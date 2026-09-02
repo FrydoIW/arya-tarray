@@ -1,0 +1,381 @@
+.page {
+  gap: 18px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.tablePanel {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.tableHeader {
+  min-height: 84px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.tableHeader h2 {
+  margin: 0;
+  font-size: 14.5px;
+}
+
+.tableHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tableToolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.statusSelect {
+  min-width: 125px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  border: 1px solid #e4e9f1;
+  border-radius: 7px;
+}
+
+.statusSelect.active {
+  color: #148044;
+  background: #f1fbf4;
+}
+
+.statusSelect.inactive {
+  color: #a6424c;
+  background: #fff5f5;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.statusSelect select {
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 11px;
+}
+
+.roleSelect {
+  min-width: 185px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #245fc5;
+  background: #f4f7ff;
+  border: 1px solid #dce6fb;
+  border-radius: 7px;
+}
+
+.roleSelect.roleInactive {
+  color: #8c6270;
+  background: #fff7f7;
+  border-color: #f0dcdf;
+}
+
+.roleSelect select {
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+
+.readOnlyRole {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  color: #245fc5;
+  background: #f4f7ff;
+  border: 1px solid #dce6fb;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.roleInactiveText {
+  color: #8c6270;
+  background: #fff7f7;
+  border-color: #f0dcdf;
+}
+
+.readOnlyStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.readOnlyStatus.active {
+  color: #148044;
+  background: #f1fbf4;
+  border: 1px solid #d9f0df;
+}
+
+.readOnlyStatus.inactive {
+  color: #a6424c;
+  background: #fff5f5;
+  border: 1px solid #f2dfe1;
+}
+
+.updatedBy {
+  color: #33415f;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.draftLabel {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rowActions {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.passwordActionWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.pendingDot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  background: var(--primary);
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+.accessFlowCard {
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: minmax(220px, .7fr) minmax(0, 2.3fr);
+  gap: 28px;
+  align-items: center;
+}
+
+.accessFlowIntro h2 {
+  margin: 0;
+  font-size: 14.5px;
+}
+
+.accessFlowIntro p {
+  margin: 6px 0 0;
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.accessFlowSteps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1.15fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.accessStep {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.accessIcon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+}
+
+.accessIcon.blue {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.accessIcon.green {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.accessIcon.violet {
+  color: var(--violet);
+  background: var(--violet-soft);
+}
+
+.accessStep div {
+  min-width: 0;
+}
+
+.accessStep small {
+  width: 21px;
+  height: 21px;
+  display: inline-grid;
+  place-items: center;
+  margin-bottom: 4px;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.accessStep strong {
+  display: block;
+  color: #24304a;
+  font-size: 11px;
+}
+
+.accessStep p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.flowArrow {
+  color: #8290aa;
+}
+
+.modalBody {
+  padding: 20px 22px 6px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field > span {
+  color: #53617d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  color: #24304a;
+  background: #fff;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  outline: none;
+  font-size: 11.5px;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: #adc2ef;
+  box-shadow: 0 0 0 3px rgba(20, 87, 242, .06);
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 18px 22px 22px;
+}
+
+@media (max-width: 1180px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accessFlowCard {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 920px) {
+  .tableHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tableToolbar {
+    width: 100%;
+  }
+
+  .accessFlowSteps {
+    grid-template-columns: 1fr;
+  }
+
+  .flowArrow {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .tableToolbar,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .tableToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .formGrid {
+    display: grid;
+  }
+}

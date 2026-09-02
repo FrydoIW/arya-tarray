@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @map("role_id") @db.Char(36)
+  roleCode    String   @map("role_code") @db.VarChar(50)
+  roleName    String   @map("role_name") @db.VarChar(100)
+  description String?  @db.VarChar(255)
+  activeFlag  Boolean  @default(true) @map("active_flag")
+  createdById String?  @map("created_by") @db.Char(36)
+  updatedById String?  @map("updated_by") @db.Char(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+
+  createdBy User?      @relation("RoleCreatedBy", fields: [createdById], references: [id])
+  updatedBy User?      @relation("RoleUpdatedBy", fields: [updatedById], references: [id])
+  userRoles UserRole[]
+  roleMenus RoleMenu[]
+
+  @@map("arya_role")
+}
+
+model User {
+  id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
+  fullName     String   @map("full_name") @db.VarChar(150)
+  email        String   @db.VarChar(150)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  status       String   @default("ACTIVE") @db.VarChar(20)
+  createdById  String?  @map("created_by") @db.Char(36)
+  updatedById  String?  @map("updated_by") @db.Char(36)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+
+  createdBy              User?                          @relation("UserCreatedBy", fields: [createdById], references: [id])
+  updatedBy              User?                          @relation("UserUpdatedBy", fields: [updatedById], references: [id])
+  createdUsers           User[]                         @relation("UserCreatedBy")
+  updatedUsers           User[]                         @relation("UserUpdatedBy")
+  userRoles              UserRole[]
+  createdRoles           Role[]                         @relation("RoleCreatedBy")
+  updatedRoles           Role[]                         @relation("RoleUpdatedBy")
+  createdEventCodes      EventCode[]                    @relation("EventCodeCreatedBy")
+  updatedEventCodes      EventCode[]                    @relation("EventCodeUpdatedBy")
+  createdBankAccounts    BankAccount[]                  @relation("BankAccountCreatedBy")
+  updatedBankAccounts    BankAccount[]                  @relation("BankAccountUpdatedBy")
+  uploadedStatements     BankStatementUpload[]          @relation("StatementUploadedBy")
+  executedStatements     BankStatementUpload[]          @relation("StatementExecutedBy")
+  finalizedStatements    BankStatementUpload[]          @relation("StatementFinalizedBy")
+  transactionHistory     BankTransactionHistory[]       @relation("TransactionHistoryChangedBy")
+  submittedApprovals     ReconciliationApproval[]       @relation("ApprovalSubmittedBy")
+  decidedApprovals       ReconciliationApproval[]       @relation("ApprovalDecidedBy")
+  approvalHistoryActions          ReconciliationApprovalHistory[] @relation("ApprovalHistoryActionBy")
+  createdApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigCreatedBy")
+  updatedApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigUpdatedBy")
+  approvalConfigAssignments       ApprovalConfigApprover[]        @relation("ApprovalConfigApproverUser")
+  createdApprovalConfigAssignments ApprovalConfigApprover[]       @relation("ApprovalConfigApproverCreatedBy")
+  createdMenus                    Menu[]                           @relation("MenuCreatedBy")
+  updatedMenus           Menu[]                         @relation("MenuUpdatedBy")
+  createdRoleMenus       RoleMenu[]                     @relation("RoleMenuCreatedBy")
+
+  @@map("arya_user")
+}
+
+model UserRole {
+  userId String @map("user_id") @db.Char(36)
+  roleId String @map("role_id") @db.Char(36)
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("arya_user_role")
+}
+
+model Menu {
+  id            String   @id @default(uuid()) @map("menu_id") @db.Char(36)
+  parentMenuId  String?  @map("parent_menu_id") @db.Char(36)
+  menuCode      String   @map("menu_code") @db.VarChar(100)
+  menuName      String   @map("menu_name") @db.VarChar(150)
+  route         String?  @db.VarChar(255)
+  menuType      String   @map("menu_type") @db.VarChar(20)
+  displayOrder  Int      @default(0) @map("display_order")
+  activeFlag    Boolean  @default(true) @map("active_flag")
+  createdById   String?  @map("created_by") @db.Char(36)
+  updatedById   String?  @map("updated_by") @db.Char(36)
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+
+  parent     Menu?      @relation("MenuHierarchy", fields: [parentMenuId], references: [id])
+  children   Menu[]     @relation("MenuHierarchy")
+  createdBy  User?      @relation("MenuCreatedBy", fields: [createdById], references: [id])
+  updatedBy      User?           @relation("MenuUpdatedBy", fields: [updatedById], references: [id])
+  roleMenus      RoleMenu[]
+  approvalConfig ApprovalConfig?
+
+  @@map("arya_menu")
+}
+
+model RoleMenu {
+  roleId      String   @map("role_id") @db.Char(36)
+  menuId      String   @map("menu_id") @db.Char(36)
+  createdById String?  @map("created_by") @db.Char(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+
+  role      Role  @relation(fields: [roleId], references: [id])
+  menu      Menu  @relation(fields: [menuId], references: [id])
+  createdBy User? @relation("RoleMenuCreatedBy", fields: [createdById], references: [id])
+
+  @@id([roleId, menuId])
+  @@map("arya_role_menu")
+}
+
+model EventCode {
+  id          String   @id @default(uuid()) @map("event_code_id") @db.Char(36)
+  code        String   @db.Char(3)
+  eventName   String   @map("event_name") @db.VarChar(150)
+  description String?  @db.VarChar(500)
+  activeFlag  Boolean  @default(true) @map("active_flag")
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  createdById String?  @map("created_by") @db.Char(36)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  updatedById String?  @map("updated_by") @db.Char(36)
+
+  createdBy             User?             @relation("EventCodeCreatedBy", fields: [createdById], references: [id])
+  updatedBy             User?             @relation("EventCodeUpdatedBy", fields: [updatedById], references: [id])
+  suggestedTransactions BankTransaction[] @relation("SuggestedEventCode")
+  transactions          BankTransaction[] @relation("FinalEventCode")
+
+  @@map("arya_event_code")
+}
+
+model BankAccount {
+  id           String   @id @default(uuid()) @map("bank_account_id") @db.Char(36)
+  bankCode     String   @map("bank_code") @db.VarChar(30)
+  bankName     String   @map("bank_name") @db.VarChar(100)
+  accountNo    String   @map("account_no") @db.VarChar(100)
+  accountName  String   @map("account_name") @db.VarChar(200)
+  currencyCode String   @default("IDR") @map("currency_code") @db.Char(3)
+  activeFlag   Boolean  @default(true) @map("active_flag")
+  createdById  String?  @map("created_by") @db.Char(36)
+  updatedById  String?  @map("updated_by") @db.Char(36)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+
+  createdBy  User?                 @relation("BankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  updatedBy  User?                 @relation("BankAccountUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  statements BankStatementUpload[]
+
+  @@unique([bankCode, accountNo], map: "uk_bank_account_bank_account_no")
+  @@map("arya_bank_account")
+}
+
+model BankStatementUpload {
+  id               String    @id @default(uuid()) @map("statement_upload_id") @db.Char(36)
+  bankAccountId    String    @map("bank_account_id") @db.Char(36)
+  fileName         String    @map("file_name") @db.VarChar(255)
+  periodFrom       DateTime? @map("period_from") @db.Date
+  periodTo         DateTime? @map("period_to") @db.Date
+  totalTransaction Int       @default(0) @map("total_transaction")
+  totalCredit      Decimal   @default(0) @map("total_credit") @db.Decimal(20, 2)
+  totalDebit       Decimal   @default(0) @map("total_debit") @db.Decimal(20, 2)
+  status           String    @default("RAW") @db.VarChar(20)
+  uploadedAt       DateTime  @default(now()) @map("uploaded_at") @db.DateTime(0)
+  uploadedById     String    @map("uploaded_by") @db.Char(36)
+  executedAt       DateTime? @map("executed_at") @db.DateTime(0)
+  executedById     String?   @map("executed_by") @db.Char(36)
+  finalizedAt      DateTime? @map("finalized_at") @db.DateTime(0)
+  finalizedById    String?   @map("finalized_by") @db.Char(36)
+  remark           String?   @db.VarChar(1000)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
+
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id])
+  uploadedBy  User        @relation("StatementUploadedBy", fields: [uploadedById], references: [id])
+  executedBy  User?       @relation("StatementExecutedBy", fields: [executedById], references: [id])
+  finalizedBy User?       @relation("StatementFinalizedBy", fields: [finalizedById], references: [id])
+  transactions BankTransaction[]
+  approval     ReconciliationApproval?
+
+  @@map("arya_bank_statement_upload")
+}
+
+model BankTransaction {
+  id                   String    @id @default(uuid()) @map("bank_transaction_id") @db.Char(36)
+  statementUploadId    String    @map("statement_upload_id") @db.Char(36)
+  rowNo                Int?      @map("row_no")
+  transactionDate      DateTime? @map("transaction_date") @db.Date
+  transactionType      String?   @map("transaction_type") @db.VarChar(20)
+  referenceNo          String?   @map("reference_no") @db.VarChar(150)
+  senderName           String?   @map("sender_name") @db.VarChar(255)
+  description          String?   @db.Text
+  originalAmount       Decimal   @map("original_amount") @db.Decimal(20, 2)
+  suffixCode           String?   @map("suffix_code") @db.Char(3)
+  suggestedEventCodeId String?   @map("suggested_event_code_id") @db.Char(36)
+  eventCodeId          String?   @map("event_code_id") @db.Char(36)
+  baseAmount           Decimal?  @map("base_amount") @db.Decimal(20, 2)
+  status               String    @default("RAW") @db.VarChar(20)
+  remark               String?   @db.VarChar(1000)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
+
+  statementUpload    BankStatementUpload       @relation(fields: [statementUploadId], references: [id])
+  suggestedEventCode EventCode?                @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
+  eventCode          EventCode?                @relation("FinalEventCode", fields: [eventCodeId], references: [id])
+  history            BankTransactionHistory[]
+
+  @@map("arya_bank_transaction")
+}
+
+model BankTransactionHistory {
+  id                    String   @id @default(uuid()) @map("transaction_history_id") @db.Char(36)
+  bankTransactionId     String   @map("bank_transaction_id") @db.Char(36)
+  fieldName             String?  @map("field_name") @db.VarChar(100)
+  oldValue              String?  @map("old_value") @db.Text
+  newValue              String?  @map("new_value") @db.Text
+  remark                String?  @db.VarChar(1000)
+  changedAt             DateTime @default(now()) @map("changed_at") @db.DateTime(0)
+  changedById           String   @map("changed_by") @db.Char(36)
+
+  transaction BankTransaction @relation(fields: [bankTransactionId], references: [id])
+  changedBy   User            @relation("TransactionHistoryChangedBy", fields: [changedById], references: [id])
+
+  @@map("arya_bank_transaction_history")
+}
+
+model ReconciliationApproval {
+  id                String    @id @default(uuid()) @map("approval_id") @db.Char(36)
+  statementUploadId String    @unique @map("statement_upload_id") @db.Char(36)
+  status            String    @default("PENDING") @db.VarChar(20)
+  submittedAt       DateTime  @default(now()) @map("submitted_at") @db.DateTime(0)
+  submittedById     String    @map("submitted_by") @db.Char(36)
+  decidedAt         DateTime? @map("decided_at") @db.DateTime(0)
+  decidedById       String?   @map("decided_by") @db.Char(36)
+  remark            String?   @db.VarChar(1000)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
+
+  statementUpload BankStatementUpload              @relation(fields: [statementUploadId], references: [id])
+  submittedBy     User                             @relation("ApprovalSubmittedBy", fields: [submittedById], references: [id])
+  decidedBy       User?                            @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  history         ReconciliationApprovalHistory[]
+
+  @@index([status, submittedAt])
+  @@map("arya_reconciliation_approval")
+}
+
+model ReconciliationApprovalHistory {
+  id           String   @id @default(uuid()) @map("approval_history_id") @db.Char(36)
+  approvalId   String   @map("approval_id") @db.Char(36)
+  action       String   @db.VarChar(50)
+  remark       String?  @db.VarChar(1000)
+  actionAt     DateTime @default(now()) @map("action_at") @db.DateTime(0)
+  actionById   String   @map("action_by") @db.Char(36)
+
+  approval ReconciliationApproval @relation(fields: [approvalId], references: [id])
+  actionBy User                   @relation("ApprovalHistoryActionBy", fields: [actionById], references: [id])
+
+  @@index([approvalId, actionAt])
+  @@map("arya_reconciliation_approval_history")
+}
+
+model ApprovalConfig {
+  id          String   @id @default(uuid()) @map("approval_config_id") @db.Char(36)
+  menuId      String   @unique @map("menu_id") @db.Char(36)
+  activeFlag  Boolean  @default(true) @map("active_flag")
+  createdById String?  @map("created_by") @db.Char(36)
+  updatedById String?  @map("updated_by") @db.Char(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+
+  menu      Menu                     @relation(fields: [menuId], references: [id])
+  createdBy User?                    @relation("ApprovalConfigCreatedBy", fields: [createdById], references: [id])
+  updatedBy User?                    @relation("ApprovalConfigUpdatedBy", fields: [updatedById], references: [id])
+  approvers ApprovalConfigApprover[]
+
+  @@map("arya_approval_config")
+}
+
+model ApprovalConfigApprover {
+  approvalConfigId String   @map("approval_config_id") @db.Char(36)
+  approverUserId   String   @map("approver_user_id") @db.Char(36)
+  createdById      String?  @map("created_by") @db.Char(36)
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(0)
+
+  approvalConfig ApprovalConfig @relation(fields: [approvalConfigId], references: [id])
+  approverUser   User           @relation("ApprovalConfigApproverUser", fields: [approverUserId], references: [id])
+  createdBy      User?          @relation("ApprovalConfigApproverCreatedBy", fields: [createdById], references: [id])
+
+  @@id([approvalConfigId, approverUserId])
+  @@map("arya_approval_config_approver")
+}

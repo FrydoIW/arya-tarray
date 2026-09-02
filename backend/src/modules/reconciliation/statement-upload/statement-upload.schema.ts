@@ -1,0 +1,24 @@
+import { z } from "zod";
+
+export const workspaceQuerySchema = z.object({
+  statementId: z.string().uuid().optional()
+});
+
+export const uploadStatementBodySchema = z.object({
+  bankAccountId: z.string().uuid()
+});
+
+export const transactionParamsSchema = z.object({
+  transactionId: z.string().uuid()
+});
+
+export const updateFinalEventSchema = z.object({
+  eventCodeId: z.string().uuid().nullable(),
+  remark: z.string().trim().max(1000).optional()
+});
+
+export const statementParamsSchema = z.object({
+  statementId: z.string().uuid()
+});
+
+export type UpdateFinalEventInput = z.infer<typeof updateFinalEventSchema>;

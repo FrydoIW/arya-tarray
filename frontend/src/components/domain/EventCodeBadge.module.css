@@ -1,0 +1,15 @@
+.badge {
+  display: inline-grid;
+  min-width: 54px;
+  height: 33px;
+  place-items: center;
+  padding: 0 11px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid #d9e5ff;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .06em;
+}

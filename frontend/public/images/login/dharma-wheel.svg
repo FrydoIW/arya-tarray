@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
+  <title id="title">Dharma Wheel</title>
+  <desc id="desc">Traditional eight-spoked Dharma wheel in restrained gold linework.</desc>
+  <g fill="none" stroke="#B98227" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="60" cy="60" r="42" stroke-width="4"/>
+    <circle cx="60" cy="60" r="34" stroke-width="1.8" opacity=".82"/>
+    <circle cx="60" cy="60" r="10" stroke-width="3.2"/>
+    <circle cx="60" cy="60" r="4" fill="#B98227" stroke="none"/>
+    <g stroke-width="3.4">
+      <path d="M60 18v32M60 70v32"/>
+      <path d="M18 60h32M70 60h32"/>
+      <path d="M30.3 30.3 53 53M67 67l22.7 22.7"/>
+      <path d="M89.7 30.3 67 53M53 67 30.3 89.7"/>
+    </g>
+    <g stroke-width="2.4">
+      <path d="M60 8c3.2 4.6 3.2 7.8 0 11-3.2-3.2-3.2-6.4 0-11Z"/>
+      <path d="M60 112c-3.2-4.6-3.2-7.8 0-11 3.2 3.2 3.2 6.4 0 11Z"/>
+      <path d="M8 60c4.6-3.2 7.8-3.2 11 0-3.2 3.2-6.4 3.2-11 0Z"/>
+      <path d="M112 60c-4.6 3.2-7.8 3.2-11 0 3.2-3.2 6.4-3.2 11 0Z"/>
+      <path d="M23.2 23.2c5.5 1 7.8 3.3 7.8 7.8-4.5 0-6.8-2.3-7.8-7.8Z"/>
+      <path d="M96.8 96.8c-5.5-1-7.8-3.3-7.8-7.8 4.5 0 6.8 2.3 7.8 7.8Z"/>
+      <path d="M96.8 23.2c-1 5.5-3.3 7.8-7.8 7.8 0-4.5 2.3-6.8 7.8-7.8Z"/>
+      <path d="M23.2 96.8c1-5.5 3.3-7.8 7.8-7.8 0 4.5-2.3 6.8-7.8 7.8Z"/>
+    </g>
+  </g>
+</svg>

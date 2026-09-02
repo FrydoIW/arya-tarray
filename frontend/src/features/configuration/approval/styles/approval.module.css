@@ -1,0 +1,522 @@
+.page {
+  gap: 18px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.flowCard {
+  padding: 20px 22px;
+}
+
+.flowIntro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.infoIcon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 9px;
+}
+
+.flowIntro h2 {
+  margin: 1px 0 4px;
+  font-size: 14.5px;
+}
+
+.flowIntro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.flowSteps {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto minmax(190px, 1.08fr) auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 13px;
+}
+
+.flowStep {
+  min-height: 70px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.flowIcon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+}
+
+.flowIcon.blue {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.flowIcon.gold {
+  color: #d18d00;
+  background: #fff6da;
+}
+
+.flowIcon.violet {
+  color: var(--violet);
+  background: var(--violet-soft);
+}
+
+.flowIcon.green {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.flowStep strong {
+  display: block;
+  color: #24304a;
+  font-size: 11.5px;
+}
+
+.flowStep p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.flowArrow {
+  color: #8290aa;
+}
+
+.tablePanel {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.tableHeader {
+  min-height: 84px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.tableHeader h2 {
+  margin: 0;
+  font-size: 14.5px;
+}
+
+.tableHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tableToolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.processCell {
+  display: grid;
+  gap: 4px;
+}
+
+.processCell strong {
+  color: #24304a;
+  font-size: 11.5px;
+}
+
+.approverChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.approverChip {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  color: #245fc5;
+  background: #f4f7ff;
+  border: 1px solid #dce6fb;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.approverChip.ineligible {
+  color: #9b5360;
+  background: #fff5f5;
+  border-color: #f0dadd;
+}
+
+.approverChip small {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #bb5b68;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.statusSelect {
+  min-width: 125px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  border: 1px solid #e4e9f1;
+  border-radius: 7px;
+}
+
+.statusSelect.active {
+  color: #148044;
+  background: #f1fbf4;
+}
+
+.statusSelect.inactive {
+  color: #7b8497;
+  background: #f8f9fb;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.statusSelect select {
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 11px;
+}
+
+.updatedBy {
+  color: #33415f;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.draftLabel {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rowActions {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.modalBody {
+  padding: 20px 22px 6px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(170px, .7fr);
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.field > span,
+.approverFieldLabel > span {
+  color: #53617d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.field select {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  color: #24304a;
+  background: #fff;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  outline: none;
+  font-size: 11.5px;
+}
+
+.field select:focus {
+  border-color: #adc2ef;
+  box-shadow: 0 0 0 3px rgba(20, 87, 242, .06);
+}
+
+.readOnlyProcess {
+  min-height: 40px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 7px 11px;
+  background: #f8f9fc;
+  border: 1px solid #e5e8ef;
+  border-radius: 8px;
+}
+
+.readOnlyProcess strong {
+  color: #24304a;
+  font-size: 11.5px;
+}
+
+.readOnlyProcess small {
+  color: #8b96aa;
+  font-size: 11px;
+}
+
+.approverField {
+  margin-top: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.approverFieldLabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approverFieldLabel small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.approverSelector {
+  overflow: hidden;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+}
+
+.selectedApprovers {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 9px 11px;
+  background: #fbfcff;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.selectedApprover {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px 0 9px;
+  color: #245fc5;
+  background: #f2f6ff;
+  border: 1px solid #dbe5fb;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.selectedApprover.ineligible {
+  color: #9b5360;
+  background: #fff5f5;
+  border-color: #f0dadd;
+}
+
+.selectedApprover small {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.selectedApprover button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.selectedApprover button:hover:not(:disabled) {
+  background: rgba(36, 95, 197, .08);
+}
+
+.noSelection {
+  margin: 0;
+  padding: 12px;
+  color: var(--muted);
+  background: #fbfcff;
+  border-bottom: 1px solid #edf0f5;
+  font-size: 11px;
+}
+
+.approverSearchInput {
+  width: 100%;
+  height: 40px;
+  border: 0;
+  border-bottom: 1px solid #edf0f5;
+  border-radius: 0;
+}
+
+.approverOptions {
+  max-height: 210px;
+  overflow: auto;
+  padding: 5px;
+}
+
+.approverOption {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 18px 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.approverOption:hover {
+  background: #f8faff;
+}
+
+.approverOption input {
+  accent-color: var(--primary);
+}
+
+.approverAvatar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 8px;
+}
+
+.approverOption strong,
+.approverOption small {
+  display: block;
+}
+
+.approverOption strong {
+  color: #2c3853;
+  font-size: 11px;
+}
+
+.approverOption small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.approverEmpty {
+  padding: 20px 12px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+}
+
+.approverHint {
+  margin: 0;
+  padding: 8px 11px;
+  color: #77849d;
+  background: #fbfcff;
+  border-top: 1px solid #edf0f5;
+  font-size: 11px;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 18px 22px 22px;
+}
+
+@media (max-width: 1180px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flowSteps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flowArrow {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .tableHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tableToolbar {
+    width: 100%;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .metrics,
+  .flowSteps {
+    grid-template-columns: 1fr;
+  }
+
+  .tableToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .approverFieldLabel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

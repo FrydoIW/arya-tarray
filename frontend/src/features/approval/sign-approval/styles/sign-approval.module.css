@@ -1,0 +1,614 @@
+.page {
+  gap: 16px;
+}
+
+.tabs {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  background: #f4f6fa;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.tabs button {
+  min-width: 166px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: #7a879f;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 720;
+}
+
+.tabs button:last-child {
+  border-right: 0;
+}
+
+.tabs button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.tabs .activeTab {
+  color: var(--maroon);
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(31, 45, 74, .06);
+}
+
+.metrics,
+.detailMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.detailMetrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.accessNotice {
+  padding: 11px 14px;
+  color: #875b14;
+  background: #fff9e9;
+  border: 1px solid #f0deb2;
+  border-radius: 9px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.flowCard,
+.statementCard,
+.historyCard,
+.decisionCard {
+  padding: 18px 20px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionHeading h2,
+.tableHeader h2,
+.compactHeader h2 {
+  margin: 0;
+  color: #1d2943;
+  font-size: 14.5px;
+}
+
+.sectionHeading p,
+.tableHeader p,
+.compactHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.flowSteps {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto minmax(180px, 1fr) auto minmax(190px, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.flowStep {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.flowIcon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+}
+
+.blue { color: var(--blue); background: var(--blue-soft); }
+.gold { color: #d18d00; background: #fff6da; }
+.green { color: var(--green); background: var(--green-soft); }
+
+.flowStep strong {
+  display: block;
+  color: #26334f;
+  font-size: 11.5px;
+}
+
+.flowStep p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.flowArrow {
+  color: #9aa6ba;
+}
+
+
+.tablePanel {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.tableHeader {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 18px;
+}
+
+.compactHeader {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 18px;
+}
+
+.tableToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statementId {
+  max-width: 190px;
+  display: inline-block;
+  overflow: hidden;
+  color: #26334f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.bankCell,
+.eventCell {
+  display: grid;
+  gap: 2px;
+}
+
+.bankCell strong,
+.eventCell strong {
+  color: #34415d;
+  font-size: 11px;
+}
+
+.bankCell small,
+.eventCell small {
+  color: #8b96aa;
+  font-size: 11px;
+}
+
+.amountCell {
+  color: #2d3a56;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.statusBadge,
+.transactionStatus {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.statusBadge i,
+.transactionStatus i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.pending {
+  color: #b8780b;
+  background: #fff8e9;
+  border-color: #f2dfb7;
+}
+
+.approved,
+.checked {
+  color: #168246;
+  background: #eefaf2;
+  border-color: #d7efdf;
+}
+
+.rejected,
+.needsReview {
+  color: #c6404e;
+  background: #fff2f3;
+  border-color: #f2d5d9;
+}
+
+.detailStack {
+  display: grid;
+  gap: 14px;
+}
+
+
+.statementGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .95fr) minmax(250px, 1.05fr);
+  gap: 0;
+  border-top: 1px solid #edf0f5;
+}
+
+.detailList {
+  margin: 0;
+  padding: 15px 20px 3px 0;
+  display: grid;
+  gap: 13px;
+}
+
+.detailList + .detailList,
+.approverBlock {
+  padding-left: 22px;
+  border-left: 1px solid #edf0f5;
+}
+
+.detailList div {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.detailList dt,
+.approverBlock > span,
+.remarkField > span {
+  color: #6c7993;
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.detailList dd {
+  min-width: 0;
+  margin: 0;
+  color: #283550;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.detailId {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approverBlock {
+  padding-top: 15px;
+}
+
+.approverList {
+  margin-top: 10px;
+  display: grid;
+  gap: 7px;
+}
+
+.approverChip {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  background: #fafbff;
+  border: 1px solid #e6eaf2;
+  border-radius: 9px;
+}
+
+.approverChip > span {
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 50%;
+}
+
+.approverChip div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.approverChip strong {
+  overflow: hidden;
+  color: #34415d;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approverChip small {
+  overflow: hidden;
+  color: #8b96aa;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyCard {
+  overflow: hidden;
+}
+
+.timeline {
+  margin-top: 13px;
+  display: grid;
+}
+
+.timelineItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-height: 56px;
+  padding: 7px 0;
+}
+
+.timelineItem:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 39px;
+  bottom: -6px;
+  width: 1px;
+  background: #dfe5ef;
+}
+
+.historyIcon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.historyDefault { color: var(--blue); background: var(--blue-soft); }
+.historyApproved { color: var(--green); background: var(--green-soft); }
+.historyRejected { color: var(--red); background: var(--red-soft); }
+.historyPending { color: #c98808; background: #fff6dd; }
+
+.timelineItem strong {
+  display: block;
+  margin-top: 2px;
+  color: #33415d;
+  font-size: 11px;
+}
+
+.timelineItem p {
+  margin: 3px 0 0;
+  color: #7e899f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.timelineItem time {
+  padding-top: 3px;
+  color: #7e899f;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.remarkField {
+  margin-top: 14px;
+  display: grid;
+  gap: 7px;
+}
+
+.remarkField > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.remarkField small {
+  color: #9aa4b6;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.remarkField textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  padding: 10px 12px;
+  color: #2e3a55;
+  background: #fff;
+  border: 1px solid #dfe5ef;
+  border-radius: 8px;
+  outline: 0;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.remarkField textarea:focus {
+  border-color: #adc2ef;
+  box-shadow: 0 0 0 3px rgba(20, 87, 242, .06);
+}
+
+.remarkField textarea:disabled {
+  color: #8792a7;
+  background: #f7f8fb;
+}
+
+.inlineError {
+  margin-top: 7px;
+  color: #c43b49;
+  font-size: 11px;
+}
+
+.decisionActions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.decisionActions > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.emptyDetail,
+.detailLoading {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.detailLoading {
+  color: #7e899f;
+  font-size: 11.5px;
+}
+
+.centerActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .metrics,
+  .detailMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flowSteps {
+    grid-template-columns: 1fr;
+  }
+
+  .flowArrow {
+    display: none;
+  }
+
+  .statementGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .approverBlock {
+    grid-column: 1 / -1;
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid #edf0f5;
+  }
+
+  .approverList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .tabs {
+    width: 100%;
+  }
+
+  .tabs button {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .metrics,
+  .detailMetrics,
+  .statementGrid,
+  .approverList {
+    grid-template-columns: 1fr;
+  }
+
+  .detailList + .detailList,
+  .approverBlock {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid #edf0f5;
+  }
+
+  .tableHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tableToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tableToolbar > * {
+    width: 100%;
+  }
+
+  .timelineItem {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .timelineItem time {
+    grid-column: 2;
+    padding-top: 0;
+  }
+
+  .decisionActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .decisionActions > div {
+    width: 100%;
+  }
+
+  .decisionActions > div > button {
+    flex: 1;
+  }
+}

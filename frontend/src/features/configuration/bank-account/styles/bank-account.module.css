@@ -1,0 +1,337 @@
+.page {
+  gap: 18px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.flowCard {
+  padding: 20px 22px;
+}
+
+.flowIntro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.infoIcon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 9px;
+}
+
+.flowIntro h2 {
+  margin: 1px 0 4px;
+  font-size: 14.5px;
+}
+
+.flowIntro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.flowSteps {
+  margin-top: 18px;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.flowFragment {
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.flowFragment:last-child {
+  flex-grow: 1;
+}
+
+.flowStep {
+  position: relative;
+  min-width: 0;
+  min-height: 74px;
+  flex: 1 1 auto;
+  padding: 12px 13px 12px 42px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.stepNumber {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.flowIcon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+}
+
+.flowIcon.blue { color: var(--blue); background: var(--blue-soft); }
+.flowIcon.green { color: var(--green); background: var(--green-soft); }
+.flowIcon.violet { color: var(--violet); background: var(--violet-soft); }
+.flowIcon.gold { color: #d18d00; background: #fff6da; }
+
+.flowStep strong {
+  display: block;
+  color: #24304a;
+  font-size: 11.5px;
+}
+
+.flowStep p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.flowArrow {
+  flex: 0 0 auto;
+  color: #8290aa;
+}
+
+.tablePanel {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.tableHeader {
+  min-height: 84px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.tableHeader h2 {
+  margin: 0;
+  font-size: 14.5px;
+}
+
+.tableHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tableToolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.bankCell {
+  display: grid;
+  gap: 2px;
+}
+
+.bankCell strong {
+  color: #26344f;
+  font-size: 11.5px;
+}
+
+.bankCell small {
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountNo {
+  color: #253553;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 750;
+  letter-spacing: .015em;
+}
+
+.updatedBy {
+  color: #33415f;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.draftLabel {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rowActions {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.modalBody {
+  padding: 20px 22px 8px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.field > span {
+  color: #53617d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  color: #24304a;
+  background: #fff;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  outline: none;
+  font-size: 11.5px;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: #adc2ef;
+  box-shadow: 0 0 0 3px rgba(20, 87, 242, .06);
+}
+
+.field input:disabled,
+.field select:disabled {
+  cursor: not-allowed;
+  color: #8993a7;
+  background: #f8f9fc;
+}
+
+.fullField {
+  margin-top: 15px;
+}
+
+.readOnlyField {
+  min-height: 40px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 7px 11px;
+  background: #f8f9fc;
+  border: 1px solid #e5e8ef;
+  border-radius: 8px;
+}
+
+.readOnlyField strong {
+  color: #24304a;
+  font-size: 11.5px;
+}
+
+.readOnlyField small {
+  color: #8b96aa;
+  font-size: 11px;
+}
+
+.identityNote {
+  margin-top: 14px;
+  padding: 10px 12px;
+  color: #596987;
+  background: #f7f9fd;
+  border: 1px solid #e6ebf5;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.modalFooter {
+  padding: 14px 22px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 1180px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flowSteps {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flowFragment {
+    display: block;
+  }
+
+  .flowArrow {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .tableHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tableToolbar {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .metrics,
+  .flowSteps,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .tableToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

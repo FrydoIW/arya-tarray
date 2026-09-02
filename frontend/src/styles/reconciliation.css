@@ -1,0 +1,27 @@
+/* Reconciliation pages */
+.statement-upload-card {
+  min-height: 176px;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 22px;
+  padding: 26px;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(115deg,#54121c,#7a1a29 58%,#985039);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(74,16,25,.12);
+}
+.statement-upload-card::after { content:""; position:absolute; right:-55px; width:260px; height:260px; border:1px solid rgba(244,200,111,.22); border-radius:50%; }
+.statement-upload-card > * { position: relative; z-index: 2; }
+.statement-upload-card h2 { margin: 4px 0 7px; color: #fff; font-size: 23px; font-weight: 650; letter-spacing: -.02em; }
+.statement-upload-card p { margin: 0; max-width: 680px; color: rgba(255,255,255,.74); font-size: 12.5px; line-height: 1.6; }
+.statement-icon { width: 56px; height: 56px; display: grid; place-items: center; color: #f0c876; background: rgba(255,255,255,.07); border: 1px solid rgba(245,203,119,.32); border-radius: 12px; }
+.upload-box { display: grid; justify-items: end; gap: 10px; }
+.upload-box input { color: rgba(255,255,255,.78); }
+.code-layout { display: grid; grid-template-columns: 340px minmax(0,1fr); gap: 18px; align-items: flex-start; }
+.code-form-panel { overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-sm); }
+.stack-form { display: grid; gap: 14px; padding: 18px 20px 20px; }
+.stack-form input, .stack-form textarea, .edit-grid input, .edit-grid textarea { width: 100%; padding: 10px 11px; color: var(--ink); resize: vertical; }
+.stack-form input { height: 41px; }
