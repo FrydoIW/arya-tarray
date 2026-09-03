@@ -69,7 +69,7 @@ export function DashboardScreen() {
         </article>
 
         <TopFinalEvents
-          data={data?.topFinalEvents ?? []}
+          data={data?.eventGroups ?? []}
           loading={loading && !data}
           monthLabel={monthLabel}
           canViewInquiry={canViewInquiry}

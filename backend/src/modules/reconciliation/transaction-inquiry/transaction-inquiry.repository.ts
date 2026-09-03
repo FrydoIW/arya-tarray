@@ -43,19 +43,21 @@ const transactionListSelect = {
 } as const;
 
 export type TransactionInquiryFilter = {
-  monthStart: Date;
-  nextMonthStart: Date;
+  periodStart: Date;
+  periodEnd: Date;
   search: string;
   status: "ALL" | "RAW" | "CHECK" | "FINALIZED";
   bankAccountId?: string;
+  finalEventId?: string;
 };
 
 function buildWhere(filter: TransactionInquiryFilter): Prisma.BankTransactionWhereInput {
   const search = filter.search.trim();
   return {
-    transactionDate: { gte: filter.monthStart, lt: filter.nextMonthStart },
+    transactionDate: { gte: filter.periodStart, lt: filter.periodEnd },
     ...(filter.status !== "ALL" ? { status: filter.status } : {}),
     ...(filter.bankAccountId ? { statementUpload: { is: { bankAccountId: filter.bankAccountId } } } : {}),
+    ...(filter.finalEventId ? { eventCodeId: filter.finalEventId } : {}),
     ...(search ? {
       OR: [
         { description: { contains: search } },
@@ -78,7 +80,7 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
   const where = buildWhere(input.filter);
   const skip = (input.page - 1) * input.pageSize;
 
-  const [transactions, total, totalCredit, totalDebit, completeTransactions, bankAccounts] = await Promise.all([
+  const [transactions, total, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions] = await Promise.all([
     prisma.bankTransaction.findMany({
       where,
       select: transactionListSelect,
@@ -101,6 +103,11 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
     prisma.bankAccount.findMany({
       select: bankAccountSelect,
       orderBy: [{ bankCode: "asc" }, { accountNo: "asc" }]
+    }),
+    prisma.eventCode.findMany({
+      where: { activeFlag: true },
+      select: eventCodeSelect,
+      orderBy: [{ code: "asc" }, { eventName: "asc" }]
     })
   ]);
 
@@ -112,7 +119,8 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
     incomingTransactions: totalCredit._count._all,
     outgoingTransactions: totalDebit._count._all,
     completeTransactions,
-    bankAccounts
+    bankAccounts,
+    eventOptions
   };
 }
 
@@ -164,7 +172,7 @@ export async function loadTransactionInquiryReportRecords(input: {
     input.filter.bankAccountId
       ? prisma.bankAccount.findMany({ where: { id: input.filter.bankAccountId }, select: bankAccountSelect })
       : prisma.bankAccount.findMany({
-          where: { statements: { some: { transactions: { some: { transactionDate: { gte: input.filter.monthStart, lt: input.filter.nextMonthStart } } } } } },
+          where: { statements: { some: { transactions: { some: { transactionDate: { gte: input.filter.periodStart, lt: input.filter.periodEnd } } } } } },
           select: bankAccountSelect,
           orderBy: [{ bankCode: "asc" }, { accountNo: "asc" }]
         })
@@ -185,4 +193,8 @@ export async function loadEventCodeLabels(ids: string[]) {
     where: { id: { in: ids } },
     select: eventCodeSelect
   });
+}
+
+export function loadTransactionInquiryEventOption(eventCodeId: string) {
+  return prisma.eventCode.findUnique({ where: { id: eventCodeId }, select: eventCodeSelect });
 }

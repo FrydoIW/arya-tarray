@@ -25,6 +25,11 @@ export function currentBusinessMonthValue(now = new Date()) {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
+export function currentBusinessDayValue(now = new Date()) {
+  const { year, month, day } = businessDateParts(now);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function businessDayUtcRange(now = new Date()) {
   const { year, month, day } = businessDateParts(now);
   const start = new Date(Date.UTC(year, month - 1, day) - BUSINESS_UTC_OFFSET_MS);

@@ -8,6 +8,7 @@ function normalizeInput(item: EventCode): EventCodeInput {
   return {
     code: item.code.trim(),
     eventName: item.eventName.trim(),
+    category: item.category?.trim() || null,
     description: item.description?.trim() || null,
     activeFlag: item.activeFlag
   };
@@ -16,6 +17,7 @@ function normalizeInput(item: EventCode): EventCodeInput {
 function sameInput(a: EventCodeInput, b: EventCodeInput) {
   return a.code === b.code
     && a.eventName === b.eventName
+    && a.category === b.category
     && a.description === b.description
     && a.activeFlag === b.activeFlag;
 }
@@ -26,12 +28,16 @@ function validateRows(rows: EventCode[]) {
   for (const [index, row] of rows.entries()) {
     const code = row.code.trim();
     const eventName = row.eventName.trim();
+    const category = row.category?.trim() ?? "";
 
     if (!/^\d{3}$/.test(code)) {
       return `Row ${index + 1}: Event Code harus tepat 3 digit.`;
     }
     if (!eventName) {
       return `Row ${index + 1}: Event Name wajib diisi.`;
+    }
+    if (category.length > 50) {
+      return `Row ${index + 1}: Category maksimal 50 karakter.`;
     }
     if (usedCodes.has(code)) {
       return `Event Code ${code} muncul lebih dari satu kali.`;
@@ -87,6 +93,7 @@ export function useEventCodes() {
 
       return item.code.toLowerCase().includes(query)
         || item.eventName.toLowerCase().includes(query)
+        || (item.category ?? "").toLowerCase().includes(query)
         || (item.description ?? "").toLowerCase().includes(query)
         || (item.updatedBy?.fullName ?? "").toLowerCase().includes(query);
     });
@@ -127,6 +134,7 @@ export function useEventCodes() {
       if (item.id !== id) return item;
       if (field === "code") return { ...item, code: String(value).replace(/\D/g, "").slice(0, 3) };
       if (field === "eventName") return { ...item, eventName: String(value) };
+      if (field === "category") return { ...item, category: String(value).slice(0, 50) };
       if (field === "description") return { ...item, description: String(value) };
       if (field === "activeFlag") return { ...item, activeFlag: Boolean(value) };
       return item;
@@ -143,6 +151,7 @@ export function useEventCodes() {
         id,
         code: "",
         eventName: "",
+        category: "",
         description: "",
         activeFlag: true,
         updatedBy: null,

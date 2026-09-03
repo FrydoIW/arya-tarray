@@ -33,6 +33,7 @@
   .ui-data-table-actions > button { width: 100%; }
   .ui-page-size-select { min-width: 120px; }
   .ui-month-picker-trigger { min-height: 44px; }
+  .ui-period-picker-day { min-height: 44px; }
   .ui-modal-backdrop { align-items: end; padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
   .ui-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: 16px 16px 12px 12px; }
   .ui-modal-head { min-height: 76px; padding: 17px 16px 14px; }
@@ -40,6 +41,8 @@
 
 @media (max-width: 720px) {
   .ui-month-picker { width: 100%; min-width: 0; }
+  .ui-period-picker { width: 100%; }
+  .ui-period-picker-mode, .ui-period-picker-day { width: 100%; min-width: 0; }
   .ui-month-picker-popover { width: min(286px, calc(100vw - 36px)); }
 }
 

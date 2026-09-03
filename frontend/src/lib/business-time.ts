@@ -24,3 +24,8 @@ export function businessMonthValue(value: Date) {
 export function currentBusinessMonthValue(now = new Date()) {
   return businessMonthValue(now);
 }
+
+export function currentBusinessDayValue(now = new Date()) {
+  const { year, month, day } = businessDateParts(now);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}

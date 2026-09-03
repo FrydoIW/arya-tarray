@@ -8,27 +8,33 @@ import {
 } from "../api/transaction-inquiry.api";
 import type {
   TransactionInquiryDetail,
+  TransactionInquiryPeriodMode,
   TransactionInquiryStatus,
   TransactionInquiryWorkspace,
   TransactionReportOptions
 } from "../types";
-import { getCurrentMonthValue } from "../utils/transaction-inquiry.utils";
+import { getCurrentDayValue, getCurrentMonthValue } from "../utils/transaction-inquiry.utils";
 
 const CURRENT_MONTH = getCurrentMonthValue();
+const CURRENT_DAY = getCurrentDayValue();
 const EMPTY_WORKSPACE: TransactionInquiryWorkspace = {
-  filters: { month: CURRENT_MONTH, search: "", status: "ALL", bankAccountId: null },
+  filters: { periodMode: "MONTH", month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL", bankAccountId: null, finalEventId: null },
   summary: { totalTransactions: 0, totalCredit: "0.00", totalDebit: "0.00", completeTransactions: 0, incomingTransactions: 0, outgoingTransactions: 0 },
   bankAccounts: [],
+  eventOptions: [],
   transactions: [],
   pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 }
 };
 
 export function useTransactionInquiry() {
+  const [periodMode, setPeriodMode] = useState<TransactionInquiryPeriodMode>("MONTH");
   const [month, setMonth] = useState(CURRENT_MONTH);
+  const [date, setDate] = useState(CURRENT_DAY);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<TransactionInquiryStatus>("ALL");
   const [bankAccountId, setBankAccountId] = useState("ALL");
+  const [finalEventId, setFinalEventId] = useState("ALL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [workspace, setWorkspace] = useState<TransactionInquiryWorkspace>(EMPTY_WORKSPACE);
@@ -46,7 +52,7 @@ export function useTransactionInquiry() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const query = useMemo(() => ({ month, search, status, bankAccountId, page, pageSize }), [bankAccountId, month, page, pageSize, search, status]);
+  const query = useMemo(() => ({ periodMode, month, date, search, status, bankAccountId, finalEventId, page, pageSize }), [bankAccountId, date, finalEventId, month, page, pageSize, periodMode, search, status]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,9 +69,15 @@ export function useTransactionInquiry() {
 
   useEffect(() => { void load(); }, [load]);
 
-  function changeMonth(value: string) { setMonth(value); setPage(1); }
+  function changePeriod(value: { mode: TransactionInquiryPeriodMode; month: string; date: string }) {
+    setPeriodMode(value.mode);
+    setMonth(value.month);
+    setDate(value.date);
+    setPage(1);
+  }
   function changeStatus(value: TransactionInquiryStatus) { setStatus(value); setPage(1); }
   function changeBankAccount(value: string) { setBankAccountId(value); setPage(1); }
+  function changeFinalEvent(value: string) { setFinalEventId(value); setPage(1); }
   function changePageSize(value: number) { setPageSize(value); setPage(1); }
 
   async function openDetail(transactionId: string) {
@@ -84,7 +96,7 @@ export function useTransactionInquiry() {
     setReportLoading(true);
     setError("");
     try {
-      const result = await generateTransactionInquiryReport({ month, search, status, bankAccountId }, options);
+      const result = await generateTransactionInquiryReport({ periodMode, month, date, search, status, bankAccountId, finalEventId }, options);
       const url = URL.createObjectURL(result.blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -103,12 +115,14 @@ export function useTransactionInquiry() {
   }
 
   return {
-    month,
+    period: { mode: periodMode, month, date },
     maxMonth: CURRENT_MONTH,
+    maxDate: CURRENT_DAY,
     searchInput,
     activeSearch: search,
     status,
     bankAccountId,
+    finalEventId,
     page,
     pageSize,
     workspace,
@@ -118,9 +132,10 @@ export function useTransactionInquiry() {
     reportLoading,
     error,
     setSearchInput,
-    changeMonth,
+    changePeriod,
     changeStatus,
     changeBankAccount,
+    changeFinalEvent,
     setPage,
     changePageSize,
     refresh: load,

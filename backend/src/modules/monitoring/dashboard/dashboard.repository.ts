@@ -108,7 +108,7 @@ export async function loadDashboardTrendMonth(range: DashboardMonthRange) {
   };
 }
 
-export async function loadTopFinalEvents(range: DashboardMonthRange, limit = 5) {
+export async function loadTopFinalEvents(range: DashboardMonthRange) {
   const groups = await prisma.bankTransaction.groupBy({
     by: ["eventCodeId"],
     where: {
@@ -121,8 +121,7 @@ export async function loadTopFinalEvents(range: DashboardMonthRange, limit = 5) 
     },
     _count: { _all: true },
     _sum: { originalAmount: true },
-    orderBy: { _sum: { originalAmount: "desc" } },
-    take: limit
+    orderBy: { _sum: { originalAmount: "desc" } }
   });
 
   const ids = groups
@@ -132,7 +131,7 @@ export async function loadTopFinalEvents(range: DashboardMonthRange, limit = 5) 
   const eventCodes = ids.length
     ? await prisma.eventCode.findMany({
         where: { id: { in: ids } },
-        select: { id: true, code: true, eventName: true }
+        select: { id: true, code: true, eventName: true, category: true }
       })
     : [];
 

@@ -66,6 +66,13 @@ export function EventCodeTable({
       placeholder: "Event name"
     },
     {
+      key: "category",
+      header: "Category",
+      minWidth: "180px",
+      editable: true,
+      placeholder: "e.g. RUPANG"
+    },
+    {
       key: "description",
       header: "Description",
       minWidth: "380px",
@@ -140,7 +147,7 @@ export function EventCodeTable({
               setPage(1);
               onSearchChange(event.target.value);
             }}
-            placeholder="Search code, event, or updater..."
+            placeholder="Search code, event, category, or updater..."
             aria-label="Search event codes"
           />
           <Select
@@ -175,7 +182,7 @@ export function EventCodeTable({
         rowKey={(row) => row.id}
         loading={loading}
         disabled={disabled}
-        minWidth="1420px"
+        minWidth="1600px"
         emptyState={{
           title: "No event codes found",
           description: search || statusFilter !== "ALL" ? "Try changing your search or status filter." : "Add the first 3-digit event code."

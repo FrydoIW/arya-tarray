@@ -1,4 +1,5 @@
 export type EditIncomeDisplayStatus = "COMPLETE" | "PENDING_REAPPROVAL";
+export type EditIncomePeriodMode = "MONTH" | "DAY";
 export type EditIncomeStatusFilter = "ALL" | EditIncomeDisplayStatus;
 export type CorrectionRowStatus = "CURRENT" | "MODIFIED" | "NOT_APPLICABLE";
 export type CorrectionRowStatusFilter = "ALL" | CorrectionRowStatus;
@@ -30,7 +31,9 @@ export type EditIncomeStatement = {
 };
 
 export type EditIncomeWorkspace = {
+  periodMode: EditIncomePeriodMode;
   month: string;
+  date: string;
   summary: {
     finalizedStatements: number;
     totalTransactions: number;

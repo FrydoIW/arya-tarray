@@ -1,8 +1,10 @@
-import { currentBusinessMonthValue, formatBusinessDateTime } from "../../../lib/business-time.js";
+import { currentBusinessDayValue, currentBusinessMonthValue, formatBusinessDateTime } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
+import { formatPeriodLabel, resolvePeriod } from "../../../lib/period.js";
 import {
   loadEventCodeLabels,
   loadReportGeneratedBy,
+  loadTransactionInquiryEventOption,
   loadTransactionInquiryDetailRecord,
   loadTransactionInquiryReportRecords,
   loadTransactionInquiryWorkspaceRecords,
@@ -13,24 +15,23 @@ import { buildTransactionInquiryPdf } from "./transaction-inquiry.pdf.js";
 
 const REPORT_LIMIT = 20000;
 
-function monthRange(value: string) {
-  const [yearRaw, monthRaw] = value.split("-");
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  return {
-    monthStart: new Date(Date.UTC(year, month - 1, 1)),
-    nextMonthStart: new Date(Date.UTC(year, month, 1))
-  };
-}
+type TransactionInquiryFilterQuery = Pick<TransactionInquiryWorkspaceQuery, "periodMode" | "month" | "date" | "search" | "status" | "bankAccountId" | "finalEventId">;
 
-function filterFromQuery(input: Pick<TransactionInquiryWorkspaceQuery, "month" | "search" | "status" | "bankAccountId">): TransactionInquiryFilter & { month: string } {
+function filterFromQuery(input: TransactionInquiryFilterQuery): TransactionInquiryFilter & { periodMode: "MONTH" | "DAY"; month: string; date: string } {
+  const periodMode = input.periodMode ?? "MONTH";
   const month = input.month ?? currentBusinessMonthValue();
+  const date = input.date ?? (periodMode === "MONTH" ? `${month}-01` : currentBusinessDayValue());
+  const period = resolvePeriod(periodMode, month, date);
   return {
-    month,
-    ...monthRange(month),
+    periodMode,
+    month: period.month,
+    date: period.date,
+    periodStart: period.start,
+    periodEnd: period.end,
     search: input.search ?? "",
     status: input.status ?? "ALL",
-    bankAccountId: input.bankAccountId
+    bankAccountId: input.bankAccountId,
+    finalEventId: input.finalEventId
   };
 }
 
@@ -114,10 +115,13 @@ export async function getTransactionInquiryWorkspace(input: TransactionInquiryWo
   const records = await loadTransactionInquiryWorkspaceRecords({ filter, page: input.page, pageSize: input.pageSize });
   return {
     filters: {
+      periodMode: filter.periodMode,
       month: filter.month,
+      date: filter.date,
       search: filter.search,
       status: filter.status,
-      bankAccountId: filter.bankAccountId ?? null
+      bankAccountId: filter.bankAccountId ?? null,
+      finalEventId: filter.finalEventId ?? null
     },
     summary: {
       totalTransactions: records.total,
@@ -128,6 +132,7 @@ export async function getTransactionInquiryWorkspace(input: TransactionInquiryWo
       outgoingTransactions: records.outgoingTransactions
     },
     bankAccounts: records.bankAccounts,
+    eventOptions: records.eventOptions,
     transactions: records.transactions.map(mapTransaction),
     pagination: {
       page: input.page,
@@ -192,9 +197,10 @@ export async function getTransactionInquiryDetail(transactionId: string) {
 
 export async function generateTransactionInquiryReport(input: TransactionInquiryReportQuery, userId: string) {
   const filter = filterFromQuery(input);
-  const [records, generatedBy] = await Promise.all([
+  const [records, generatedBy, selectedEvent] = await Promise.all([
     loadTransactionInquiryReportRecords({ filter, limit: REPORT_LIMIT }),
-    loadReportGeneratedBy(userId)
+    loadReportGeneratedBy(userId),
+    filter.finalEventId ? loadTransactionInquiryEventOption(filter.finalEventId) : Promise.resolve(null)
   ]);
   if (!generatedBy) throw new HttpError(401, "Current user is no longer available");
   if (records.count > REPORT_LIMIT || records.transactions.length > REPORT_LIMIT) {
@@ -253,9 +259,10 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
     : "All Bank Accounts";
 
   const pdf = buildTransactionInquiryPdf({
-    periodLabel: monthLabel(filter.month),
+    periodLabel: formatPeriodLabel({ mode: filter.periodMode, month: filter.month, date: filter.date }),
     bankAccountLabel: bankLabel,
     statusLabel: filter.status === "ALL" ? "All Status" : statusLabel(filter.status),
+    finalEventLabel: selectedEvent ? `${selectedEvent.code} - ${selectedEvent.eventName}` : "All Final Events",
     searchLabel: filter.search || null,
     generatedBy: generatedBy.fullName,
     generatedAt: formatDateTime(new Date()),
@@ -285,6 +292,6 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
 
   return {
     buffer: pdf,
-    fileName: `transaction-inquiry-${filter.month}.pdf`
+    fileName: `transaction-inquiry-${filter.periodMode === "DAY" ? filter.date : filter.month}.pdf`
   };
 }

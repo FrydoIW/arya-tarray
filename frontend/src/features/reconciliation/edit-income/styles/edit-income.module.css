@@ -85,20 +85,20 @@
 
 
 /* Keep all inquiry controls visually aligned with the shared 39px control rhythm. */
-.monthFilter { flex: 0 0 176px; }
+.periodFilter { flex: 0 0 auto; }
 .searchFilter { width: 235px; flex: 0 1 235px; }
 .statusFilter { min-width: 132px; flex: 0 0 132px; }
 .bankFilter { min-width: 160px; flex: 0 0 160px; }
 .reloadButton { height: var(--control-height); flex: 0 0 auto; }
 
 @media (max-width: 1180px) {
-  .monthFilter, .searchFilter, .statusFilter, .bankFilter { flex: 1 1 180px; width: auto; min-width: min(180px, 100%); }
+  .periodFilter, .searchFilter, .statusFilter, .bankFilter { flex: 1 1 180px; width: auto; min-width: min(180px, 100%); }
 }
 
 @media (max-width: 760px) {
   .metrics, .flowSteps, .statementDetail { grid-template-columns: 1fr; }
   .tableToolbar, .correctionToolbar { align-items: stretch; flex-direction: column; }
-  .monthFilter, .searchFilter, .statusFilter, .bankFilter, .reloadButton { width: 100%; min-width: 0; flex: none; }
+  .periodFilter, .searchFilter, .statusFilter, .bankFilter, .reloadButton { width: 100%; min-width: 0; flex: none; }
   .tableToolbar > *, .correctionToolbar > * { width: 100%; }
   .statementDetail { margin-right: 12px; margin-left: 12px; }
   .noteCard { align-items: flex-start; }

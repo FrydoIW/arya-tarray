@@ -16,6 +16,7 @@ export function listEventCodes(search?: string) {
           OR: [
             { code: { contains: search } },
             { eventName: { contains: search } },
+            { category: { contains: search } },
             { description: { contains: search } }
           ]
         }
@@ -47,6 +48,7 @@ export async function applyEventCodeChangesAtomic(data: {
   creates: Array<{
     code: string;
     eventName: string;
+    category: string | null;
     description: string | null;
     activeFlag: boolean;
   }>;
@@ -55,6 +57,7 @@ export async function applyEventCodeChangesAtomic(data: {
     input: {
       code: string;
       eventName: string;
+      category: string | null;
       description: string | null;
       activeFlag: boolean;
     };
@@ -75,6 +78,7 @@ export async function applyEventCodeChangesAtomic(data: {
         data: {
           code: update.input.code,
           eventName: update.input.eventName,
+          category: update.input.category,
           description: update.input.description,
           activeFlag: update.input.activeFlag,
           updatedById: data.userId
@@ -87,6 +91,7 @@ export async function applyEventCodeChangesAtomic(data: {
         data: {
           code: create.code,
           eventName: create.eventName,
+          category: create.category,
           description: create.description,
           activeFlag: create.activeFlag,
           createdById: data.userId,

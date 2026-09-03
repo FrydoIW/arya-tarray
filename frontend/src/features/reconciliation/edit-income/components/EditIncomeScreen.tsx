@@ -30,13 +30,16 @@ export function EditIncomeScreen() {
       {workspace.message ? <div className="ui-alert ui-alert-success">{workspace.message}</div> : null}
       {workspace.error ? <div className="ui-alert ui-alert-error">{workspace.error}</div> : null}
 
-      <EditIncomeSummary summary={workspace.workspace.summary} modifiedTransactions={workspace.modifiedTransactions} month={workspace.month} />
+      <EditIncomeSummary summary={workspace.workspace.summary} modifiedTransactions={workspace.modifiedTransactions} periodMode={workspace.period.mode} month={workspace.period.month} date={workspace.period.date} />
       <EditIncomeFlow />
       <EditIncomeStatementTable
         rows={workspace.filteredStatements}
         bankAccounts={workspace.workspace.bankAccounts}
-        month={workspace.month}
+        periodMode={workspace.period.mode}
+        month={workspace.period.month}
+        date={workspace.period.date}
         maxMonth={workspace.maxMonth}
+        maxDate={workspace.maxDate}
         monthDisabled={Boolean(workspace.detail)}
         search={workspace.statementSearch}
         statusFilter={workspace.statementStatusFilter}
@@ -45,7 +48,7 @@ export function EditIncomeScreen() {
         pageSize={workspace.statementPageSize}
         loading={workspace.loading}
         busy={workspace.busy}
-        onMonthChange={workspace.changeMonth}
+        onPeriodChange={workspace.changePeriod}
         onSearchChange={workspace.setStatementSearch}
         onStatusFilterChange={workspace.setStatementStatusFilter}
         onBankAccountFilterChange={workspace.setBankAccountFilter}

@@ -49,6 +49,7 @@ export function EventCodeFormModal({ open, item, saving, onClose, onSubmit }: Ev
       await onSubmit({
         code,
         eventName: eventName.trim(),
+        category: null,
         description: description.trim() || null,
         activeFlag
       });

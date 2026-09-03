@@ -1,4 +1,5 @@
 export type TransactionInquiryStatus = "ALL" | "RAW" | "CHECK" | "FINALIZED";
+export type TransactionInquiryPeriodMode = "MONTH" | "DAY";
 
 export type TransactionInquiryBankAccount = {
   id: string;
@@ -37,10 +38,13 @@ export type TransactionInquiryRow = {
 
 export type TransactionInquiryWorkspace = {
   filters: {
+    periodMode: TransactionInquiryPeriodMode;
     month: string;
+    date: string;
     search: string;
     status: TransactionInquiryStatus;
     bankAccountId: string | null;
+    finalEventId: string | null;
   };
   summary: {
     totalTransactions: number;
@@ -51,6 +55,7 @@ export type TransactionInquiryWorkspace = {
     outgoingTransactions: number;
   };
   bankAccounts: TransactionInquiryBankAccount[];
+  eventOptions: TransactionInquiryEvent[];
   transactions: TransactionInquiryRow[];
   pagination: {
     page: number;
@@ -104,10 +109,13 @@ export type TransactionInquiryDetail = {
 };
 
 export type TransactionInquiryQuery = {
+  periodMode: TransactionInquiryPeriodMode;
   month: string;
+  date: string;
   search: string;
   status: TransactionInquiryStatus;
   bankAccountId: string;
+  finalEventId: string;
   page: number;
   pageSize: number;
 };

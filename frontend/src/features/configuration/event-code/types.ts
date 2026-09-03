@@ -7,6 +7,7 @@ export type EventCode = {
   id: string;
   code: string;
   eventName: string;
+  category: string | null;
   description: string | null;
   activeFlag: boolean;
   updatedAt?: string;
@@ -17,6 +18,7 @@ export type EventCode = {
 export type EventCodeInput = {
   code: string;
   eventName: string;
+  category: string | null;
   description: string | null;
   activeFlag: boolean;
 };

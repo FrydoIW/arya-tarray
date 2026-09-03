@@ -87,6 +87,13 @@
 .ui-select select { width: 100%; height: 100%; padding: 0 33px 0 12px; color: inherit; background: #fff; border: 0; outline: 0; appearance: none; font-size: 13px; }
 .ui-select > svg { position: absolute; right: 10px; pointer-events: none; }
 
+.ui-period-picker { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.ui-period-picker-mode { width: 102px; min-width: 102px; }
+.ui-period-picker-day { width: 184px; min-width: 184px; height: var(--control-height); display: inline-flex; align-items: center; gap: 8px; padding: 0 11px; color: var(--primary); background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+.ui-period-picker-day:focus-within { border-color: #adc2ef; box-shadow: 0 0 0 3px rgba(20,87,242,.07); }
+.ui-period-picker-day input { min-width: 0; flex: 1; height: 100%; color: #34415d; background: transparent; border: 0; outline: 0; font: inherit; font-size: 13px; }
+.ui-period-picker-day:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+
 .ui-empty-state { min-height: 148px; display: grid; place-items: center; align-content: center; gap: 8px; padding: 24px; color: #8c98ad; text-align: center; }
 .ui-empty-state > span { width: 40px; height: 40px; display: grid; place-items: center; color: #71809d; background: #f3f6fb; border-radius: 10px; }
 .ui-empty-state strong { color: #55617b; font-size: 13px; }

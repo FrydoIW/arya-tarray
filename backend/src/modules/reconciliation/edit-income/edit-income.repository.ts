@@ -49,16 +49,18 @@ const statementSummarySelect = {
 } as const;
 
 export type EditIncomeWorkspaceRange = {
-  periodFrom: Date;
-  periodTo: Date;
+  mode: "MONTH" | "DAY";
+  start: Date;
+  end: Date;
 };
 
 export async function loadEditIncomeWorkspaceRecords(range: EditIncomeWorkspaceRange) {
   const statements = await prisma.bankStatementUpload.findMany({
     where: {
       status: { in: ["FINALIZED", "CHECK"] },
-      periodFrom: { lte: range.periodTo },
-      periodTo: { gte: range.periodFrom },
+      ...(range.mode === "DAY"
+        ? { periodFrom: { lte: range.start }, periodTo: { gte: range.start } }
+        : { periodFrom: { lt: range.end }, periodTo: { gte: range.start } }),
       approval: {
         is: {
           history: { some: { action: "APPROVED" } }

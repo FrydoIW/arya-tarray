@@ -4,17 +4,19 @@ import { useEffect, useState } from "react";
 import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import type { TransactionInquiryBankAccount, TransactionInquiryStatus, TransactionReportOptions } from "../types";
-import { formatMonthLabel, getLifecycleLabel } from "../utils/transaction-inquiry.utils";
+import type { TransactionInquiryBankAccount, TransactionInquiryEvent, TransactionInquiryPeriodMode, TransactionInquiryStatus, TransactionReportOptions } from "../types";
+import { formatPeriodLabel, getLifecycleLabel } from "../utils/transaction-inquiry.utils";
 import styles from "../styles/transaction-inquiry.module.css";
 
 export function GenerateReportModal(props: {
   open: boolean;
-  month: string;
+  period: { mode: TransactionInquiryPeriodMode; month: string; date: string };
   search: string;
   status: TransactionInquiryStatus;
   bankAccountId: string;
+  finalEventId: string;
   bankAccounts: TransactionInquiryBankAccount[];
+  eventOptions: TransactionInquiryEvent[];
   loading: boolean;
   onClose: () => void;
   onGenerate: (options: TransactionReportOptions) => Promise<boolean>;
@@ -22,6 +24,7 @@ export function GenerateReportModal(props: {
   const [options, setOptions] = useState<TransactionReportOptions>({ includeFinancialSummary: true, includeClassificationSummary: true, includeTransactionDetail: true });
   useEffect(() => { if (props.open) setOptions({ includeFinancialSummary: true, includeClassificationSummary: true, includeTransactionDetail: true }); }, [props.open]);
   const selectedBank = props.bankAccounts.find((item) => item.id === props.bankAccountId);
+  const selectedEvent = props.eventOptions.find((item) => item.id === props.finalEventId);
   const valid = options.includeFinancialSummary || options.includeClassificationSummary || options.includeTransactionDetail;
 
   async function generate() {
@@ -33,9 +36,10 @@ export function GenerateReportModal(props: {
     <Modal open={props.open} title="Generate Transaction Report" description="Generate a proper PDF reconciliation report using the current inquiry filters." onClose={props.onClose}>
       <div className={styles.reportModalBody}>
         <div className={styles.reportFilters}>
-          <div><span>Period</span><strong>{formatMonthLabel(props.month)}</strong></div>
+          <div><span>Period</span><strong>{formatPeriodLabel(props.period.mode, props.period.month, props.period.date)}</strong></div>
           <div><span>Bank Account</span><strong>{selectedBank ? `${selectedBank.bankCode} - ${selectedBank.accountNo}` : "All Bank Accounts"}</strong></div>
           <div><span>Status</span><strong>{props.status === "ALL" ? "All Status" : getLifecycleLabel(props.status)}</strong></div>
+          <div><span>Final Event</span><strong>{selectedEvent ? `${selectedEvent.code} - ${selectedEvent.eventName}` : "All Final Events"}</strong></div>
           <div><span>Search</span><strong>{props.search || "No search filter"}</strong></div>
         </div>
         <div className={styles.reportSections}>

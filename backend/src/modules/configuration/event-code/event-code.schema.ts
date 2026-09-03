@@ -2,10 +2,15 @@ import { z } from "zod";
 
 const code = z.string().trim().regex(/^\d{3}$/, "Code harus terdiri dari tepat 3 digit");
 const eventName = z.string().trim().min(1, "Event name wajib diisi").max(150);
+const category = z
+  .union([z.string().trim().max(50), z.null()])
+  .optional()
+  .transform((value) => value || null);
 
 const eventCodeExecuteValueSchema = z.object({
   code,
   eventName,
+  category,
   description: z.string().trim().max(500).nullable(),
   activeFlag: z.boolean()
 });

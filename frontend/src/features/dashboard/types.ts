@@ -52,12 +52,17 @@ export interface DashboardSummary {
     complete: number;
     total: number;
   };
-  topFinalEvents: Array<{
-    eventCodeId: string;
-    code: string;
-    eventName: string;
-    transactions: number;
-    amount: string;
+  eventGroups: Array<{
+    category: string;
+    transactionCount: number;
+    totalAmount: string;
+    events: Array<{
+      eventCodeId: string;
+      code: string;
+      eventName: string;
+      transactionCount: number;
+      totalAmount: string;
+    }>;
   }>;
   recentActivities: Array<{
     id: string;

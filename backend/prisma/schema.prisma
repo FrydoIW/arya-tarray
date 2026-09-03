@@ -119,6 +119,7 @@ model EventCode {
   id          String   @id @default(uuid()) @map("event_code_id") @db.Char(36)
   code        String   @db.Char(3)
   eventName   String   @map("event_name") @db.VarChar(150)
+  category    String?  @db.VarChar(50)
   description String?  @db.VarChar(500)
   activeFlag  Boolean  @default(true) @map("active_flag")
   createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)

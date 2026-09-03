@@ -1,4 +1,5 @@
-import { currentBusinessMonthValue } from "@/lib/business-time";
+import { BUSINESS_TIME_ZONE, currentBusinessDayValue, currentBusinessMonthValue } from "@/lib/business-time";
+import type { EditIncomePeriodMode } from "../types";
 import type {
   CorrectionRowStatus,
   EditIncomeDetail,
@@ -53,6 +54,7 @@ export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactio
 }
 
 export const getCurrentMonthValue = currentBusinessMonthValue;
+export const getCurrentDayValue = currentBusinessDayValue;
 
 export function formatMonthLabel(value: string) {
   const match = /^(\d{4})-(\d{2})$/.exec(value);
@@ -64,4 +66,19 @@ export function formatMonthLabel(value: string) {
     year: "numeric",
     timeZone: "UTC"
   }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+export function formatDayLabel(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  return new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: BUSINESS_TIME_ZONE })
+    .format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))));
+}
+
+export function formatPeriodLabel(mode: EditIncomePeriodMode, month: string, date: string) {
+  return mode === "DAY" ? formatDayLabel(date) : formatMonthLabel(month);
+}
+
+export function periodContext(mode: EditIncomePeriodMode, month: string, date: string) {
+  return `${mode === "DAY" ? "on" : "in"} ${formatPeriodLabel(mode, month, date)}`;
 }

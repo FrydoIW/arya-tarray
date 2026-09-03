@@ -10,6 +10,7 @@ type EventCodeApiItem = {
   id: string;
   code: string;
   eventName: string;
+  category: string | null;
   description?: string | null;
   activeFlag: boolean;
   updatedAt?: string;
@@ -34,6 +35,7 @@ function mapEventCode(item: EventCodeApiItem): EventCode {
     id: String(item.id),
     code: item.code,
     eventName: item.eventName,
+    category: item.category ?? null,
     description: item.description ?? null,
     activeFlag: item.activeFlag,
     updatedAt: item.updatedAt,

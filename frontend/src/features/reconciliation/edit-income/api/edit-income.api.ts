@@ -2,12 +2,15 @@ import { apiFetch } from "@/lib/api";
 import type {
   EditIncomeCorrectionChange,
   EditIncomeDetail,
+  EditIncomePeriodMode,
   EditIncomeWorkspace,
   ExecuteEditIncomeResponse
 } from "../types";
 
-export function getEditIncomeWorkspace(month: string): Promise<EditIncomeWorkspace> {
-  const params = new URLSearchParams({ month });
+export function getEditIncomeWorkspace(period: { mode: EditIncomePeriodMode; month: string; date: string }): Promise<EditIncomeWorkspace> {
+  const params = new URLSearchParams({ periodMode: period.mode });
+  if (period.mode === "DAY") params.set("date", period.date);
+  else params.set("month", period.month);
   return apiFetch<EditIncomeWorkspace>(`/reconciliation/edit-income/workspace?${params.toString()}`);
 }
 

@@ -5,10 +5,11 @@
 .tableHeader h2 { margin: 0; color: #1d2943; font-size: 14.5px; }
 .tableHeader p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .toolbar { display: flex; align-items: center; gap: 7px; }
-.monthFilter { flex: 0 0 176px; }
+.periodFilter { flex: 0 0 auto; }
 .searchFilter { width: 235px; flex: 0 1 235px; }
 .statusFilter { min-width: 132px; flex: 0 0 132px; }
 .bankFilter { min-width: 160px; flex: 0 0 160px; }
+.eventFilter { min-width: 175px; flex: 0 0 175px; }
 .reloadButton { height: var(--control-height); flex: 0 0 auto; }
 .primaryCell, .amountCell, .eventText { color: #34415d; font-size: 11px; white-space: nowrap; }
 .amountCell { font-weight: 680; }
@@ -61,14 +62,14 @@
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tableHeader { align-items: flex-start; flex-direction: column; }
   .toolbar { width: 100%; flex-wrap: wrap; }
-  .monthFilter, .searchFilter, .statusFilter, .bankFilter { flex: 1 1 180px; width: auto; min-width: min(180px, 100%); }
+  .periodFilter, .searchFilter, .statusFilter, .bankFilter, .eventFilter { flex: 1 1 180px; width: auto; min-width: min(180px, 100%); }
 }
 
 @media (max-width: 760px) {
   .metrics { grid-template-columns: 1fr; }
   .tableHeader { gap: 12px; }
   .toolbar { width: 100%; align-items: stretch; flex-direction: column; }
-  .monthFilter, .searchFilter, .statusFilter, .bankFilter, .reloadButton { width: 100%; min-width: 0; flex: none; }
+  .periodFilter, .searchFilter, .statusFilter, .bankFilter, .eventFilter, .reloadButton { width: 100%; min-width: 0; flex: none; }
   .detailGrid, .classificationGrid, .reportFilters { grid-template-columns: 1fr; }
   .reportActions { align-items: stretch; flex-direction: column-reverse; }
   .reportActions > button { width: 100%; }

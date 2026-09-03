@@ -1,5 +1,6 @@
-import { currentBusinessMonthValue } from "../../../lib/business-time.js";
+import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
+import { resolvePeriod } from "../../../lib/period.js";
 import type { EditIncomeWorkspaceQuery, ExecuteEditIncomeInput } from "./edit-income.schema.js";
 import {
   executeEditIncomeCorrectionAtomic,
@@ -31,16 +32,6 @@ function totalAmount(totalCredit: { toString(): string }, totalDebit: { toString
   return centsToDecimal(decimalToCents(totalCredit) + decimalToCents(totalDebit));
 }
 
-function monthRange(value: string) {
-  const [yearRaw, monthRaw] = value.split("-");
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  return {
-    periodFrom: new Date(Date.UTC(year, month - 1, 1)),
-    periodTo: new Date(Date.UTC(year, month, 0))
-  };
-}
-
 function mapStatement(item: Awaited<ReturnType<typeof loadEditIncomeWorkspaceRecords>>["statements"][number]) {
   const hasPriorApproval = Boolean(item.approval?.history.length);
   const correctionPending = item.status === "CHECK" && item.approval?.status === "PENDING" && hasPriorApproval;
@@ -63,8 +54,11 @@ function mapStatement(item: Awaited<ReturnType<typeof loadEditIncomeWorkspaceRec
 }
 
 export async function getEditIncomeWorkspace(input: EditIncomeWorkspaceQuery) {
+  const periodMode = input.periodMode ?? "MONTH";
   const month = input.month ?? currentBusinessMonthValue();
-  const records = await loadEditIncomeWorkspaceRecords(monthRange(month));
+  const date = input.date ?? (periodMode === "MONTH" ? `${month}-01` : currentBusinessDayValue());
+  const period = resolvePeriod(periodMode, month, date);
+  const records = await loadEditIncomeWorkspaceRecords({ mode: period.mode, start: period.start, end: period.end });
   const statements = records.statements.map(mapStatement);
   const finalized = statements.filter((item) => item.status === "FINALIZED");
   const pendingReapproval = statements.filter((item) => item.displayStatus === "PENDING_REAPPROVAL");
@@ -72,7 +66,9 @@ export async function getEditIncomeWorkspace(input: EditIncomeWorkspaceQuery) {
     .sort((a, b) => `${a.bankName}${a.accountNo}`.localeCompare(`${b.bankName}${b.accountNo}`));
 
   return {
-    month,
+    periodMode: period.mode,
+    month: period.month,
+    date: period.date,
     summary: {
       finalizedStatements: finalized.length,
       totalTransactions: finalized.reduce((total, item) => total + item.totalTransaction, 0),

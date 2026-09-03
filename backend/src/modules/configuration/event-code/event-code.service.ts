@@ -10,6 +10,7 @@ type EventCodeRecord = {
   id: string;
   code: string;
   eventName: string;
+  category: string | null;
   description: string | null;
   activeFlag: boolean;
   createdAt: Date;
@@ -25,6 +26,7 @@ function toResponse(item: EventCodeRecord) {
     id: item.id,
     code: item.code,
     eventName: item.eventName,
+    category: item.category,
     description: item.description,
     activeFlag: item.activeFlag,
     createdAt: item.createdAt,

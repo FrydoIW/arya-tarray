@@ -4,19 +4,22 @@ import { useMemo } from "react";
 import { Pencil, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
-import { MonthPicker } from "@/components/ui/MonthPicker";
+import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
-import type { EditIncomeBankAccount, EditIncomeStatement, EditIncomeStatusFilter } from "../types";
-import { formatMonthLabel, getStatementStatusLabel } from "../utils/edit-income.utils";
+import type { EditIncomeBankAccount, EditIncomePeriodMode, EditIncomeStatement, EditIncomeStatusFilter } from "../types";
+import { getStatementStatusLabel, periodContext } from "../utils/edit-income.utils";
 import styles from "../styles/edit-income.module.css";
 
 type Props = {
   rows: EditIncomeStatement[];
   bankAccounts: EditIncomeBankAccount[];
+  periodMode: EditIncomePeriodMode;
   month: string;
+  date: string;
   maxMonth: string;
+  maxDate: string;
   monthDisabled: boolean;
   search: string;
   statusFilter: EditIncomeStatusFilter;
@@ -25,7 +28,7 @@ type Props = {
   pageSize: number;
   loading: boolean;
   busy: boolean;
-  onMonthChange: (value: string) => void;
+  onPeriodChange: (value: { mode: EditIncomePeriodMode; month: string; date: string }) => void;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: EditIncomeStatusFilter) => void;
   onBankAccountFilterChange: (value: string) => void;
@@ -106,20 +109,21 @@ export function EditIncomeStatementTable(props: Props) {
     }
   ], [props.busy, props.onEdit]);
 
-  const monthLabel = formatMonthLabel(props.month);
+  const context = periodContext(props.periodMode, props.month, props.date);
 
   return (
     <section className={styles.tablePanel}>
       <div className={styles.tableHeader}>
-        <div><h2>Edit Income Workspace</h2><p>Showing approved statements whose period overlaps {monthLabel}.</p></div>
+        <div><h2>Edit Income Workspace</h2><p>Showing approved statements available {context}.</p></div>
         <div className={styles.tableToolbar}>
-          <MonthPicker
-            className={styles.monthFilter}
-            value={props.month}
+          <PeriodPicker
+            className={styles.periodFilter}
+            value={{ mode: props.periodMode, month: props.month, date: props.date }}
             maxMonth={props.maxMonth}
+            maxDate={props.maxDate}
             disabled={props.loading || props.monthDisabled}
-            ariaLabel="Edit Income month"
-            onChange={props.onMonthChange}
+            ariaLabel="Edit Income period"
+            onChange={props.onPeriodChange}
           />
           <SearchInput className={styles.searchFilter} value={props.search} disabled={props.loading} placeholder="Search statement or account" onChange={(event) => props.onSearchChange(event.target.value)} />
           <Select className={styles.statusFilter} value={props.statusFilter} disabled={props.loading} onChange={(event) => props.onStatusFilterChange(event.target.value as EditIncomeStatusFilter)} aria-label="Statement status">
@@ -140,7 +144,7 @@ export function EditIncomeStatementTable(props: Props) {
         rowKey={(row) => row.id}
         loading={props.loading}
         minWidth="1240px"
-        emptyState={{ title: `No statements in ${monthLabel}`, description: "Choose another month or adjust the search and filters." }}
+        emptyState={{ title: `No statements ${context}`, description: "Choose another period or adjust the search and filters." }}
         pagination={{
           page: props.page,
           pageSize: props.pageSize,

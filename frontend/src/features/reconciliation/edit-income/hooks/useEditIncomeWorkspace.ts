@@ -9,6 +9,7 @@ import {
 import type {
   CorrectionRowStatusFilter,
   EditIncomeDetail,
+  EditIncomePeriodMode,
   EditIncomeStatusFilter,
   EditIncomeTransaction,
   EditIncomeWorkspace
@@ -17,20 +18,26 @@ import {
   buildCorrectionChanges,
   getCorrectionRowStatus,
   getCurrentMonthValue,
+  getCurrentDayValue,
   transactionChanged
 } from "../utils/edit-income.utils";
 
 const CURRENT_MONTH = getCurrentMonthValue();
+const CURRENT_DAY = getCurrentDayValue();
 
 const EMPTY_WORKSPACE: EditIncomeWorkspace = {
+  periodMode: "MONTH",
   month: CURRENT_MONTH,
+  date: CURRENT_DAY,
   summary: { finalizedStatements: 0, totalTransactions: 0, pendingReapproval: 0 },
   statements: [],
   bankAccounts: []
 };
 
 export function useEditIncomeWorkspace() {
+  const [periodMode, setPeriodMode] = useState<EditIncomePeriodMode>("MONTH");
   const [month, setMonth] = useState(CURRENT_MONTH);
+  const [date, setDate] = useState(CURRENT_DAY);
   const [workspace, setWorkspace] = useState<EditIncomeWorkspace>(EMPTY_WORKSPACE);
   const [detail, setDetail] = useState<EditIncomeDetail | null>(null);
   const [draftTransactions, setDraftTransactions] = useState<EditIncomeTransaction[]>([]);
@@ -51,8 +58,8 @@ export function useEditIncomeWorkspace() {
   const [transactionPage, setTransactionPage] = useState(1);
   const [transactionPageSize, setTransactionPageSize] = useState(25);
 
-  const loadWorkspace = useCallback(async (targetMonth: string) => {
-    const next = await getEditIncomeWorkspace(targetMonth);
+  const loadWorkspace = useCallback(async (targetPeriod: { mode: EditIncomePeriodMode; month: string; date: string }) => {
+    const next = await getEditIncomeWorkspace(targetPeriod);
     setWorkspace(next);
     return next;
   }, []);
@@ -81,14 +88,14 @@ export function useEditIncomeWorkspace() {
     setError("");
     setMessage("");
     try {
-      await loadWorkspace(month);
+      await loadWorkspace({ mode: periodMode, month, date });
       if (detail?.statement.id) await loadDetail(detail.statement.id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to reload Edit Income workspace.");
     } finally {
       setLoading(false);
     }
-  }, [detail?.statement.id, loadDetail, loadWorkspace, month]);
+  }, [date, detail?.statement.id, loadDetail, loadWorkspace, month, periodMode]);
 
   useEffect(() => {
     let active = true;
@@ -97,7 +104,7 @@ export function useEditIncomeWorkspace() {
     setMessage("");
     void (async () => {
       try {
-        const next = await getEditIncomeWorkspace(month);
+        const next = await getEditIncomeWorkspace({ mode: periodMode, month, date });
         if (active) setWorkspace(next);
       } catch (caught) {
         if (active) setError(caught instanceof Error ? caught.message : "Failed to load Edit Income workspace.");
@@ -106,7 +113,7 @@ export function useEditIncomeWorkspace() {
       }
     })();
     return () => { active = false; };
-  }, [month]);
+  }, [date, month, periodMode]);
 
   const filteredStatements = useMemo(() => {
     const search = statementSearch.trim().toLowerCase();
@@ -124,7 +131,7 @@ export function useEditIncomeWorkspace() {
     });
   }, [bankAccountFilter, statementSearch, statementStatusFilter, workspace.statements]);
 
-  useEffect(() => { setStatementPage(1); }, [statementSearch, statementStatusFilter, bankAccountFilter, month]);
+  useEffect(() => { setStatementPage(1); }, [statementSearch, statementStatusFilter, bankAccountFilter, month, date, periodMode]);
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filteredStatements.length / statementPageSize));
     if (statementPage > maxPage) setStatementPage(maxPage);
@@ -165,9 +172,11 @@ export function useEditIncomeWorkspace() {
   const canEdit = Boolean(detail?.statement.editable && !busy && !detailLoading);
   const canExecute = Boolean(canEdit && modifiedTransactions > 0);
 
-  function changeMonth(value: string) {
+  function changePeriod(value: { mode: EditIncomePeriodMode; month: string; date: string }) {
     if (busy || detail) return;
-    setMonth(value);
+    setPeriodMode(value.mode);
+    setMonth(value.month);
+    setDate(value.date);
     setStatementSearch("");
     setStatementStatusFilter("ALL");
     setBankAccountFilter("ALL");
@@ -214,7 +223,7 @@ export function useEditIncomeWorkspace() {
     setMessage("");
     try {
       const result = await executeEditIncomeCorrection(detail.statement.id, changes);
-      await loadWorkspace(month);
+      await loadWorkspace({ mode: periodMode, month, date });
       setDetail(null);
       setDraftTransactions([]);
       setMessage(result.message);
@@ -226,8 +235,9 @@ export function useEditIncomeWorkspace() {
   }
 
   return {
-    month,
+    period: { mode: periodMode, month, date },
     maxMonth: CURRENT_MONTH,
+    maxDate: CURRENT_DAY,
     workspace,
     detail,
     loading,
@@ -250,7 +260,7 @@ export function useEditIncomeWorkspace() {
     modifiedTransactions,
     canEdit,
     canExecute,
-    changeMonth,
+    changePeriod,
     setStatementSearch,
     setStatementStatusFilter,
     setBankAccountFilter,

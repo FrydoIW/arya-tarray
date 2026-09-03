@@ -7,10 +7,13 @@ import type {
 } from "../types";
 
 function queryParams(query: Omit<TransactionInquiryQuery, "page" | "pageSize">) {
-  const params = new URLSearchParams({ month: query.month });
+  const params = new URLSearchParams({ periodMode: query.periodMode });
+  if (query.periodMode === "MONTH") params.set("month", query.month);
+  else params.set("date", query.date);
   if (query.search.trim()) params.set("search", query.search.trim());
   if (query.status !== "ALL") params.set("status", query.status);
   if (query.bankAccountId !== "ALL") params.set("bankAccountId", query.bankAccountId);
+  if (query.finalEventId !== "ALL") params.set("finalEventId", query.finalEventId);
   return params;
 }
 

@@ -202,6 +202,37 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
   const previousIncoming = decimalToCents(previous.incomingAmount);
   const currentOutgoing = decimalToCents(current.outgoingAmount);
   const previousOutgoing = decimalToCents(previous.outgoingAmount);
+  const eventGroupsByCategory = new Map<string, {
+    category: string;
+    transactionCount: number;
+    totalAmountCents: bigint;
+    events: Array<{ eventCodeId: string; code: string; eventName: string; transactionCount: number; totalAmount: string; amountCents: bigint }>;
+  }>();
+
+  for (const group of topEventsRecords.groups) {
+    if (!group.eventCodeId) continue;
+    const event = eventCodeById.get(group.eventCodeId);
+    if (!event) continue;
+    const category = event.category?.trim() || "Uncategorized";
+    const amountCents = decimalToCents(group._sum.originalAmount);
+    const currentGroup = eventGroupsByCategory.get(category) ?? {
+      category,
+      transactionCount: 0,
+      totalAmountCents: 0n,
+      events: []
+    };
+    currentGroup.transactionCount += group._count._all;
+    currentGroup.totalAmountCents += amountCents;
+    currentGroup.events.push({
+      eventCodeId: event.id,
+      code: event.code,
+      eventName: event.eventName,
+      transactionCount: group._count._all,
+      totalAmount: centsToDecimal(amountCents),
+      amountCents
+    });
+    eventGroupsByCategory.set(category, currentGroup);
+  }
 
   return {
     viewer,
@@ -243,18 +274,20 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     })),
     transactionStatus: summarizeTransactionStatus(current),
     statementStatus: summarizeStatementStatus(current),
-    topFinalEvents: topEventsRecords.groups.flatMap((group) => {
-      if (!group.eventCodeId) return [];
-      const event = eventCodeById.get(group.eventCodeId);
-      if (!event) return [];
-      return [{
-        eventCodeId: event.id,
-        code: event.code,
-        eventName: event.eventName,
-        transactions: group._count._all,
-        amount: group._sum.originalAmount?.toString() ?? "0.00"
-      }];
-    }),
+    eventGroups: [...eventGroupsByCategory.values()]
+      .sort((left, right) => right.totalAmountCents === left.totalAmountCents
+        ? left.category.localeCompare(right.category)
+        : right.totalAmountCents > left.totalAmountCents ? 1 : -1)
+      .map((group) => ({
+        category: group.category,
+        transactionCount: group.transactionCount,
+        totalAmount: centsToDecimal(group.totalAmountCents),
+        events: group.events
+          .sort((left, right) => right.amountCents === left.amountCents
+            ? left.code.localeCompare(right.code)
+            : right.amountCents > left.amountCents ? 1 : -1)
+          .map(({ amountCents: _amountCents, ...event }) => event)
+      })),
     recentActivities: mapRecentActivities(recentCandidates),
     lastUpdatedAt: new Date()
   };
