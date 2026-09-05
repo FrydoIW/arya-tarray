@@ -7,6 +7,80 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Member {
+  id String @id @default(uuid()) @map("member_id") @db.Char(36)
+  memberCode String @unique(map: "uk_member_code") @map("member_code") @db.VarChar(30)
+  memberName String @map("member_name") @db.VarChar(150)
+  initialName String? @map("initial_name") @db.VarChar(100)
+  birthDate DateTime? @map("birth_date") @db.Date
+  phone String? @db.VarChar(50)
+  email String? @db.VarChar(150)
+  address String? @db.VarChar(500)
+  city String? @db.VarChar(100)
+  registrationSource String @default("MANUAL") @map("registration_source") @db.VarChar(20)
+  activeFlag Boolean @default(true) @map("active_flag")
+  remark String? @db.VarChar(500)
+  registeredAt DateTime @default(now()) @map("registered_at") @db.DateTime(3)
+  registeredById String? @map("registered_by") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById String? @map("created_by") @db.Char(36)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById String? @map("updated_by") @db.Char(36)
+  registeredBy User? @relation("MemberRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_registered_by")
+  createdBy User? @relation("MemberCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_created_by")
+  updatedBy User? @relation("MemberUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_updated_by")
+  identities MemberIdentity[]
+  @@index([memberName], map: "idx_member_name")
+  @@index([initialName], map: "idx_member_initial_name")
+  @@index([city], map: "idx_member_city")
+  @@index([activeFlag], map: "idx_member_active")
+  @@index([registeredById], map: "fk_member_registered_by")
+  @@index([createdById], map: "fk_member_created_by")
+  @@index([updatedById], map: "fk_member_updated_by")
+  @@map("arya_member")
+}
+
+model MemberIdentity {
+  id String @id @default(uuid()) @map("member_identity_id") @db.Char(36)
+  memberId String? @map("member_id") @db.Char(36)
+  sourceType String @default("STATEMENT") @map("source_type") @db.VarChar(20)
+  bankName String? @map("bank_name") @db.VarChar(100)
+  accountNumber String? @map("account_number") @db.VarChar(100)
+  accountType String? @map("account_type") @db.VarChar(100)
+  accountName String @map("account_name") @db.VarChar(200)
+  initialName String? @map("initial_name") @db.VarChar(100)
+  normalizedName String @map("normalized_name") @db.VarChar(200)
+  identityKey String @unique(map: "uk_member_identity_key") @map("identity_key") @db.VarChar(191)
+  verificationStatus String @default("UNVERIFIED") @map("verification_status") @db.VarChar(20)
+  firstSeenStatementUploadId String? @map("first_seen_statement_upload_id") @db.Char(36)
+  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.DateTime(3)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.DateTime(3)
+  verifiedAt DateTime? @map("verified_at") @db.DateTime(3)
+  verifiedById String? @map("verified_by") @db.Char(36)
+  remark String? @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById String? @map("created_by") @db.Char(36)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById String? @map("updated_by") @db.Char(36)
+  member Member? @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_member")
+  firstSeenStatement BankStatementUpload? @relation(fields: [firstSeenStatementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_first_statement")
+  verifiedBy User? @relation("MemberIdentityVerifiedBy", fields: [verifiedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_verified_by")
+  createdBy User? @relation("MemberIdentityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_created_by")
+  updatedBy User? @relation("MemberIdentityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_updated_by")
+  transactions BankTransaction[]
+  @@index([memberId], map: "idx_member_identity_member")
+  @@index([verificationStatus], map: "idx_member_identity_status")
+  @@index([normalizedName], map: "idx_member_identity_normalized_name")
+  @@index([accountName], map: "idx_member_identity_account_name")
+  @@index([accountNumber], map: "idx_member_identity_account_number")
+  @@index([lastSeenAt], map: "idx_member_identity_last_seen")
+  @@index([firstSeenStatementUploadId], map: "fk_member_identity_first_statement")
+  @@index([verifiedById], map: "fk_member_identity_verified_by")
+  @@index([createdById], map: "fk_member_identity_created_by")
+  @@index([updatedById], map: "fk_member_identity_updated_by")
+  @@map("arya_member_identity")
+}
+
 model Role {
   id          String   @id @default(uuid()) @map("role_id") @db.Char(36)
   roleCode    String   @map("role_code") @db.VarChar(50)
@@ -27,6 +101,12 @@ model Role {
 }
 
 model User {
+  registeredMembers Member[] @relation("MemberRegisteredBy")
+  createdMembers Member[] @relation("MemberCreatedBy")
+  updatedMembers Member[] @relation("MemberUpdatedBy")
+  verifiedMemberIdentities MemberIdentity[] @relation("MemberIdentityVerifiedBy")
+  createdMemberIdentities MemberIdentity[] @relation("MemberIdentityCreatedBy")
+  updatedMemberIdentities MemberIdentity[] @relation("MemberIdentityUpdatedBy")
   id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
   fullName     String   @map("full_name") @db.VarChar(150)
   email        String   @db.VarChar(150)
@@ -157,6 +237,7 @@ model BankAccount {
 }
 
 model BankStatementUpload {
+  firstSeenMemberIdentities MemberIdentity[]
   id               String    @id @default(uuid()) @map("statement_upload_id") @db.Char(36)
   bankAccountId    String    @map("bank_account_id") @db.Char(36)
   fileName         String    @map("file_name") @db.VarChar(255)
@@ -187,6 +268,9 @@ model BankStatementUpload {
 }
 
 model BankTransaction {
+  memberIdentityId String? @map("member_identity_id") @db.Char(36)
+  memberIdentity MemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_member_identity")
+  @@index([memberIdentityId], map: "idx_bank_transaction_member_identity")
   id                   String    @id @default(uuid()) @map("bank_transaction_id") @db.Char(36)
   statementUploadId    String    @map("statement_upload_id") @db.Char(36)
   rowNo                Int?      @map("row_no")

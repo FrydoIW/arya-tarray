@@ -3,6 +3,8 @@ import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
 import { storedTransactionRequiresClassification } from "../reconciliation-classification.js";
 import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../reconciliation-approval.js";
+import { discoverMemberIdentities } from "../../member/member-identity/member-identity.service.js";
+import { memberTransaction } from "../../member/member-identity/member-transaction.js";
 
 const bankAccountSelect = {
   id: true,
@@ -265,7 +267,7 @@ export async function updateTransactionFinalEventAtomic(input: {
 }
 
 export async function executeStatementAtomic(input: { statementId: string; userId: string }) {
-  return prisma.$transaction(async (tx) => {
+  return memberTransaction(async (tx) => {
     const statement = await tx.bankStatementUpload.findUnique({
       where: { id: input.statementId },
       select: {
@@ -274,6 +276,10 @@ export async function executeStatementAtomic(input: { statementId: string; userI
         transactions: {
           select: {
             id: true,
+            senderName: true,
+            statementUploadId: true,
+            createdAt: true,
+            memberIdentityId: true,
             transactionType: true,
             originalAmount: true,
             eventCodeId: true
@@ -370,6 +376,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
       }
     });
 
-    return { statementId: statement.id, approvalId };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    const memberDiscovery = await discoverMemberIdentities(tx, statement.transactions, input.userId);
+    return { statementId: statement.id, approvalId, memberDiscovery };
+  });
 }

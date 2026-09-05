@@ -1,5 +1,6 @@
 import {
   BadgeCheck,
+  ContactRound,
   Landmark,
   CircleGauge,
   FilePenLine,
@@ -87,6 +88,15 @@ export const navigation: NavigationGroup[] = [
     ]
   },
   {
+    menuCode: "MEMBER",
+    label: "Donatur",
+    icon: UsersRound,
+    children: [
+      { menuCode: "MEMBER_REGISTRATION", label: "Registrasi Donatur", icon: UserRound, href: "/member/registration", enabled: true },
+      { menuCode: "MEMBER_DATA", label: "Data Donatur", icon: ContactRound, href: "/member/data", enabled: true }
+    ]
+  },
+  {
     menuCode: "CONFIGURATION",
     label: "Configuration",
     icon: Settings2,
@@ -132,7 +142,7 @@ export const navigation: NavigationGroup[] = [
 
 export function getNavigationTitle(pathname: string) {
   for (const group of navigation) {
-    const child = group.children.find((item) => item.href === pathname);
+    const child = group.children.find((item) => item.href && (item.href === pathname || pathname.startsWith(`${item.href}/`)));
     if (child) return child.label;
   }
 
@@ -151,7 +161,7 @@ export function getNavigationByMenuCode(menuCode: string) {
 
 export function getNavigationByPathname(pathname: string) {
   for (const group of navigation) {
-    const child = group.children.find((item) => item.href === pathname);
+    const child = group.children.find((item) => item.href && (item.href === pathname || pathname.startsWith(`${item.href}/`)));
     if (child) return child;
   }
 

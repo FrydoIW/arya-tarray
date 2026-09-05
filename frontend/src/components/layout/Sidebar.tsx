@@ -46,7 +46,7 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
               <div className="nav-children">
                 {visibleChildren.map((child) => {
                   const ChildIcon = child.icon;
-                  const active = Boolean(child.href && pathname === child.href);
+                  const active = Boolean(child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
 
                   return (
                     <Link
