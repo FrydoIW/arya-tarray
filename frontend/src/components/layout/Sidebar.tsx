@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Flower2, ShieldCheck, X } from "lucide-react";
 import { navigation } from "@/config/navigation";
@@ -14,20 +14,7 @@ interface SidebarProps {
 
 export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: SidebarProps) {
   const allowed = new Set(allowedMenuCodes);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(navigation.map((group) => [group.menuCode, true]))
-  );
-
-  useEffect(() => {
-    const activeGroup = navigation.find((group) =>
-      group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)))
-    );
-
-    if (!activeGroup) return;
-    setExpandedGroups((current) => current[activeGroup.menuCode]
-      ? current
-      : { ...current, [activeGroup.menuCode]: true });
-  }, [pathname]);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   return (
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
@@ -49,7 +36,7 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
           const GroupIcon = group.icon;
           const visibleChildren = group.children.filter((child) => !child.enabled || allowed.has(child.menuCode));
           if (visibleChildren.length === 0) return null;
-          const expanded = expandedGroups[group.menuCode] ?? true;
+          const expanded = expandedGroups[group.menuCode] ?? false;
           const childrenId = `nav-group-${group.menuCode.toLowerCase().replaceAll("_", "-")}`;
 
           return (
@@ -61,7 +48,7 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
                 aria-controls={childrenId}
                 onClick={() => setExpandedGroups((current) => ({
                   ...current,
-                  [group.menuCode]: !(current[group.menuCode] ?? true)
+                  [group.menuCode]: !(current[group.menuCode] ?? false)
                 }))}
               >
                 <GroupIcon size={17} aria-hidden="true" />

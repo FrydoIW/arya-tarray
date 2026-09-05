@@ -11,6 +11,8 @@ import { AccessDenied } from "./AccessDenied";
 import { ScreenLoader } from "./ScreenLoader";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { WorkspaceTabs } from "./WorkspaceTabs";
+import { clearWorkspaceTabsSession, useWorkspaceTabs } from "./useWorkspaceTabs";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,6 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     getCurrentUser()
       .then(setUser)
       .catch(() => {
+        clearWorkspaceTabsSession();
         clearSession();
         router.replace("/login");
       });
@@ -64,9 +67,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return !(user.menuCodes ?? []).includes(item.menuCode);
   }, [pathname, user]);
 
+  const workspaceTabs = useWorkspaceTabs(user?.id ?? null, user?.menuCodes ?? [], pathname);
+
   function logout() {
+    clearWorkspaceTabsSession();
     clearSession();
     router.replace("/login");
+  }
+
+  function closeWorkspaceTab(route: string) {
+    const nextRoute = workspaceTabs.closeTab(route);
+    if (nextRoute) router.push(nextRoute);
   }
 
   if (!user) return <ScreenLoader />;
@@ -96,6 +107,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           menuOpen={mobileOpen}
           onMenuOpen={() => setMobileOpen(true)}
           onLogout={logout}
+        />
+        <WorkspaceTabs
+          tabs={workspaceTabs.tabs}
+          activeRoute={workspaceTabs.activeRoute}
+          onActivate={(route) => router.push(route)}
+          onClose={closeWorkspaceTab}
         />
         <div className="page-stage">{routeDenied ? <AccessDenied /> : children}</div>
       </main>
