@@ -4,6 +4,7 @@ import { isValidPeriodDate } from "../../../lib/period.js";
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must use YYYY-MM format");
 const dateSchema = z.string().refine(isValidPeriodDate, "Date must use YYYY-MM-DD format");
 const statusSchema = z.enum(["ALL", "RAW", "CHECK", "FINALIZED"]);
+const memberLinkStatusSchema = z.enum(["ALL", "LINKED", "UNLINKED"]);
 const optionalUuidSchema = z.string().uuid().optional();
 const periodModeSchema = z.enum(["MONTH", "DAY"]);
 
@@ -36,6 +37,8 @@ export const transactionInquiryWorkspaceQuerySchema = z.object({
   status: statusSchema.optional().default("ALL"),
   bankAccountId: optionalUuidSchema,
   finalEventId: optionalUuidSchema,
+  memberId: optionalUuidSchema,
+  memberLinkStatus: memberLinkStatusSchema.optional().default("ALL"),
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(25)
 }).superRefine(validatePeriod);
@@ -48,6 +51,8 @@ export const transactionInquiryReportQuerySchema = z.object({
   status: statusSchema.optional().default("ALL"),
   bankAccountId: optionalUuidSchema,
   finalEventId: optionalUuidSchema,
+  memberId: optionalUuidSchema,
+  memberLinkStatus: memberLinkStatusSchema.optional().default("ALL"),
   includeFinancialSummary: queryBoolean(true),
   includeClassificationSummary: queryBoolean(true),
   includeTransactionDetail: queryBoolean(true)
@@ -66,5 +71,11 @@ export const transactionInquiryParamsSchema = z.object({
   transactionId: z.string().uuid()
 });
 
+export const transactionInquiryMemberOptionsQuerySchema = z.object({
+  search: z.string().trim().max(100).optional().default(""),
+  limit: z.coerce.number().int().min(1).max(50).optional().default(20)
+});
+
 export type TransactionInquiryWorkspaceQuery = z.infer<typeof transactionInquiryWorkspaceQuerySchema>;
 export type TransactionInquiryReportQuery = z.infer<typeof transactionInquiryReportQuerySchema>;
+export type TransactionInquiryMemberOptionsQuery = z.infer<typeof transactionInquiryMemberOptionsQuerySchema>;

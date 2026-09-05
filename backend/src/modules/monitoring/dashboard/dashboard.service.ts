@@ -1,15 +1,18 @@
-import { currentBusinessMonthValue } from "../../../lib/business-time.js";
+import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
+import { formatPeriodLabel, resolvePeriod } from "../../../lib/period.js";
 import { storedTransactionRequiresClassification } from "../../reconciliation/reconciliation-classification.js";
 import {
-  loadDashboardMonthSummary,
+  loadDashboardMemberRecords,
+  loadDashboardPeriodSummary,
   loadDashboardRecentActivityCandidates,
   loadDashboardTrendMonth,
   loadDashboardViewer,
   loadTopFinalEvents,
-  type DashboardMonthRange
+  type DashboardPeriodRange
 } from "./dashboard.repository.js";
 import type { DashboardWorkspaceQuery } from "./dashboard.schema.js";
+import { isRegistrationFollowUpIdentity, summarizeDashboardMemberDonations } from "./dashboard-member.domain.js";
 
 const TREND_MONTHS = 6;
 const RECENT_ACTIVITY_LIMIT = 6;
@@ -28,11 +31,11 @@ function shiftMonth(value: string, offset: number) {
   return monthValue(new Date(Date.UTC(year, month - 1 + offset, 1)));
 }
 
-function monthRange(value: string): DashboardMonthRange {
-  const { year, month } = parseMonth(value);
+function monthRange(value: string): DashboardPeriodRange {
+  const period = resolvePeriod("MONTH", value, `${value}-01`);
   return {
-    monthStart: new Date(Date.UTC(year, month - 1, 1)),
-    nextMonthStart: new Date(Date.UTC(year, month, 1))
+    periodStart: period.start,
+    periodEnd: period.end
   };
 }
 
@@ -40,15 +43,6 @@ function monthLabel(value: string) {
   const { year, month } = parseMonth(value);
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(Date.UTC(year, month - 1, 1)));
-}
-
-function longMonthLabel(value: string) {
-  const { year, month } = parseMonth(value);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
     year: "numeric",
     timeZone: "UTC"
   }).format(new Date(Date.UTC(year, month - 1, 1)));
@@ -88,7 +82,7 @@ function statusCount(groups: Array<{ status: string; _count: { _all: number } }>
   return groups.find((group) => group.status === status)?._count._all ?? 0;
 }
 
-function summarizeTransactionStatus(records: Awaited<ReturnType<typeof loadDashboardMonthSummary>>) {
+function summarizeTransactionStatus(records: Awaited<ReturnType<typeof loadDashboardPeriodSummary>>) {
   const raw = statusCount(records.transactionStatusGroups, "RAW");
   const pendingApproval = statusCount(records.transactionStatusGroups, "CHECK");
   const complete = statusCount(records.transactionStatusGroups, "FINALIZED");
@@ -106,7 +100,7 @@ function summarizeTransactionStatus(records: Awaited<ReturnType<typeof loadDashb
   };
 }
 
-function summarizeStatementStatus(records: Awaited<ReturnType<typeof loadDashboardMonthSummary>>) {
+function summarizeStatementStatus(records: Awaited<ReturnType<typeof loadDashboardPeriodSummary>>) {
   const draft = statusCount(records.statementStatusGroups, "RAW");
   const pendingApproval = statusCount(records.statementStatusGroups, "CHECK");
   const complete = statusCount(records.statementStatusGroups, "FINALIZED");
@@ -179,20 +173,28 @@ function mapRecentActivities(records: Awaited<ReturnType<typeof loadDashboardRec
 }
 
 export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, userId: string) {
+  const periodMode = input.periodMode ?? "MONTH";
   const month = input.month ?? currentBusinessMonthValue();
+  const date = input.date ?? (periodMode === "DAY" ? currentBusinessDayValue() : `${month}-01`);
+  const period = resolvePeriod(periodMode, month, date);
   const previousMonth = shiftMonth(month, -1);
-  const trendMonths = Array.from({ length: TREND_MONTHS }, (_, index) => shiftMonth(month, index - (TREND_MONTHS - 1)));
+  const currentRange = { periodStart: period.start, periodEnd: period.end };
+  const previousRange = periodMode === "DAY"
+    ? { periodStart: new Date(period.start.getTime() - 86_400_000), periodEnd: period.start }
+    : monthRange(previousMonth);
+  const trendMonths = Array.from({ length: TREND_MONTHS }, (_, index) => shiftMonth(period.month, index - (TREND_MONTHS - 1)));
 
-  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates] = await Promise.all([
+  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords] = await Promise.all([
     loadDashboardViewer(userId),
-    loadDashboardMonthSummary(monthRange(month)),
-    loadDashboardMonthSummary(monthRange(previousMonth)),
+    loadDashboardPeriodSummary(currentRange),
+    loadDashboardPeriodSummary(previousRange),
     Promise.all(trendMonths.map(async (trendMonth) => ({
       month: trendMonth,
       record: await loadDashboardTrendMonth(monthRange(trendMonth))
     }))),
-    loadTopFinalEvents(monthRange(month)),
-    loadDashboardRecentActivityCandidates()
+    loadTopFinalEvents(currentRange),
+    loadDashboardRecentActivityCandidates(),
+    loadDashboardMemberRecords(currentRange)
   ]);
 
   if (!viewer) throw new HttpError(401, "Current user is no longer available");
@@ -202,6 +204,10 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
   const previousIncoming = decimalToCents(previous.incomingAmount);
   const currentOutgoing = decimalToCents(current.outgoingAmount);
   const previousOutgoing = decimalToCents(previous.outgoingAmount);
+  const memberAnalytics = summarizeDashboardMemberDonations(memberRecords.donationGroups, memberRecords.identities, memberRecords.eventCodes);
+  const followUpCounts = new Map(memberRecords.followUpTransactionGroups.flatMap(group =>
+    group.memberIdentityId ? [[group.memberIdentityId, group._count._all] as const] : []
+  ));
   const eventGroupsByCategory = new Map<string, {
     category: string;
     transactionCount: number;
@@ -237,8 +243,12 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
   return {
     viewer,
     filters: {
-      month,
-      monthLabel: longMonthLabel(month)
+      periodMode,
+      month: period.month,
+      date: period.date,
+      monthLabel: formatPeriodLabel(period),
+      periodLabel: formatPeriodLabel(period),
+      comparisonLabel: periodMode === "DAY" ? "vs previous day" : "vs last month"
     },
     metrics: {
       totalStatements: {
@@ -288,6 +298,28 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
             : right.amountCents > left.amountCents ? 1 : -1)
           .map(({ amountCents: _amountCents, ...event }) => event)
       })),
+    memberSummary: {
+      linkedAmount: memberAnalytics.linkedAmount,
+      contributingMemberCount: memberAnalytics.contributingMemberCount,
+      linkedTransactionCount: memberAnalytics.linkedTransactionCount,
+      linkedIdentityCount: memberAnalytics.linkedIdentityCount,
+      unlinkedTransactionCount: memberAnalytics.unlinkedTransactionCount,
+      unlinkedIdentityCount: memberAnalytics.unlinkedIdentityCount,
+      unlinkedObservedAmount: memberAnalytics.unlinkedObservedAmount,
+      unverifiedIdentityCount: memberRecords.unverifiedIdentityCount
+    },
+    topMembers: memberAnalytics.topMembers,
+    memberEventGroups: memberAnalytics.eventGroups,
+    registrationFollowUp: {
+      unverifiedIdentityCount: memberRecords.unverifiedIdentityCount,
+      identities: memberRecords.followUpIdentities.filter(isRegistrationFollowUpIdentity).map(identity => ({
+        memberIdentityId: identity.id,
+        accountName: identity.accountName,
+        firstSeenAt: identity.firstSeenAt,
+        lastSeenAt: identity.lastSeenAt,
+        transactionCount: followUpCounts.get(identity.id) ?? 0
+      }))
+    },
     recentActivities: mapRecentActivities(recentCandidates),
     lastUpdatedAt: new Date()
   };

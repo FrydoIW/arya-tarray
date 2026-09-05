@@ -1,5 +1,20 @@
 export type TransactionInquiryStatus = "ALL" | "RAW" | "CHECK" | "FINALIZED";
 export type TransactionInquiryPeriodMode = "MONTH" | "DAY";
+export type TransactionInquiryMemberLinkStatus = "ALL" | "LINKED" | "UNLINKED";
+
+export type TransactionInquiryMember = {
+  memberId: string;
+  memberCode: string;
+  memberName: string;
+  memberInitialName: string | null;
+  activeFlag: boolean;
+};
+
+export type TransactionInquiryMemberIdentity = {
+  id: string;
+  accountName: string;
+  verificationStatus: string;
+};
 
 export type TransactionInquiryBankAccount = {
   id: string;
@@ -33,6 +48,8 @@ export type TransactionInquiryRow = {
   remark: string | null;
   suggestedEvent: TransactionInquiryEvent | null;
   finalEvent: TransactionInquiryEvent | null;
+  memberIdentity: TransactionInquiryMemberIdentity | null;
+  member: TransactionInquiryMember | null;
   bankAccount: TransactionInquiryBankAccount;
 };
 
@@ -45,6 +62,8 @@ export type TransactionInquiryWorkspace = {
     status: TransactionInquiryStatus;
     bankAccountId: string | null;
     finalEventId: string | null;
+    memberId: string | null;
+    memberLinkStatus: TransactionInquiryMemberLinkStatus;
   };
   summary: {
     totalTransactions: number;
@@ -94,6 +113,8 @@ export type TransactionInquiryDetail = {
     remark: string | null;
     suggestedEvent: TransactionInquiryEvent | null;
     finalEvent: TransactionInquiryEvent | null;
+    memberIdentity: TransactionInquiryMemberIdentity | null;
+    member: TransactionInquiryMember | null;
   };
   history: Array<{
     id: string;
@@ -116,9 +137,13 @@ export type TransactionInquiryQuery = {
   status: TransactionInquiryStatus;
   bankAccountId: string;
   finalEventId: string;
+  memberId: string;
+  memberLinkStatus: TransactionInquiryMemberLinkStatus;
   page: number;
   pageSize: number;
 };
+
+export type TransactionInquiryMemberOptions = { members: TransactionInquiryMember[] };
 
 export type TransactionReportOptions = {
   includeFinancialSummary: boolean;

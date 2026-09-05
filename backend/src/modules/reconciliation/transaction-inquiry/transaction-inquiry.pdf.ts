@@ -12,6 +12,7 @@ type PdfReportTransaction = {
   type: string;
   amount: string;
   finalEvent: string;
+  member: string;
   status: string;
 };
 
@@ -20,6 +21,8 @@ export type TransactionInquiryPdfInput = {
   bankAccountLabel: string;
   statusLabel: string;
   finalEventLabel: string;
+  memberLabel: string;
+  memberLinkStatusLabel: string;
   searchLabel: string | null;
   generatedBy: string;
   generatedAt: string;
@@ -158,7 +161,9 @@ function drawReportHeader(page: PdfPage, input: TransactionInquiryPdfInput) {
     page.text(x, 99, label, 7, true);
     page.text(x, 116, truncate(value, cellWidth - 10, 8), 8);
   });
-  if (input.searchLabel) page.text(MARGIN, 136, `Search filter: ${truncate(input.searchLabel, 650, 8)}`, 8);
+  page.text(MARGIN, 134, `Member: ${truncate(input.memberLabel, 350, 8)}`, 8);
+  page.text(MARGIN + 390, 134, `Member Link: ${input.memberLinkStatusLabel}`, 8);
+  if (input.searchLabel) page.text(MARGIN, 148, `Search filter: ${truncate(input.searchLabel, 650, 8)}`, 8);
 }
 
 function drawFinancialSummary(page: PdfPage, input: TransactionInquiryPdfInput, top: number) {
@@ -207,11 +212,12 @@ function transactionHeader(page: PdfPage, top: number) {
   const headers = [
     [MARGIN + 5, "Date"],
     [MARGIN + 70, "Description"],
-    [MARGIN + 330, "Reference"],
-    [MARGIN + 445, "Type"],
-    [MARGIN + 500, "Amount (IDR)"],
+    [MARGIN + 255, "Reference"],
+    [MARGIN + 345, "Type"],
+    [MARGIN + 390, "Amount (IDR)"],
+    [MARGIN + 490, "Member"],
     [MARGIN + 595, "Final Event"],
-    [MARGIN + 720, "Status"]
+    [MARGIN + 710, "Status"]
   ] as const;
   headers.forEach(([x, label]) => page.text(x, headerTop + 14, label, 6.5, true));
   return headerTop + 22;
@@ -219,12 +225,13 @@ function transactionHeader(page: PdfPage, top: number) {
 
 function drawTransactionRow(page: PdfPage, row: PdfReportTransaction, top: number) {
   page.text(MARGIN + 5, top + 14, truncate(row.date, 58, 6.5), 6.5);
-  page.text(MARGIN + 70, top + 14, truncate(row.description, 250, 6.5), 6.5);
-  page.text(MARGIN + 330, top + 14, truncate(row.referenceNo, 105, 6.5), 6.5);
-  page.text(MARGIN + 445, top + 14, truncate(row.type, 50, 6.5), 6.5);
-  page.text(MARGIN + 500, top + 14, truncate(row.amount, 88, 6.5), 6.5);
-  page.text(MARGIN + 595, top + 14, truncate(row.finalEvent, 116, 6.5), 6.5);
-  page.text(MARGIN + 720, top + 14, truncate(row.status, 80, 6.5), 6.5);
+  page.text(MARGIN + 70, top + 14, truncate(row.description, 180, 6.5), 6.5);
+  page.text(MARGIN + 255, top + 14, truncate(row.referenceNo, 85, 6.5), 6.5);
+  page.text(MARGIN + 345, top + 14, truncate(row.type, 40, 6.5), 6.5);
+  page.text(MARGIN + 390, top + 14, truncate(row.amount, 95, 6.5), 6.5);
+  page.text(MARGIN + 490, top + 14, truncate(row.member, 100, 6.5), 6.5);
+  page.text(MARGIN + 595, top + 14, truncate(row.finalEvent, 110, 6.5), 6.5);
+  page.text(MARGIN + 710, top + 14, truncate(row.status, 90, 6.5), 6.5);
   page.line(MARGIN, top + 22, PAGE_WIDTH - MARGIN, top + 22, 0.2);
 }
 
@@ -232,7 +239,7 @@ export function buildTransactionInquiryPdf(input: TransactionInquiryPdfInput) {
   const document = new PdfDocument();
   const first = document.addPage();
   drawReportHeader(first, input);
-  let top = input.searchLabel ? 157 : 145;
+  let top = input.searchLabel ? 169 : 157;
 
   if (input.includeFinancialSummary) {
     drawFinancialSummary(first, input, top);

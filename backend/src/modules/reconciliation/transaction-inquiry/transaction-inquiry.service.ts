@@ -5,17 +5,20 @@ import {
   loadEventCodeLabels,
   loadReportGeneratedBy,
   loadTransactionInquiryEventOption,
+  loadTransactionInquiryMemberOption,
+  loadTransactionInquiryMemberOptions,
   loadTransactionInquiryDetailRecord,
   loadTransactionInquiryReportRecords,
   loadTransactionInquiryWorkspaceRecords,
   type TransactionInquiryFilter
 } from "./transaction-inquiry.repository.js";
-import type { TransactionInquiryReportQuery, TransactionInquiryWorkspaceQuery } from "./transaction-inquiry.schema.js";
+import type { TransactionInquiryMemberOptionsQuery, TransactionInquiryReportQuery, TransactionInquiryWorkspaceQuery } from "./transaction-inquiry.schema.js";
 import { buildTransactionInquiryPdf } from "./transaction-inquiry.pdf.js";
+import { resolveCanonicalTransactionMember } from "./transaction-inquiry-member.domain.js";
 
 const REPORT_LIMIT = 20000;
 
-type TransactionInquiryFilterQuery = Pick<TransactionInquiryWorkspaceQuery, "periodMode" | "month" | "date" | "search" | "status" | "bankAccountId" | "finalEventId">;
+type TransactionInquiryFilterQuery = Pick<TransactionInquiryWorkspaceQuery, "periodMode" | "month" | "date" | "search" | "status" | "bankAccountId" | "finalEventId" | "memberId" | "memberLinkStatus">;
 
 function filterFromQuery(input: TransactionInquiryFilterQuery): TransactionInquiryFilter & { periodMode: "MONTH" | "DAY"; month: string; date: string } {
   const periodMode = input.periodMode ?? "MONTH";
@@ -31,7 +34,9 @@ function filterFromQuery(input: TransactionInquiryFilterQuery): TransactionInqui
     search: input.search ?? "",
     status: input.status ?? "ALL",
     bankAccountId: input.bankAccountId,
-    finalEventId: input.finalEventId
+    finalEventId: input.finalEventId,
+    memberId: input.memberId,
+    memberLinkStatus: input.memberLinkStatus ?? "ALL"
   };
 }
 
@@ -90,6 +95,7 @@ function formatIdr(value: string) {
 }
 
 function mapTransaction(item: Awaited<ReturnType<typeof loadTransactionInquiryWorkspaceRecords>>["transactions"][number]) {
+  const member = resolveCanonicalTransactionMember(item.memberIdentity);
   return {
     id: item.id,
     statementId: item.statementUpload.id,
@@ -106,6 +112,18 @@ function mapTransaction(item: Awaited<ReturnType<typeof loadTransactionInquiryWo
     remark: item.remark,
     suggestedEvent: item.suggestedEventCode,
     finalEvent: item.eventCode,
+    memberIdentity: item.memberIdentity ? {
+      id: item.memberIdentity.id,
+      accountName: item.memberIdentity.accountName,
+      verificationStatus: item.memberIdentity.verificationStatus
+    } : null,
+    member: member ? {
+      memberId: member.id,
+      memberCode: member.memberCode,
+      memberName: member.memberName,
+      memberInitialName: member.initialName,
+      activeFlag: member.activeFlag
+    } : null,
     bankAccount: item.statementUpload.bankAccount
   };
 }
@@ -121,7 +139,9 @@ export async function getTransactionInquiryWorkspace(input: TransactionInquiryWo
       search: filter.search,
       status: filter.status,
       bankAccountId: filter.bankAccountId ?? null,
-      finalEventId: filter.finalEventId ?? null
+      finalEventId: filter.finalEventId ?? null,
+      memberId: filter.memberId ?? null,
+      memberLinkStatus: filter.memberLinkStatus
     },
     summary: {
       totalTransactions: records.total,
@@ -150,6 +170,7 @@ export async function getTransactionInquiryDetail(transactionId: string) {
   const eventIds = [...new Set(transaction.history.flatMap((item) => [item.oldValue, item.newValue]).filter((value): value is string => Boolean(value && /^[0-9a-f-]{36}$/i.test(value))))];
   const eventCodes = await loadEventCodeLabels(eventIds);
   const eventLabels = new Map(eventCodes.map((item) => [item.id, `${item.code} - ${item.eventName}`]));
+  const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
 
   return {
     statement: {
@@ -179,7 +200,19 @@ export async function getTransactionInquiryDetail(transactionId: string) {
       displayStatus: statusLabel(transaction.status),
       remark: transaction.remark,
       suggestedEvent: transaction.suggestedEventCode,
-      finalEvent: transaction.eventCode
+      finalEvent: transaction.eventCode,
+      memberIdentity: transaction.memberIdentity ? {
+        id: transaction.memberIdentity.id,
+        accountName: transaction.memberIdentity.accountName,
+        verificationStatus: transaction.memberIdentity.verificationStatus
+      } : null,
+      member: member ? {
+        memberId: member.id,
+        memberCode: member.memberCode,
+        memberName: member.memberName,
+        memberInitialName: member.initialName,
+        activeFlag: member.activeFlag
+      } : null
     },
     history: transaction.history.map((item) => ({
       id: item.id,
@@ -197,10 +230,11 @@ export async function getTransactionInquiryDetail(transactionId: string) {
 
 export async function generateTransactionInquiryReport(input: TransactionInquiryReportQuery, userId: string) {
   const filter = filterFromQuery(input);
-  const [records, generatedBy, selectedEvent] = await Promise.all([
+  const [records, generatedBy, selectedEvent, selectedMember] = await Promise.all([
     loadTransactionInquiryReportRecords({ filter, limit: REPORT_LIMIT }),
     loadReportGeneratedBy(userId),
-    filter.finalEventId ? loadTransactionInquiryEventOption(filter.finalEventId) : Promise.resolve(null)
+    filter.finalEventId ? loadTransactionInquiryEventOption(filter.finalEventId) : Promise.resolve(null),
+    filter.memberId ? loadTransactionInquiryMemberOption(filter.memberId) : Promise.resolve(null)
   ]);
   if (!generatedBy) throw new HttpError(401, "Current user is no longer available");
   if (records.count > REPORT_LIMIT || records.transactions.length > REPORT_LIMIT) {
@@ -263,6 +297,10 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
     bankAccountLabel: bankLabel,
     statusLabel: filter.status === "ALL" ? "All Status" : statusLabel(filter.status),
     finalEventLabel: selectedEvent ? `${selectedEvent.code} - ${selectedEvent.eventName}` : "All Final Events",
+    memberLabel: selectedMember
+      ? `${selectedMember.memberCode} - ${selectedMember.memberName}${selectedMember.activeFlag ? "" : " (Inactive)"}`
+      : filter.memberId ? "Selected Member" : "All Members",
+    memberLinkStatusLabel: filter.memberLinkStatus === "LINKED" ? "Linked" : filter.memberLinkStatus === "UNLINKED" ? "Unlinked" : "All",
     searchLabel: filter.search || null,
     generatedBy: generatedBy.fullName,
     generatedAt: formatDateTime(new Date()),
@@ -276,15 +314,19 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
       completeTransactions
     },
     classifications: classificationRows,
-    transactions: records.transactions.map((transaction) => ({
-      date: formatDate(transaction.transactionDate),
-      description: transaction.description ?? transaction.senderName ?? "-",
-      referenceNo: transaction.referenceNo ?? "-",
-      type: decimalToCents(transaction.originalAmount) >= 0n ? "Credit" : "Debit",
-      amount: formatIdr(absDecimal(transaction.originalAmount)),
-      finalEvent: transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}` : "N/A",
-      status: statusLabel(transaction.status)
-    })),
+    transactions: records.transactions.map((transaction) => {
+      const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
+      return {
+        date: formatDate(transaction.transactionDate),
+        description: transaction.description ?? transaction.senderName ?? "-",
+        referenceNo: transaction.referenceNo ?? "-",
+        type: decimalToCents(transaction.originalAmount) >= 0n ? "Credit" : "Debit",
+        amount: formatIdr(absDecimal(transaction.originalAmount)),
+        finalEvent: transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}` : "N/A",
+        member: member ? `${member.memberCode} - ${member.memberName}${member.activeFlag ? "" : " (Inactive)"}` : "Belum Terhubung",
+        status: statusLabel(transaction.status)
+      };
+    }),
     includeFinancialSummary: input.includeFinancialSummary,
     includeClassificationSummary: input.includeClassificationSummary,
     includeTransactionDetail: input.includeTransactionDetail
@@ -293,5 +335,18 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
   return {
     buffer: pdf,
     fileName: `transaction-inquiry-${filter.periodMode === "DAY" ? filter.date : filter.month}.pdf`
+  };
+}
+
+export async function getTransactionInquiryMemberOptions(input: TransactionInquiryMemberOptionsQuery) {
+  const members = await loadTransactionInquiryMemberOptions(input.search, input.limit);
+  return {
+    members: members.map(member => ({
+      memberId: member.id,
+      memberCode: member.memberCode,
+      memberName: member.memberName,
+      memberInitialName: member.initialName,
+      activeFlag: member.activeFlag
+    }))
   };
 }

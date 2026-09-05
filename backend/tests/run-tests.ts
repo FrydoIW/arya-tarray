@@ -4,5 +4,8 @@ import "./period.test.js";
 import "./member-identity.test.js";
 import "./member-data.test.js";
 import "./member-donation.test.js";
+import "./member-operational.test.js";
+import "./transaction-inquiry-member.test.js";
+import "./dashboard-member.test.js";
 import "./reconciliation-classification.test.js";
 import "./statement-upload-parser.test.js";

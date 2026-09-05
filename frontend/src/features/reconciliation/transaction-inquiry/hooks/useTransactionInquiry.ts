@@ -4,10 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   generateTransactionInquiryReport,
   getTransactionInquiryDetail,
+  getTransactionInquiryMemberOptions,
   getTransactionInquiryWorkspace
 } from "../api/transaction-inquiry.api";
 import type {
   TransactionInquiryDetail,
+  TransactionInquiryMember,
+  TransactionInquiryMemberLinkStatus,
   TransactionInquiryPeriodMode,
   TransactionInquiryStatus,
   TransactionInquiryWorkspace,
@@ -18,7 +21,7 @@ import { getCurrentDayValue, getCurrentMonthValue } from "../utils/transaction-i
 const CURRENT_MONTH = getCurrentMonthValue();
 const CURRENT_DAY = getCurrentDayValue();
 const EMPTY_WORKSPACE: TransactionInquiryWorkspace = {
-  filters: { periodMode: "MONTH", month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL", bankAccountId: null, finalEventId: null },
+  filters: { periodMode: "MONTH", month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL", bankAccountId: null, finalEventId: null, memberId: null, memberLinkStatus: "ALL" },
   summary: { totalTransactions: 0, totalCredit: "0.00", totalDebit: "0.00", completeTransactions: 0, incomingTransactions: 0, outgoingTransactions: 0 },
   bankAccounts: [],
   eventOptions: [],
@@ -35,6 +38,12 @@ export function useTransactionInquiry() {
   const [status, setStatus] = useState<TransactionInquiryStatus>("ALL");
   const [bankAccountId, setBankAccountId] = useState("ALL");
   const [finalEventId, setFinalEventId] = useState("ALL");
+  const [memberId, setMemberId] = useState("ALL");
+  const [memberLinkStatus, setMemberLinkStatus] = useState<TransactionInquiryMemberLinkStatus>("ALL");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberOptions, setMemberOptions] = useState<TransactionInquiryMember[]>([]);
+  const [selectedMember, setSelectedMember] = useState<TransactionInquiryMember | null>(null);
+  const [memberOptionsLoading, setMemberOptionsLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [workspace, setWorkspace] = useState<TransactionInquiryWorkspace>(EMPTY_WORKSPACE);
@@ -52,7 +61,23 @@ export function useTransactionInquiry() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const query = useMemo(() => ({ periodMode, month, date, search, status, bankAccountId, finalEventId, page, pageSize }), [bankAccountId, date, finalEventId, month, page, pageSize, periodMode, search, status]);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setMemberOptionsLoading(true);
+      try {
+        const result = await getTransactionInquiryMemberOptions(memberSearch);
+        if (!cancelled) setMemberOptions(result.members);
+      } catch (caught) {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : "Failed to load Member options.");
+      } finally {
+        if (!cancelled) setMemberOptionsLoading(false);
+      }
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [memberSearch]);
+
+  const query = useMemo(() => ({ periodMode, month, date, search, status, bankAccountId, finalEventId, memberId, memberLinkStatus, page, pageSize }), [bankAccountId, date, finalEventId, memberId, memberLinkStatus, month, page, pageSize, periodMode, search, status]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,6 +103,12 @@ export function useTransactionInquiry() {
   function changeStatus(value: TransactionInquiryStatus) { setStatus(value); setPage(1); }
   function changeBankAccount(value: string) { setBankAccountId(value); setPage(1); }
   function changeFinalEvent(value: string) { setFinalEventId(value); setPage(1); }
+  function changeMember(value: string) {
+    setMemberId(value);
+    setSelectedMember(value === "ALL" ? null : memberOptions.find((item) => item.memberId === value) ?? null);
+    setPage(1);
+  }
+  function changeMemberLinkStatus(value: TransactionInquiryMemberLinkStatus) { setMemberLinkStatus(value); setPage(1); }
   function changePageSize(value: number) { setPageSize(value); setPage(1); }
 
   async function openDetail(transactionId: string) {
@@ -96,7 +127,7 @@ export function useTransactionInquiry() {
     setReportLoading(true);
     setError("");
     try {
-      const result = await generateTransactionInquiryReport({ periodMode, month, date, search, status, bankAccountId, finalEventId }, options);
+      const result = await generateTransactionInquiryReport({ periodMode, month, date, search, status, bankAccountId, finalEventId, memberId, memberLinkStatus }, options);
       const url = URL.createObjectURL(result.blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -123,6 +154,12 @@ export function useTransactionInquiry() {
     status,
     bankAccountId,
     finalEventId,
+    memberId,
+    memberLinkStatus,
+    memberSearch,
+    memberOptions,
+    selectedMember,
+    memberOptionsLoading,
     page,
     pageSize,
     workspace,
@@ -136,6 +173,9 @@ export function useTransactionInquiry() {
     changeStatus,
     changeBankAccount,
     changeFinalEvent,
+    setMemberSearch,
+    changeMember,
+    changeMemberLinkStatus,
     setPage,
     changePageSize,
     refresh: load,

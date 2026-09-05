@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { TransactionInquiryDetail } from "../types";
@@ -11,7 +12,7 @@ function DetailItem({ label, value, wide = false }: { label: string; value: Reac
   return <div className={wide ? styles.detailWide : ""}><span>{label}</span><strong>{value || "-"}</strong></div>;
 }
 
-export function TransactionDetailModal({ detail, open, onClose }: { detail: TransactionInquiryDetail | null; open: boolean; onClose: () => void }) {
+export function TransactionDetailModal({ detail, open, canViewMemberData, onClose }: { detail: TransactionInquiryDetail | null; open: boolean; canViewMemberData: boolean; onClose: () => void }) {
   if (!detail) return null;
   const transaction = detail.transaction;
   return (
@@ -25,6 +26,20 @@ export function TransactionDetailModal({ detail, open, onClose }: { detail: Tran
             <DetailItem label="Period" value={`${formatDate(detail.statement.periodFrom)} - ${formatDate(detail.statement.periodTo)}`} />
             <DetailItem label="Status" value={detail.statement.displayStatus} />
             <DetailItem label="File Name" value={detail.statement.fileName} />
+          </div>
+        </section>
+        <section className={styles.detailSection}>
+          <h3>Member</h3>
+          <div className={styles.detailGrid}>
+            <DetailItem label="Canonical Member" value={transaction.member ? (
+              canViewMemberData
+                ? <Link className={styles.memberDetailLink} href={`/member/data/${transaction.member.memberId}`}>{transaction.member.memberCode} - {transaction.member.memberName}</Link>
+                : `${transaction.member.memberCode} - ${transaction.member.memberName}`
+            ) : "Belum Terhubung"} wide />
+            <DetailItem label="Member Status" value={transaction.member ? transaction.member.activeFlag ? "Active" : "Inactive" : "-"} />
+            <DetailItem label="Identity Status" value={transaction.memberIdentity?.verificationStatus ?? "-"} />
+            <DetailItem label="Identity ID" value={transaction.memberIdentity?.id ?? "-"} />
+            <DetailItem label="Account / Sender Evidence" value={transaction.memberIdentity?.accountName ?? transaction.senderName ?? "-"} />
           </div>
         </section>
         <section className={styles.detailSection}>

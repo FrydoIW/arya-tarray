@@ -8,6 +8,8 @@ export type DashboardMoneyMetricValue = {
   changePercent: number | null;
 };
 
+export type DashboardPeriodMode = "MONTH" | "DAY";
+
 export type DashboardActivityType =
   | "STATEMENT_UPLOADED"
   | "APPROVAL_SUBMITTED"
@@ -22,8 +24,12 @@ export interface DashboardSummary {
     email: string;
   };
   filters: {
+    periodMode: DashboardPeriodMode;
     month: string;
+    date: string;
     monthLabel: string;
+    periodLabel: string;
+    comparisonLabel: string;
   };
   metrics: {
     totalStatements: DashboardMetricValue;
@@ -64,6 +70,49 @@ export interface DashboardSummary {
       totalAmount: string;
     }>;
   }>;
+  memberSummary: {
+    linkedAmount: string;
+    contributingMemberCount: number;
+    linkedTransactionCount: number;
+    linkedIdentityCount: number;
+    unlinkedTransactionCount: number;
+    unlinkedIdentityCount: number;
+    unlinkedObservedAmount: string;
+    unverifiedIdentityCount: number;
+  };
+  topMembers: Array<{
+    memberId: string;
+    memberCode: string;
+    memberName: string;
+    activeFlag: boolean;
+    transactionCount: number;
+    amount: string;
+  }>;
+  memberEventGroups: Array<{
+    category: string;
+    memberCount: number;
+    transactionCount: number;
+    amount: string;
+    events: Array<{
+      eventCodeId: string;
+      eventCode: string;
+      eventName: string;
+      category: string;
+      memberCount: number;
+      transactionCount: number;
+      amount: string;
+    }>;
+  }>;
+  registrationFollowUp: {
+    unverifiedIdentityCount: number;
+    identities: Array<{
+      memberIdentityId: string;
+      accountName: string;
+      firstSeenAt: string;
+      lastSeenAt: string;
+      transactionCount: number;
+    }>;
+  };
   recentActivities: Array<{
     id: string;
     type: DashboardActivityType;

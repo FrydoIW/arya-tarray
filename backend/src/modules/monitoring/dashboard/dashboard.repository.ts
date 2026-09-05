@@ -1,32 +1,32 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 
-export type DashboardMonthRange = {
-  monthStart: Date;
-  nextMonthStart: Date;
+export type DashboardPeriodRange = {
+  periodStart: Date;
+  periodEnd: Date;
 };
 
-function transactionMonthWhere(range: DashboardMonthRange): Prisma.BankTransactionWhereInput {
+function transactionPeriodWhere(range: DashboardPeriodRange): Prisma.BankTransactionWhereInput {
   return {
     transactionDate: {
-      gte: range.monthStart,
-      lt: range.nextMonthStart
+      gte: range.periodStart,
+      lt: range.periodEnd
     }
   };
 }
 
-function statementMonthWhere(range: DashboardMonthRange): Prisma.BankStatementUploadWhereInput {
+function statementPeriodWhere(range: DashboardPeriodRange): Prisma.BankStatementUploadWhereInput {
   return {
     AND: [
-      { periodFrom: { lt: range.nextMonthStart } },
-      { periodTo: { gte: range.monthStart } }
+      { periodFrom: { lt: range.periodEnd } },
+      { periodTo: { gte: range.periodStart } }
     ]
   };
 }
 
-export async function loadDashboardMonthSummary(range: DashboardMonthRange) {
-  const transactionWhere = transactionMonthWhere(range);
-  const statementWhere = statementMonthWhere(range);
+export async function loadDashboardPeriodSummary(range: DashboardPeriodRange) {
+  const transactionWhere = transactionPeriodWhere(range);
+  const statementWhere = statementPeriodWhere(range);
 
   const [
     totalStatements,
@@ -87,8 +87,8 @@ export async function loadDashboardMonthSummary(range: DashboardMonthRange) {
   };
 }
 
-export async function loadDashboardTrendMonth(range: DashboardMonthRange) {
-  const where = transactionMonthWhere(range);
+export async function loadDashboardTrendMonth(range: DashboardPeriodRange) {
+  const where = transactionPeriodWhere(range);
   const [totalTransactions, incoming, outgoing] = await Promise.all([
     prisma.bankTransaction.count({ where }),
     prisma.bankTransaction.aggregate({
@@ -108,12 +108,12 @@ export async function loadDashboardTrendMonth(range: DashboardMonthRange) {
   };
 }
 
-export async function loadTopFinalEvents(range: DashboardMonthRange) {
+export async function loadTopFinalEvents(range: DashboardPeriodRange) {
   const groups = await prisma.bankTransaction.groupBy({
     by: ["eventCodeId"],
     where: {
       AND: [
-        transactionMonthWhere(range),
+        transactionPeriodWhere(range),
         { status: "FINALIZED" },
         { originalAmount: { gt: 0 } },
         { eventCodeId: { not: null } }
@@ -215,4 +215,72 @@ export function loadDashboardViewer(userId: string) {
     where: { id: userId },
     select: { id: true, fullName: true, email: true }
   });
+}
+
+const officialMemberDonationWhere = (range: DashboardPeriodRange): Prisma.BankTransactionWhereInput => ({
+  transactionDate: { gte: range.periodStart, lt: range.periodEnd },
+  status: "FINALIZED",
+  originalAmount: { gt: 0 },
+  eventCodeId: { not: null }
+});
+
+const registrationFollowUpTransactionWhere = (range: DashboardPeriodRange): Prisma.BankTransactionWhereInput => ({
+  // MemberIdentity is created and attached only by the shared eligible-incoming
+  // discovery flow. Query its persisted relation; never reconstruct ownership
+  // from sender text, status, or a guessed Final Event on the Dashboard.
+  transactionDate: { gte: range.periodStart, lt: range.periodEnd }
+});
+
+export async function loadDashboardMemberRecords(range: DashboardPeriodRange) {
+  const followUpTransactionWhere = registrationFollowUpTransactionWhere(range);
+  const [donationGroups, unverifiedIdentityCount, followUpIdentities] = await Promise.all([
+    prisma.bankTransaction.groupBy({
+      by: ["memberIdentityId", "eventCodeId"],
+      where: officialMemberDonationWhere(range),
+      _count: { _all: true },
+      _sum: { originalAmount: true }
+    }),
+    prisma.memberIdentity.count({
+      where: {
+        verificationStatus: "UNVERIFIED",
+        memberId: null,
+        transactions: { some: followUpTransactionWhere }
+      }
+    }),
+    prisma.memberIdentity.findMany({
+      where: {
+        verificationStatus: "UNVERIFIED",
+        memberId: null,
+        transactions: { some: followUpTransactionWhere }
+      },
+      select: { id: true, accountName: true, firstSeenAt: true, lastSeenAt: true, verificationStatus: true, memberId: true },
+      orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
+      take: 5
+    })
+  ]);
+
+  const identityIds = donationGroups.flatMap(group => group.memberIdentityId ? [group.memberIdentityId] : []);
+  const eventCodeIds = donationGroups.flatMap(group => group.eventCodeId ? [group.eventCodeId] : []);
+  const followUpIds = followUpIdentities.map(identity => identity.id);
+  const [identities, eventCodes, followUpTransactionGroups] = await Promise.all([
+    identityIds.length ? prisma.memberIdentity.findMany({
+      where: { id: { in: identityIds } },
+      select: {
+        id: true,
+        verificationStatus: true,
+        member: { select: { id: true, memberCode: true, memberName: true, activeFlag: true } }
+      }
+    }) : Promise.resolve([]),
+    eventCodeIds.length ? prisma.eventCode.findMany({
+      where: { id: { in: eventCodeIds } },
+      select: { id: true, code: true, eventName: true, category: true }
+    }) : Promise.resolve([]),
+    followUpIds.length ? prisma.bankTransaction.groupBy({
+      by: ["memberIdentityId"],
+      where: { AND: [followUpTransactionWhere, { memberIdentityId: { in: followUpIds } }] },
+      _count: { _all: true }
+    }) : Promise.resolve([])
+  ]);
+
+  return { donationGroups, identities, eventCodes, unverifiedIdentityCount, followUpIdentities, followUpTransactionGroups };
 }

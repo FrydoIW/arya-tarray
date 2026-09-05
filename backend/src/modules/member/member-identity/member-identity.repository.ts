@@ -39,7 +39,7 @@ export async function persistIdentityObservations(tx: Prisma.TransactionClient, 
           ${Prisma.join(observationsById.map(item => Prisma.sql`WHEN ${item.id} THEN LEAST(first_seen_at, ${item.firstSeenAt})`), " ")} ELSE first_seen_at END,
         last_seen_at = CASE member_identity_id
           ${Prisma.join(observationsById.map(item => Prisma.sql`WHEN ${item.id} THEN GREATEST(last_seen_at, ${item.lastSeenAt})`), " ")} ELSE last_seen_at END,
-        updated_at = CURRENT_TIMESTAMP(3), updated_by = ${userId}
+        updated_at = CURRENT_TIMESTAMP(3), updated_by = COALESCE(${userId}, updated_by)
       WHERE member_identity_id IN (${Prisma.join(observationsById.map(item => item.id))})
     `);
     const links = observationsById.flatMap(item => item.transactionIds.map(transactionId => ({ transactionId, identityId: item.id })));

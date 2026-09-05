@@ -1,14 +1,15 @@
-import { currentBusinessMonthValue } from "@/lib/business-time";
+import { currentBusinessDayValue, currentBusinessMonthValue } from "@/lib/business-time";
 import { formatMoney } from "@/lib/format";
 
 export const currentMonthValue = currentBusinessMonthValue;
+export const currentDayValue = currentBusinessDayValue;
 
-export function changeDetail(changePercent: number | null | undefined) {
+export function changeDetail(changePercent: number | null | undefined, comparisonLabel = "vs last month") {
   if (changePercent === undefined) return "loading comparison…";
-  if (changePercent === null) return "new vs last month";
-  if (changePercent === 0) return "no change vs last month";
+  if (changePercent === null) return `new ${comparisonLabel}`;
+  if (changePercent === 0) return `no change ${comparisonLabel}`;
   const direction = changePercent > 0 ? "↑" : "↓";
-  return `${direction} ${Math.abs(changePercent).toLocaleString("en-US", { maximumFractionDigits: 1 })}% vs last month`;
+  return `${direction} ${Math.abs(changePercent).toLocaleString("en-US", { maximumFractionDigits: 1 })}% ${comparisonLabel}`;
 }
 
 export function compactMoney(value: string | number) {

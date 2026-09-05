@@ -4,12 +4,16 @@
 .tableHeader { min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 16px; }
 .tableHeader h2 { margin: 0; color: #1d2943; font-size: 14.5px; }
 .tableHeader p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-.toolbar { display: flex; align-items: center; gap: 7px; }
+.toolbar { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
 .periodFilter { flex: 0 0 auto; }
 .searchFilter { width: 235px; flex: 0 1 235px; }
 .statusFilter { min-width: 132px; flex: 0 0 132px; }
 .bankFilter { min-width: 160px; flex: 0 0 160px; }
 .eventFilter { min-width: 175px; flex: 0 0 175px; }
+.memberFilterGroup { display: flex; align-items: center; gap: 5px; padding: 3px; background: #f8f7f3; border: 1px solid #e5e0d5; border-radius: 8px; }
+.memberFilterGroup > label:first-child { width: 130px; }
+.memberFilterGroup > label:last-child { min-width: 180px; }
+.memberLinkFilter { min-width: 145px; flex: 0 0 145px; }
 .reloadButton { height: var(--control-height); flex: 0 0 auto; }
 .primaryCell, .amountCell, .eventText { color: #34415d; font-size: 11px; white-space: nowrap; }
 .amountCell { font-weight: 680; }
@@ -17,6 +21,13 @@
 .descriptionCell { min-width: 0; display: grid; gap: 3px; }
 .descriptionCell strong { max-width: 235px; overflow: hidden; color: #34415d; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .descriptionCell small { max-width: 235px; overflow: hidden; color: #8995aa; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.memberCell { min-width: 0; display: grid; gap: 3px; }
+.memberCell a, .memberCell strong { width: fit-content; color: #7d263d; font-size: 11px; font-weight: 760; text-decoration: none; }
+.memberCell a:hover { color: #a26a24; text-decoration: underline; text-underline-offset: 2px; }
+.memberCell small { max-width: 165px; overflow: hidden; color: #7d899f; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.unlinkedMember { color: #8a94a6; font-size: 10.5px; font-weight: 650; white-space: nowrap; }
+.memberDetailLink { color: #7d263d; text-decoration: none; }
+.memberDetailLink:hover { color: #a26a24; text-decoration: underline; text-underline-offset: 2px; }
 .typeBadge, .statusBadge { display: inline-flex; align-items: center; width: fit-content; padding: 4px 7px; border: 1px solid transparent; border-radius: 999px; font-size: 11px; font-weight: 760; white-space: nowrap; }
 .credit { color: #168246; background: #eefaf2; border-color: #d7efdf; }
 .debit { color: #b3404c; background: #fff0f2; border-color: #f3d8dc; }
@@ -62,14 +73,17 @@
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tableHeader { align-items: flex-start; flex-direction: column; }
   .toolbar { width: 100%; flex-wrap: wrap; }
-  .periodFilter, .searchFilter, .statusFilter, .bankFilter, .eventFilter { flex: 1 1 180px; width: auto; min-width: min(180px, 100%); }
+  .periodFilter, .searchFilter, .statusFilter, .bankFilter, .eventFilter, .memberLinkFilter { flex: 1 1 180px; width: auto; min-width: min(180px, 100%); }
+  .memberFilterGroup { flex: 1 1 320px; }
 }
 
 @media (max-width: 760px) {
   .metrics { grid-template-columns: 1fr; }
   .tableHeader { gap: 12px; }
   .toolbar { width: 100%; align-items: stretch; flex-direction: column; }
-  .periodFilter, .searchFilter, .statusFilter, .bankFilter, .eventFilter, .reloadButton { width: 100%; min-width: 0; flex: none; }
+  .periodFilter, .searchFilter, .statusFilter, .bankFilter, .eventFilter, .memberLinkFilter, .reloadButton { width: 100%; min-width: 0; flex: none; }
+  .memberFilterGroup { width: 100%; flex: none; align-items: stretch; flex-direction: column; }
+  .memberFilterGroup > label:first-child, .memberFilterGroup > label:last-child { width: 100%; min-width: 0; }
   .detailGrid, .classificationGrid, .reportFilters { grid-template-columns: 1fr; }
   .reportActions { align-items: stretch; flex-direction: column-reverse; }
   .reportActions > button { width: 100%; }

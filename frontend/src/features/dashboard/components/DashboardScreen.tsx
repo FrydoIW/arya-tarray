@@ -1,6 +1,6 @@
 "use client";
 
-import { MonthPicker } from "@/components/ui/MonthPicker";
+import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
 import { formatDateTime } from "@/lib/format";
 import { DashboardMetrics } from "./DashboardMetrics";
@@ -9,16 +9,20 @@ import { StatementStatus } from "./StatementStatus";
 import { TopFinalEvents } from "./TopFinalEvents";
 import { TransactionStatus } from "./TransactionStatus";
 import { TransactionTrend } from "./TransactionTrend";
+import { MemberDashboardSection } from "./MemberDashboardSection";
 import { useDashboardWorkspace } from "../hooks/useDashboardWorkspace";
+import { currentDayValue, currentMonthValue } from "../utils/dashboard.utils";
 
 export function DashboardScreen() {
   const user = useAuthSession();
-  const { month, setMonth, data, loading, error } = useDashboardWorkspace();
+  const { period, changePeriod, data, loading, error } = useDashboardWorkspace();
   const monthLabel = data?.filters.monthLabel ?? "selected month";
   const trendRange = data?.trend.length
     ? `${data.trend[0].label} – ${data.trend[data.trend.length - 1].label}`
     : "Historical 6-month view";
   const canViewInquiry = user.menuCodes.includes("RECON_TRANSACTION_INQUIRY");
+  const canViewMemberData = user.menuCodes.includes("MEMBER_DATA");
+  const canViewMemberRegistration = user.menuCodes.includes("MEMBER_REGISTRATION");
 
   return (
     <div className="page-stack dashboard-page" aria-busy={loading}>
@@ -27,12 +31,12 @@ export function DashboardScreen() {
           <h1>Welcome back, {data?.viewer.fullName ?? user.fullName} <span aria-hidden="true">👋</span></h1>
           <p>Here&apos;s what&apos;s happening with your reconciliation operations.</p>
         </div>
-        <MonthPicker value={month} onChange={setMonth} disabled={loading} ariaLabel="Dashboard month" />
+        <PeriodPicker value={period} maxMonth={currentMonthValue()} maxDate={currentDayValue()} onChange={changePeriod} disabled={loading} ariaLabel="Dashboard period" />
       </section>
 
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
 
-      <DashboardMetrics data={data} loading={loading} />
+      <DashboardMetrics data={data} loading={loading} comparisonLabel={data?.filters.comparisonLabel ?? (period.mode === "DAY" ? "vs previous day" : "vs last month")} />
 
       <section className="dashboard-main-grid">
         <article className="ui-card dashboard-panel dashboard-trend-panel">
@@ -81,6 +85,14 @@ export function DashboardScreen() {
           canViewInquiry={canViewInquiry}
         />
       </section>
+
+      <MemberDashboardSection
+        data={data}
+        loading={loading && !data}
+        periodLabel={data?.filters.periodLabel ?? monthLabel}
+        canViewMemberData={canViewMemberData}
+        canViewMemberRegistration={canViewMemberRegistration}
+      />
 
       <footer className="dashboard-footer-note">
         <span>All amounts are in IDR · Dashboard auto-refreshes every 5 minutes</span>

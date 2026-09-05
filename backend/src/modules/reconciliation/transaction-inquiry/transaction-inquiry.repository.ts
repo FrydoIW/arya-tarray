@@ -31,6 +31,16 @@ const transactionListSelect = {
   remark: true,
   suggestedEventCode: { select: eventCodeSelect },
   eventCode: { select: eventCodeSelect },
+  memberIdentity: {
+    select: {
+      id: true,
+      accountName: true,
+      verificationStatus: true,
+      member: {
+        select: { id: true, memberCode: true, memberName: true, initialName: true, activeFlag: true }
+      }
+    }
+  },
   statementUpload: {
     select: {
       id: true,
@@ -49,16 +59,26 @@ export type TransactionInquiryFilter = {
   status: "ALL" | "RAW" | "CHECK" | "FINALIZED";
   bankAccountId?: string;
   finalEventId?: string;
+  memberId?: string;
+  memberLinkStatus: "ALL" | "LINKED" | "UNLINKED";
 };
 
-function buildWhere(filter: TransactionInquiryFilter): Prisma.BankTransactionWhereInput {
+export function buildTransactionInquiryWhere(filter: TransactionInquiryFilter): Prisma.BankTransactionWhereInput {
   const search = filter.search.trim();
-  return {
-    transactionDate: { gte: filter.periodStart, lt: filter.periodEnd },
-    ...(filter.status !== "ALL" ? { status: filter.status } : {}),
-    ...(filter.bankAccountId ? { statementUpload: { is: { bankAccountId: filter.bankAccountId } } } : {}),
-    ...(filter.finalEventId ? { eventCodeId: filter.finalEventId } : {}),
-    ...(search ? {
+  const conditions: Prisma.BankTransactionWhereInput[] = [
+    { transactionDate: { gte: filter.periodStart, lt: filter.periodEnd } }
+  ];
+  if (filter.status !== "ALL") conditions.push({ status: filter.status });
+  if (filter.bankAccountId) conditions.push({ statementUpload: { is: { bankAccountId: filter.bankAccountId } } });
+  if (filter.finalEventId) conditions.push({ eventCodeId: filter.finalEventId });
+  if (filter.memberId) conditions.push({ memberIdentity: { is: { memberId: filter.memberId } } });
+  if (filter.memberLinkStatus === "LINKED") {
+    conditions.push({ memberIdentity: { is: { member: { isNot: null } } } });
+  } else if (filter.memberLinkStatus === "UNLINKED") {
+    conditions.push({ OR: [{ memberIdentityId: null }, { memberIdentity: { is: { memberId: null } } }] });
+  }
+  if (search) {
+    conditions.push({
       OR: [
         { description: { contains: search } },
         { referenceNo: { contains: search } },
@@ -68,8 +88,9 @@ function buildWhere(filter: TransactionInquiryFilter): Prisma.BankTransactionWhe
         { statementUpload: { is: { bankAccount: { is: { accountNo: { contains: search } } } } } },
         { statementUpload: { is: { bankAccount: { is: { accountName: { contains: search } } } } } }
       ]
-    } : {})
-  };
+    });
+  }
+  return { AND: conditions };
 }
 
 export async function loadTransactionInquiryWorkspaceRecords(input: {
@@ -77,7 +98,7 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
   page: number;
   pageSize: number;
 }) {
-  const where = buildWhere(input.filter);
+  const where = buildTransactionInquiryWhere(input.filter);
   const skip = (input.page - 1) * input.pageSize;
 
   const [transactions, total, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions] = await Promise.all([
@@ -130,6 +151,14 @@ export async function loadTransactionInquiryDetailRecord(transactionId: string) 
     include: {
       suggestedEventCode: { select: eventCodeSelect },
       eventCode: { select: eventCodeSelect },
+      memberIdentity: {
+        select: {
+          id: true,
+          accountName: true,
+          verificationStatus: true,
+          member: { select: { id: true, memberCode: true, memberName: true, initialName: true, activeFlag: true } }
+        }
+      },
       statementUpload: {
         include: {
           bankAccount: { select: bankAccountSelect },
@@ -160,7 +189,7 @@ export async function loadTransactionInquiryReportRecords(input: {
   filter: TransactionInquiryFilter;
   limit: number;
 }) {
-  const where = buildWhere(input.filter);
+  const where = buildTransactionInquiryWhere(input.filter);
   const [count, transactions, userBankAccounts] = await Promise.all([
     prisma.bankTransaction.count({ where }),
     prisma.bankTransaction.findMany({
@@ -197,4 +226,32 @@ export async function loadEventCodeLabels(ids: string[]) {
 
 export function loadTransactionInquiryEventOption(eventCodeId: string) {
   return prisma.eventCode.findUnique({ where: { id: eventCodeId }, select: eventCodeSelect });
+}
+
+const memberOptionSelect = {
+  id: true,
+  memberCode: true,
+  memberName: true,
+  initialName: true,
+  activeFlag: true
+} as const;
+
+export function loadTransactionInquiryMemberOptions(search: string, limit: number) {
+  const term = search.trim();
+  return prisma.member.findMany({
+    where: term ? {
+      OR: [
+        { memberCode: { contains: term } },
+        { memberName: { contains: term } },
+        { initialName: { contains: term } }
+      ]
+    } : undefined,
+    select: memberOptionSelect,
+    orderBy: [{ activeFlag: "desc" }, { memberCode: "asc" }],
+    take: limit
+  });
+}
+
+export function loadTransactionInquiryMemberOption(memberId: string) {
+  return prisma.member.findUnique({ where: { id: memberId }, select: memberOptionSelect });
 }

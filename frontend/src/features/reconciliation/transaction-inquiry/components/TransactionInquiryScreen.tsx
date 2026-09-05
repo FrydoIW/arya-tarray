@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
 import { useTransactionInquiry } from "../hooks/useTransactionInquiry";
 import { GenerateReportModal } from "./GenerateReportModal";
 import { TransactionDetailModal } from "./TransactionDetailModal";
@@ -13,6 +14,8 @@ import styles from "../styles/transaction-inquiry.module.css";
 
 export function TransactionInquiryScreen() {
   const inquiry = useTransactionInquiry();
+  const user = useAuthSession();
+  const canViewMemberData = user.menuCodes.includes("MEMBER_DATA");
   const [reportOpen, setReportOpen] = useState(false);
 
   return (
@@ -37,6 +40,13 @@ export function TransactionInquiryScreen() {
         status={inquiry.status}
         bankAccountId={inquiry.bankAccountId}
         finalEventId={inquiry.finalEventId}
+        memberId={inquiry.memberId}
+        memberLinkStatus={inquiry.memberLinkStatus}
+        memberSearch={inquiry.memberSearch}
+        memberOptions={inquiry.memberOptions}
+        selectedMember={inquiry.selectedMember}
+        memberOptionsLoading={inquiry.memberOptionsLoading}
+        canViewMemberData={canViewMemberData}
         eventOptions={inquiry.workspace.eventOptions}
         page={inquiry.page}
         pageSize={inquiry.pageSize}
@@ -48,13 +58,16 @@ export function TransactionInquiryScreen() {
         onStatusChange={inquiry.changeStatus}
         onBankAccountChange={inquiry.changeBankAccount}
         onFinalEventChange={inquiry.changeFinalEvent}
+        onMemberSearchChange={inquiry.setMemberSearch}
+        onMemberChange={inquiry.changeMember}
+        onMemberLinkStatusChange={inquiry.changeMemberLinkStatus}
         onPageChange={inquiry.setPage}
         onPageSizeChange={inquiry.changePageSize}
         onReload={() => void inquiry.refresh()}
         onView={(id) => void inquiry.openDetail(id)}
       />
-      <div className={styles.infoNote}><strong>Report information</strong><span>PDF reports use the active Period, Search, Status, Bank Account, and Final Event filters and always query the full filtered dataset, not only the visible table page.</span></div>
-      <TransactionDetailModal detail={inquiry.detail} open={Boolean(inquiry.detail)} onClose={inquiry.closeDetail} />
+      <div className={styles.infoNote}><strong>Report information</strong><span>PDF reports use all active filters, including Member and Member Link Status, and always query the full filtered dataset rather than only the visible table page.</span></div>
+      <TransactionDetailModal detail={inquiry.detail} open={Boolean(inquiry.detail)} canViewMemberData={canViewMemberData} onClose={inquiry.closeDetail} />
       <GenerateReportModal
         open={reportOpen}
         period={inquiry.period}
@@ -62,6 +75,8 @@ export function TransactionInquiryScreen() {
         status={inquiry.status}
         bankAccountId={inquiry.bankAccountId}
         finalEventId={inquiry.finalEventId}
+        member={inquiry.selectedMember}
+        memberLinkStatus={inquiry.memberLinkStatus}
         bankAccounts={inquiry.workspace.bankAccounts}
         eventOptions={inquiry.workspace.eventOptions}
         loading={inquiry.reportLoading}
