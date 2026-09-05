@@ -37,6 +37,9 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --shell-header-height: 72px;
+  --shell-content-max: 1560px;
+  --shell-content-inline: 32px;
   --font-ui: "Segoe UI Variable Text", "Segoe UI", "Aptos", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: "Segoe UI Variable Display", "Segoe UI", "Aptos Display", system-ui, sans-serif;
   --font-brand: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;

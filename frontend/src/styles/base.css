@@ -60,7 +60,7 @@ p { text-wrap: pretty; }
   display: grid;
   gap: var(--space-5);
   width: 100%;
-  max-width: 1560px;
+  max-width: var(--shell-content-max);
   margin: 0 auto;
 }
 

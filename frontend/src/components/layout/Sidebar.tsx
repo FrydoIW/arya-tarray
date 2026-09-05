@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronUp, Flower2, ShieldCheck, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Flower2, ShieldCheck, X } from "lucide-react";
 import { navigation } from "@/config/navigation";
 
 interface SidebarProps {
@@ -13,6 +14,20 @@ interface SidebarProps {
 
 export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: SidebarProps) {
   const allowed = new Set(allowedMenuCodes);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(navigation.map((group) => [group.menuCode, true]))
+  );
+
+  useEffect(() => {
+    const activeGroup = navigation.find((group) =>
+      group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)))
+    );
+
+    if (!activeGroup) return;
+    setExpandedGroups((current) => current[activeGroup.menuCode]
+      ? current
+      : { ...current, [activeGroup.menuCode]: true });
+  }, [pathname]);
 
   return (
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
@@ -34,16 +49,29 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
           const GroupIcon = group.icon;
           const visibleChildren = group.children.filter((child) => !child.enabled || allowed.has(child.menuCode));
           if (visibleChildren.length === 0) return null;
+          const expanded = expandedGroups[group.menuCode] ?? true;
+          const childrenId = `nav-group-${group.menuCode.toLowerCase().replaceAll("_", "-")}`;
 
           return (
             <section className="nav-group" key={group.menuCode}>
-              <div className="nav-group-label">
+              <button
+                className="nav-group-label"
+                type="button"
+                aria-expanded={expanded}
+                aria-controls={childrenId}
+                onClick={() => setExpandedGroups((current) => ({
+                  ...current,
+                  [group.menuCode]: !(current[group.menuCode] ?? true)
+                }))}
+              >
                 <GroupIcon size={17} aria-hidden="true" />
                 <span>{group.label}</span>
-                <ChevronUp size={14} aria-hidden="true" />
-              </div>
+                {expanded
+                  ? <ChevronUp size={14} aria-hidden="true" />
+                  : <ChevronDown size={14} aria-hidden="true" />}
+              </button>
 
-              <div className="nav-children">
+              <div className="nav-children" id={childrenId} hidden={!expanded}>
                 {visibleChildren.map((child) => {
                   const ChildIcon = child.icon;
                   const active = Boolean(child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
