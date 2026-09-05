@@ -41,3 +41,7 @@
 .donationToolbar { padding: 15px 17px; border-color: #e4e9f0; border-radius: 11px; background: #fff; }
 .breakdownPanel { border-color: #e4e9f0; border-radius: 11px; }
 .breakdownPanel header { background: #f9fafb; }
+.field { color: #475467; font-size: 12px; font-weight: var(--font-weight-semibold); }
+.field input, .field textarea { border-radius: var(--radius-control); color: #344054; font-size: var(--font-size-control); font-weight: var(--font-weight-regular); line-height: var(--line-height-body); }
+.field input::placeholder, .field textarea::placeholder { color: #8a94a6; opacity: 1; }
+.field input:focus-visible, .field textarea:focus-visible { outline: 0; border-color: #9ec5f4; box-shadow: 0 0 0 3px rgba(59, 130, 246, .08); }

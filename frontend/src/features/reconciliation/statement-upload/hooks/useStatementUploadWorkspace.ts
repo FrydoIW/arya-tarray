@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAbortError } from "@/lib/api";
+import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, setWorkspaceCache, workspaceCacheKey } from "@/lib/workspace-cache";
 import {
   executeStatementDraft,
   getStatementUploadWorkspace,
@@ -8,12 +10,7 @@ import {
   updateDraftTransactionFinalEvent
 } from "../api/statement-upload.api";
 import type { DraftRowStatusFilter, StatementUploadWorkspace } from "../types";
-import {
-  countNeedsReview,
-  countResolvedTransactions,
-  getDraftRowStatus,
-  requiresEventClassification
-} from "../utils/statement-upload.utils";
+import { getDraftRowStatus, requiresEventClassification } from "../utils/statement-upload.utils";
 
 const EMPTY_WORKSPACE: StatementUploadWorkspace = {
   summary: { draftStatements: 0, totalTransactions: 0, needsReview: 0, readyForSubmission: 0 },
@@ -22,26 +19,60 @@ const EMPTY_WORKSPACE: StatementUploadWorkspace = {
   eventCodes: [],
   bankAccounts: []
 };
+const STATEMENT_WORKSPACE_PREFIX = "reconciliation/statement-upload/workspace";
+
+function statementWorkspaceKey(statementId?: string) {
+  return workspaceCacheKey(STATEMENT_WORKSPACE_PREFIX, statementId ? { statementId } : undefined);
+}
 
 export function useStatementUploadWorkspace() {
-  const [workspace, setWorkspace] = useState<StatementUploadWorkspace>(EMPTY_WORKSPACE);
+  const initialWorkspace = getWorkspaceCache<StatementUploadWorkspace>(statementWorkspaceKey())?.value ?? EMPTY_WORKSPACE;
+  const [workspace, setWorkspace] = useState<StatementUploadWorkspace>(initialWorkspace);
   const selectedStatementId = useRef<string | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialWorkspace === EMPTY_WORKSPACE);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<DraftRowStatusFilter>("ALL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const workspaceRequestRef = useRef<AbortController | null>(null);
 
-  const loadWorkspace = useCallback(async (statementId?: string) => {
-    const next = await getStatementUploadWorkspace(statementId);
-    selectedStatementId.current = next.statement?.id;
-    setWorkspace(next);
-    return next;
+  const loadWorkspace = useCallback(async (statementId?: string, force = false, consumerSignal?: AbortSignal) => {
+    const ownedController = consumerSignal ? null : new AbortController();
+    if (ownedController) {
+      workspaceRequestRef.current?.abort();
+      workspaceRequestRef.current = ownedController;
+    }
+    const signal = consumerSignal ?? ownedController!.signal;
+    const key = statementWorkspaceKey(statementId);
+    const read = readWorkspace(key, (signal) => getStatementUploadWorkspace(statementId, signal), { force });
+    if (read.cached) {
+      selectedStatementId.current = read.cached.statement?.id;
+      setWorkspace(read.cached);
+    }
+    if (!read.promise) {
+      if (workspaceRequestRef.current === ownedController) workspaceRequestRef.current = null;
+      return read.cached!;
+    }
+    const release = read.release;
+    signal.addEventListener("abort", release, { once: true });
+    try {
+      const next = await read.promise;
+      if (!signal.aborted) {
+        selectedStatementId.current = next.statement?.id;
+        setWorkspace(next);
+      }
+      return next;
+    } finally {
+      signal.removeEventListener("abort", release);
+      release();
+      if (workspaceRequestRef.current === ownedController) workspaceRequestRef.current = null;
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -49,38 +80,41 @@ export function useStatementUploadWorkspace() {
     setError("");
     setMessage("");
     try {
-      await loadWorkspace(selectedStatementId.current);
+      await loadWorkspace(selectedStatementId.current, true);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to load Statement Upload workspace.");
+      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Statement Upload workspace.");
     } finally {
       setLoading(false);
     }
   }, [loadWorkspace]);
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     void (async () => {
-      setLoading(true);
+      setLoading(!getWorkspaceCache<StatementUploadWorkspace>(statementWorkspaceKey()));
       try {
-        const next = await getStatementUploadWorkspace();
-        if (!active) return;
-        selectedStatementId.current = next.statement?.id;
-        setWorkspace(next);
+        await loadWorkspace(undefined, false, controller.signal);
       } catch (caught) {
-        if (active) setError(caught instanceof Error ? caught.message : "Failed to load Statement Upload workspace.");
+        if (!controller.signal.aborted && !isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Statement Upload workspace.");
       } finally {
-        if (active) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => { active = false; };
-  }, []);
+    return () => { controller.abort(); workspaceRequestRef.current?.abort(); };
+  }, [loadWorkspace]);
 
-  const needsReview = useMemo(() => countNeedsReview(workspace.transactions), [workspace.transactions]);
-  const resolvedTransactions = useMemo(() => countResolvedTransactions(workspace.transactions), [workspace.transactions]);
-  const relevantIncoming = useMemo(
-    () => workspace.transactions.filter(requiresEventClassification).length,
-    [workspace.transactions]
-  );
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(searchInput), 200);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  const transactionCounts = useMemo(() => workspace.transactions.reduce((counts, transaction) => {
+    if (getDraftRowStatus(transaction) === "NEEDS_REVIEW") counts.needsReview += 1;
+    else counts.resolvedTransactions += 1;
+    if (requiresEventClassification(transaction)) counts.relevantIncoming += 1;
+    return counts;
+  }, { needsReview: 0, resolvedTransactions: 0, relevantIncoming: 0 }), [workspace.transactions]);
+  const { needsReview, resolvedTransactions, relevantIncoming } = transactionCounts;
 
   const filteredTransactions = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -119,13 +153,18 @@ export function useStatementUploadWorkspace() {
     setMessage("");
     try {
       const result = await updateDraftTransactionFinalEvent({ transactionId, eventCodeId });
-      setWorkspace((current) => ({
-        ...current,
+      const nextWorkspace = {
+        ...workspace,
         summary: result.summary,
-        transactions: current.transactions.map((transaction) =>
+        transactions: workspace.transactions.map((transaction) =>
           transaction.id === result.transaction.id ? result.transaction : transaction
         )
-      }));
+      };
+      invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
+      setWorkspaceCache(statementWorkspaceKey(), nextWorkspace);
+      if (nextWorkspace.statement?.id) setWorkspaceCache(statementWorkspaceKey(nextWorkspace.statement.id), nextWorkspace);
+      setWorkspace(nextWorkspace);
       setMessage("Final Event saved.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to update Final Event.");
@@ -142,8 +181,16 @@ export function useStatementUploadWorkspace() {
     setMessage("");
     try {
       const next = await uploadStatement({ file, bankAccountId });
+      invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateWorkspaceCache("member/registration/workspace");
+      invalidateWorkspaceCache("reconciliation/edit-income/workspace");
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       selectedStatementId.current = next.statement?.id;
+      setWorkspaceCache(statementWorkspaceKey(), next);
+      if (next.statement?.id) setWorkspaceCache(statementWorkspaceKey(next.statement.id), next);
       setWorkspace(next);
+      setSearchInput("");
       setSearch("");
       setStatusFilter("ALL");
       setPage(1);
@@ -163,7 +210,14 @@ export function useStatementUploadWorkspace() {
     setMessage("");
     try {
       const next = await executeStatementDraft(workspace.statement.id);
+      invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateWorkspaceCache("approval/sign-approval/workspace");
+      invalidateWorkspaceCache("reconciliation/edit-income/workspace");
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       selectedStatementId.current = next.statement?.id;
+      setWorkspaceCache(statementWorkspaceKey(), next);
+      if (next.statement?.id) setWorkspaceCache(statementWorkspaceKey(next.statement.id), next);
       setWorkspace(next);
       setMessage("Draft submitted for approval. Status is now Pending Approval.");
     } catch (caught) {
@@ -181,7 +235,7 @@ export function useStatementUploadWorkspace() {
     savingTransactionId,
     error,
     message,
-    search,
+    search: searchInput,
     statusFilter,
     page,
     pageSize,
@@ -192,7 +246,7 @@ export function useStatementUploadWorkspace() {
     canEditDraft,
     canUpload,
     canExecute,
-    setSearch,
+    setSearch: setSearchInput,
     setStatusFilter,
     setPage,
     setPageSize,

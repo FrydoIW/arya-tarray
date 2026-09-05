@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAbortError } from "@/lib/api";
+import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, setWorkspaceCache } from "@/lib/workspace-cache";
 import { executeRoleWorkspace, getRoleWorkspace } from "../api/role.api";
 import type {
   MatrixMode,
@@ -26,16 +28,19 @@ import {
 } from "../utils/role-workspace.utils";
 
 export function useRoleWorkspace() {
-  const [serverRoles, setServerRoles] = useState<Role[]>([]);
-  const [workingRoles, setWorkingRoles] = useState<Role[]>([]);
+  const cacheKey = "configuration/roles/workspace";
+  const initialWorkspace = getWorkspaceCache<Awaited<ReturnType<typeof getRoleWorkspace>>>(cacheKey)?.value;
+  const [serverRoles, setServerRoles] = useState<Role[]>(initialWorkspace?.roles ?? []);
+  const [workingRoles, setWorkingRoles] = useState<Role[]>(initialWorkspace?.roles ?? []);
   const [deletedRoleIds, setDeletedRoleIds] = useState<string[]>([]);
 
-  const [serverMenus, setServerMenus] = useState<MenuRegistryItem[]>([]);
-  const [workingMenus, setWorkingMenus] = useState<MenuRegistryItem[]>([]);
+  const [serverMenus, setServerMenus] = useState<MenuRegistryItem[]>(initialWorkspace?.menus ?? []);
+  const [workingMenus, setWorkingMenus] = useState<MenuRegistryItem[]>(initialWorkspace?.menus ?? []);
   const [deletedMenuIds, setDeletedMenuIds] = useState<string[]>([]);
 
-  const [serverAccess, setServerAccess] = useState<Set<string>>(new Set());
-  const [workingAccess, setWorkingAccess] = useState<Set<string>>(new Set());
+  const initialAccess = new Set(initialWorkspace?.roleMenus.map((item) => roleMenuKey(item.roleId, item.menuId)) ?? []);
+  const [serverAccess, setServerAccess] = useState<Set<string>>(initialAccess);
+  const [workingAccess, setWorkingAccess] = useState<Set<string>>(new Set(initialAccess));
 
   const [roleSearch, setRoleSearch] = useState("");
   const [roleStatusFilter, setRoleStatusFilter] = useState<RoleStatusFilter>("ALL");
@@ -44,10 +49,11 @@ export function useRoleWorkspace() {
   const [menuTypeFilter, setMenuTypeFilter] = useState<MenuTypeFilter>("ALL");
   const [matrixMode, setMatrixMode] = useState<MatrixMode>("INQUIRY");
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialWorkspace);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
 
   const applyWorkspace = useCallback((workspace: Awaited<ReturnType<typeof getRoleWorkspace>>) => {
     setServerRoles(workspace.roles);
@@ -59,25 +65,47 @@ export function useRoleWorkspace() {
     const nextAccess = new Set(workspace.roleMenus.map((item) => roleMenuKey(item.roleId, item.menuId)));
     setServerAccess(nextAccess);
     setWorkingAccess(new Set(nextAccess));
-  }, []);
+  }, [cacheKey]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (force = false, consumerSignal?: AbortSignal) => {
+    const ownedController = consumerSignal ? null : new AbortController();
+    if (ownedController) {
+      requestRef.current?.abort();
+      requestRef.current = ownedController;
+    }
+    const signal = consumerSignal ?? ownedController!.signal;
+    const read = readWorkspace(cacheKey, getRoleWorkspace, { force });
+    if (read.cached) applyWorkspace(read.cached);
+    if (!read.promise) {
+      if (requestRef.current === ownedController) requestRef.current = null;
+      setLoading(false);
+      return true;
+    }
+    setLoading(!read.cached || force);
     setError("");
+    const release = read.release;
+    signal.addEventListener("abort", release, { once: true });
     try {
-      const workspace = await getRoleWorkspace();
+      const workspace = await read.promise;
+      if (signal.aborted) return false;
       applyWorkspace(workspace);
       return true;
     } catch (err) {
+      if (isAbortError(err) || signal.aborted) return false;
       setError(err instanceof Error ? err.message : "Failed to load role workspace");
       return false;
     } finally {
-      setLoading(false);
+      signal.removeEventListener("abort", release);
+      release();
+      if (requestRef.current === ownedController) requestRef.current = null;
+      if (!signal.aborted) setLoading(false);
     }
   }, [applyWorkspace]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(false, controller.signal);
+    return () => { controller.abort(); requestRef.current?.abort(); };
   }, [load]);
 
   const filteredRoles = useMemo(
@@ -117,7 +145,7 @@ export function useRoleWorkspace() {
 
   async function refresh() {
     setMessage("");
-    const success = await load();
+    const success = await load(true);
     if (success) setMessage("Role workspace reloaded from database.");
     return success;
   }
@@ -334,6 +362,9 @@ export function useRoleWorkspace() {
 
       const result = await executeRoleWorkspace(payload);
 
+      invalidateWorkspaceCache(cacheKey);
+      invalidateWorkspaceCache("configuration/users/workspace");
+      setWorkspaceCache(cacheKey, result);
       applyWorkspace(result);
       if (result.changedCount > 0 && accessDirty) {
         setMessage(`${result.changedCount} master change${result.changedCount === 1 ? "" : "s"} and access matrix updates successfully executed.`);

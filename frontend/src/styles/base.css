@@ -103,8 +103,8 @@ html, body { background: var(--bg); }
 body {
   color: var(--ink);
   background: var(--bg);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .page-stack { gap: 16px; }
 .eyebrow { color: var(--primary); letter-spacing: .075em; }

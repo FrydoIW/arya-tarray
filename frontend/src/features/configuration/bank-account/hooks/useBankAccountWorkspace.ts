@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import { executeBankAccountWorkspace, getBankAccountWorkspace } from "../api/bank-account.api";
 import type { BankAccount, BankAccountStatusFilter, SupportedBank } from "../types";
 import {
@@ -140,6 +141,9 @@ export function useBankAccountWorkspace() {
     try {
       const payload = buildBankAccountPayload(serverAccounts, workingAccounts);
       const result = await executeBankAccountWorkspace(payload);
+      invalidateWorkspaceCache("reconciliation/statement-upload/workspace");
+      invalidateWorkspaceCache("reconciliation/edit-income/workspace");
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       applyWorkspace(result);
       setMessage(`${result.changedCount} Bank Account change${result.changedCount === 1 ? "" : "s"} successfully executed.`);
       return true;

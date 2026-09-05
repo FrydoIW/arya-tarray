@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import * as api from "../api/member-data.api";
 import type { MemberDetail, MemberProfileInput } from "../types";
 
@@ -19,7 +20,14 @@ export function useMemberDetail(memberId: string) {
   async function perform(action: () => Promise<unknown>, success: string) {
     if (lock.current) return false;
     lock.current = true; setBusy(true); setError(""); setMessage("");
-    try { await action(); setMessage(success); refresh(); return true; }
+    try {
+      await action();
+      invalidateWorkspaceCache("member/data/workspace");
+      invalidateWorkspaceCache("member/registration/workspace");
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
+      setMessage(success); refresh(); return true;
+    }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Tindakan gagal."); return false; }
     finally { lock.current = false; setBusy(false); }
   }

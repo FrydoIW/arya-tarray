@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSession, getToken } from "@/lib/api";
 import { getCurrentUser } from "@/features/auth/api/auth.api";
 import type { User } from "@/features/auth/types";
 import { AuthSessionProvider } from "@/features/auth/context/AuthSessionContext";
 import { getNavigationByPathname } from "@/config/navigation";
+import { setWorkspaceCacheSession } from "@/lib/workspace-cache";
 import { AccessDenied } from "./AccessDenied";
 import { ScreenLoader } from "./ScreenLoader";
 import { Sidebar } from "./Sidebar";
@@ -19,6 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const prefetchedRoutes = useRef(new Set<string>());
 
   useEffect(() => {
     if (!getToken()) {
@@ -27,7 +29,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     getCurrentUser()
-      .then(setUser)
+      .then((nextUser) => {
+        setWorkspaceCacheSession(nextUser.id);
+        setUser(nextUser);
+      })
       .catch(() => {
         clearSession();
         router.replace("/login");
@@ -67,6 +72,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname, user]);
 
   const workspaceTabs = useWorkspaceTabs(user?.id ?? null, user?.menuCodes ?? [], pathname);
+
+  useEffect(() => {
+    for (const tab of workspaceTabs.tabs) {
+      if (prefetchedRoutes.current.has(tab.route)) continue;
+      prefetchedRoutes.current.add(tab.route);
+      router.prefetch(tab.route);
+    }
+  }, [router, workspaceTabs.tabs]);
 
   function logout() {
     clearSession();

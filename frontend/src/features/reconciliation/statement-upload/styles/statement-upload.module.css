@@ -505,5 +505,5 @@
 .metrics { gap: 10px; }
 .flowCard, .workspaceCard, .tablePanel { border-color: #e4e9f0; border-radius: 11px; box-shadow: var(--shadow-xs); }
 .tableHeader { min-height: 66px; padding: 12px 14px; border-bottom: 1px solid #eef1f5; background: #fff; }
-.flowHeader h2, .sectionHeading h2, .tableHeader h2 { color: #1d2939; }
-.flowHeader p, .sectionHeading p, .tableHeader p { color: #7a8699; }
+.flowHeader h2, .sectionHeading h2, .tableHeader h2 { color: #1d2939; font-size: var(--font-size-section); font-weight: var(--font-weight-bold); }
+.flowHeader p, .sectionHeading p, .tableHeader p { color: #667085; font-size: var(--font-size-helper); line-height: var(--line-height-body); }

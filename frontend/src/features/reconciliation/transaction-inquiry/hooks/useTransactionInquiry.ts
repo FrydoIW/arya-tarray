@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isAbortError } from "@/lib/api";
+import { getWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
 import {
   generateTransactionInquiryReport,
   getTransactionInquiryDetail,
@@ -29,6 +30,8 @@ const EMPTY_WORKSPACE: TransactionInquiryWorkspace = {
   transactions: [],
   pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 }
 };
+const INQUIRY_WORKSPACE_PREFIX = "reconciliation/transaction-inquiry/workspace";
+const INQUIRY_MEMBER_OPTIONS_PREFIX = "reconciliation/transaction-inquiry/member-options";
 
 export function useTransactionInquiry() {
   const [periodMode, setPeriodMode] = useState<TransactionInquiryPeriodMode>("MONTH");
@@ -45,11 +48,15 @@ export function useTransactionInquiry() {
   const [memberOptions, setMemberOptions] = useState<TransactionInquiryMember[]>([]);
   const [selectedMember, setSelectedMember] = useState<TransactionInquiryMember | null>(null);
   const [memberOptionsLoading, setMemberOptionsLoading] = useState(false);
+  const [memberOptionsRequested, setMemberOptionsRequested] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [workspace, setWorkspace] = useState<TransactionInquiryWorkspace>(EMPTY_WORKSPACE);
+  const initialQuery = { periodMode: "MONTH" as const, month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL" as const, bankAccountId: "ALL", finalEventId: "ALL", memberId: "ALL", memberLinkStatus: "ALL" as const, page: 1, pageSize: 25 };
+  const initialKey = workspaceCacheKey(INQUIRY_WORKSPACE_PREFIX, initialQuery);
+  const initialWorkspace = getWorkspaceCache<TransactionInquiryWorkspace>(initialKey)?.value ?? EMPTY_WORKSPACE;
+  const [workspace, setWorkspace] = useState<TransactionInquiryWorkspace>(initialWorkspace);
   const [detail, setDetail] = useState<TransactionInquiryDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialWorkspace === EMPTY_WORKSPACE);
   const [detailLoading, setDetailLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState("");
@@ -65,35 +72,46 @@ export function useTransactionInquiry() {
   }, [searchInput]);
 
   useEffect(() => {
+    if (!memberOptionsRequested) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
+      const key = workspaceCacheKey(INQUIRY_MEMBER_OPTIONS_PREFIX, { search: memberSearch.trim() });
+      const read = readWorkspace(key, signal => getTransactionInquiryMemberOptions(memberSearch, signal));
+      if (read.cached) setMemberOptions(read.cached.members);
+      controller.signal.addEventListener("abort", read.release, { once: true });
       setMemberOptionsLoading(true);
       try {
-        const result = await getTransactionInquiryMemberOptions(memberSearch, controller.signal);
+        const result = read.promise ? await read.promise : read.cached!;
         if (!controller.signal.aborted) setMemberOptions(result.members);
       } catch (caught) {
         if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Member options.");
       } finally {
+        read.release();
         if (!controller.signal.aborted) setMemberOptionsLoading(false);
       }
     }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [memberSearch]);
+  }, [memberOptionsRequested, memberSearch]);
 
   const query = useMemo(() => ({ periodMode, month, date, search, status, bankAccountId, finalEventId, memberId, memberLinkStatus, page, pageSize }), [bankAccountId, date, finalEventId, memberId, memberLinkStatus, month, page, pageSize, periodMode, search, status]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     workspaceRequestRef.current?.abort();
     const controller = new AbortController();
     workspaceRequestRef.current = controller;
-    setLoading(true);
+    const key = workspaceCacheKey(INQUIRY_WORKSPACE_PREFIX, query);
+    const read = readWorkspace(key, signal => getTransactionInquiryWorkspace(query, signal), { force });
+    if (read.cached) setWorkspace(read.cached);
+    controller.signal.addEventListener("abort", read.release, { once: true });
+    setLoading(!read.cached || force);
     setError("");
     try {
-      const next = await getTransactionInquiryWorkspace(query, controller.signal);
+      const next = read.promise ? await read.promise : read.cached!;
       if (!controller.signal.aborted) setWorkspace(next);
     } catch (caught) {
       if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Transaction Inquiry.");
     } finally {
+      read.release();
       if (workspaceRequestRef.current === controller) {
         workspaceRequestRef.current = null;
         setLoading(false);
@@ -102,7 +120,7 @@ export function useTransactionInquiry() {
   }, [query]);
 
   useEffect(() => {
-    void load();
+    void load(false);
     return () => workspaceRequestRef.current?.abort();
   }, [load]);
 
@@ -199,7 +217,8 @@ export function useTransactionInquiry() {
     changeMemberLinkStatus,
     setPage,
     changePageSize,
-    refresh: load,
+    refresh: () => load(true),
+    requestMemberOptions: () => setMemberOptionsRequested(true),
     openDetail,
     closeDetail: () => setDetail(null),
     generateReport

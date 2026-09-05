@@ -59,6 +59,7 @@ export function TransactionInquiryScreen() {
         onBankAccountChange={inquiry.changeBankAccount}
         onFinalEventChange={inquiry.changeFinalEvent}
         onMemberSearchChange={inquiry.setMemberSearch}
+        onMemberOptionsRequest={inquiry.requestMemberOptions}
         onMemberChange={inquiry.changeMember}
         onMemberLinkStatusChange={inquiry.changeMemberLinkStatus}
         onPageChange={inquiry.setPage}

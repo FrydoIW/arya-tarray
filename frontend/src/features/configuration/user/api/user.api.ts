@@ -93,8 +93,8 @@ function mapWorkspace(value: ApiWorkspace): UserWorkspace {
   };
 }
 
-export async function getUserWorkspace() {
-  return mapWorkspace(await apiFetch<ApiWorkspace>("/configuration/users/workspace"));
+export async function getUserWorkspace(signal?: AbortSignal) {
+  return mapWorkspace(await apiFetch<ApiWorkspace>("/configuration/users/workspace", { signal }));
 }
 
 export async function executeUserWorkspace(payload: UserWorkspaceExecutePayload) {

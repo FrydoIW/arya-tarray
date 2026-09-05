@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAbortError } from "@/lib/api";
+import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
 import {
   executeEditIncomeCorrection,
   getEditIncomeDetail,
@@ -33,19 +35,30 @@ const EMPTY_WORKSPACE: EditIncomeWorkspace = {
   statements: [],
   bankAccounts: []
 };
+const EDIT_INCOME_WORKSPACE_PREFIX = "reconciliation/edit-income/workspace";
+
+function editIncomeWorkspaceKey(period: { mode: EditIncomePeriodMode; month: string; date: string }) {
+  return workspaceCacheKey(EDIT_INCOME_WORKSPACE_PREFIX, period.mode === "DAY"
+    ? { periodMode: period.mode, date: period.date }
+    : { periodMode: period.mode, month: period.month });
+}
 
 export function useEditIncomeWorkspace() {
   const [periodMode, setPeriodMode] = useState<EditIncomePeriodMode>("MONTH");
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [date, setDate] = useState(CURRENT_DAY);
-  const [workspace, setWorkspace] = useState<EditIncomeWorkspace>(EMPTY_WORKSPACE);
+  const initialPeriod = { mode: "MONTH" as const, month: CURRENT_MONTH, date: CURRENT_DAY };
+  const initialWorkspace = getWorkspaceCache<EditIncomeWorkspace>(editIncomeWorkspaceKey(initialPeriod))?.value ?? EMPTY_WORKSPACE;
+  const [workspace, setWorkspace] = useState<EditIncomeWorkspace>(initialWorkspace);
   const [detail, setDetail] = useState<EditIncomeDetail | null>(null);
   const [draftTransactions, setDraftTransactions] = useState<EditIncomeTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialWorkspace === EMPTY_WORKSPACE);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const workspaceRequestRef = useRef<AbortController | null>(null);
+  const detailRequestRef = useRef<AbortController | null>(null);
 
   const [statementSearch, setStatementSearch] = useState("");
   const [statementStatusFilter, setStatementStatusFilter] = useState<EditIncomeStatusFilter>("ALL");
@@ -58,17 +71,44 @@ export function useEditIncomeWorkspace() {
   const [transactionPage, setTransactionPage] = useState(1);
   const [transactionPageSize, setTransactionPageSize] = useState(25);
 
-  const loadWorkspace = useCallback(async (targetPeriod: { mode: EditIncomePeriodMode; month: string; date: string }) => {
-    const next = await getEditIncomeWorkspace(targetPeriod);
-    setWorkspace(next);
-    return next;
+  const loadWorkspace = useCallback(async (targetPeriod: { mode: EditIncomePeriodMode; month: string; date: string }, force = false, consumerSignal?: AbortSignal) => {
+    const ownedController = consumerSignal ? null : new AbortController();
+    if (ownedController) {
+      workspaceRequestRef.current?.abort();
+      workspaceRequestRef.current = ownedController;
+    }
+    const signal = consumerSignal ?? ownedController!.signal;
+    const key = editIncomeWorkspaceKey(targetPeriod);
+    const read = readWorkspace(key, (signal) => getEditIncomeWorkspace(targetPeriod, signal), { force });
+    if (read.cached) setWorkspace(read.cached);
+    if (!read.promise) {
+      if (workspaceRequestRef.current === ownedController) workspaceRequestRef.current = null;
+      return read.cached!;
+    }
+    const release = read.release;
+    signal.addEventListener("abort", release, { once: true });
+    try {
+      const next = await read.promise;
+      if (!signal.aborted) {
+        setWorkspace(next);
+      }
+      return next;
+    } finally {
+      signal.removeEventListener("abort", release);
+      release();
+      if (workspaceRequestRef.current === ownedController) workspaceRequestRef.current = null;
+    }
   }, []);
 
   const loadDetail = useCallback(async (statementId: string) => {
+    detailRequestRef.current?.abort();
+    const controller = new AbortController();
+    detailRequestRef.current = controller;
     setDetailLoading(true);
     setError("");
     try {
-      const next = await getEditIncomeDetail(statementId);
+      const next = await getEditIncomeDetail(statementId, controller.signal);
+      if (controller.signal.aborted) return null;
       setDetail(next);
       setDraftTransactions(next.transactions.map((item) => ({ ...item })));
       setTransactionSearch("");
@@ -76,10 +116,13 @@ export function useEditIncomeWorkspace() {
       setTransactionPage(1);
       return next;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to load Edit Income detail.");
+      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Edit Income detail.");
       return null;
     } finally {
-      setDetailLoading(false);
+      if (detailRequestRef.current === controller) {
+        detailRequestRef.current = null;
+        setDetailLoading(false);
+      }
     }
   }, []);
 
@@ -88,32 +131,34 @@ export function useEditIncomeWorkspace() {
     setError("");
     setMessage("");
     try {
-      await loadWorkspace({ mode: periodMode, month, date });
+      await loadWorkspace({ mode: periodMode, month, date }, true);
       if (detail?.statement.id) await loadDetail(detail.statement.id);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to reload Edit Income workspace.");
+      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to reload Edit Income workspace.");
     } finally {
       setLoading(false);
     }
   }, [date, detail?.statement.id, loadDetail, loadWorkspace, month, periodMode]);
 
   useEffect(() => {
-    let active = true;
-    setLoading(true);
+    const controller = new AbortController();
+    const targetPeriod = { mode: periodMode, month, date };
+    setLoading(!getWorkspaceCache<EditIncomeWorkspace>(editIncomeWorkspaceKey(targetPeriod)));
     setError("");
     setMessage("");
     void (async () => {
       try {
-        const next = await getEditIncomeWorkspace({ mode: periodMode, month, date });
-        if (active) setWorkspace(next);
+        await loadWorkspace(targetPeriod, false, controller.signal);
       } catch (caught) {
-        if (active) setError(caught instanceof Error ? caught.message : "Failed to load Edit Income workspace.");
+        if (!controller.signal.aborted && !isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Edit Income workspace.");
       } finally {
-        if (active) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => { active = false; };
-  }, [date, month, periodMode]);
+    return () => { controller.abort(); workspaceRequestRef.current?.abort(); };
+  }, [date, loadWorkspace, month, periodMode]);
+
+  useEffect(() => () => detailRequestRef.current?.abort(), []);
 
   const filteredStatements = useMemo(() => {
     const search = statementSearch.trim().toLowerCase();
@@ -223,7 +268,12 @@ export function useEditIncomeWorkspace() {
     setMessage("");
     try {
       const result = await executeEditIncomeCorrection(detail.statement.id, changes);
-      await loadWorkspace({ mode: periodMode, month, date });
+      invalidateWorkspaceCache(EDIT_INCOME_WORKSPACE_PREFIX);
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateWorkspaceCache("member/data/workspace");
+      invalidateWorkspaceCache("approval/sign-approval/workspace");
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
+      await loadWorkspace({ mode: periodMode, month, date }, true);
       setDetail(null);
       setDraftTransactions([]);
       setMessage(result.message);

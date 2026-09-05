@@ -6,9 +6,9 @@ import type {
   UploadStatementInput
 } from "../types";
 
-export function getStatementUploadWorkspace(statementId?: string): Promise<StatementUploadWorkspace> {
+export function getStatementUploadWorkspace(statementId?: string, signal?: AbortSignal): Promise<StatementUploadWorkspace> {
   const query = statementId ? `?statementId=${encodeURIComponent(statementId)}` : "";
-  return apiFetch<StatementUploadWorkspace>(`/reconciliation/statement-upload/workspace${query}`);
+  return apiFetch<StatementUploadWorkspace>(`/reconciliation/statement-upload/workspace${query}`, { signal });
 }
 
 export function uploadStatement(input: UploadStatementInput): Promise<StatementUploadWorkspace> {

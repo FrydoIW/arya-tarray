@@ -32,6 +32,7 @@
   --radius-sm: 7px;
   --radius-md: 11px;
   --radius-lg: 13px;
+  --radius-control: 8px;
   --control-height: 40px;
   --space-1: 4px;
   --space-2: 8px;
@@ -43,6 +44,19 @@
   --shell-header-height: 64px;
   --shell-content-max: 1680px;
   --shell-content-inline: 28px;
+  --font-size-caption: 11px;
+  --font-size-helper: 11.5px;
+  --font-size-control: 12.5px;
+  --font-size-body: 13px;
+  --font-size-section: 14px;
+  --font-size-dialog: 18px;
+  --font-size-page: 26px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.25;
+  --line-height-body: 1.5;
   --font-ui: "Segoe UI Variable Text", "Segoe UI", "Aptos", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: "Segoe UI Variable Display", "Segoe UI", "Aptos Display", system-ui, sans-serif;
   --font-brand: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;

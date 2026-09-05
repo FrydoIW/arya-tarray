@@ -112,8 +112,8 @@ export async function getRoles() {
   return items.map(mapRole);
 }
 
-export async function getRoleWorkspace() {
-  return mapWorkspace(await apiFetch<ApiWorkspace>("/configuration/roles/workspace"));
+export async function getRoleWorkspace(signal?: AbortSignal) {
+  return mapWorkspace(await apiFetch<ApiWorkspace>("/configuration/roles/workspace", { signal }));
 }
 
 export async function executeRoleWorkspace(payload: RoleWorkspaceExecutePayload) {

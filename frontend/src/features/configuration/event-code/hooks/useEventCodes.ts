@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import { executeEventCodeChanges, getEventCodes } from "../api/event-code.api";
 import type { EventCode, EventCodeInput, EventCodeStatusFilter } from "../types";
 
@@ -226,6 +227,11 @@ export function useEventCodes() {
         deletes: deletedIds
       });
 
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateWorkspaceCache("member/data/workspace");
+      invalidateWorkspaceCache("reconciliation/statement-upload/workspace");
+      invalidateWorkspaceCache("reconciliation/edit-income/workspace");
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       setServerItems(result.items);
       setWorkingItems(result.items);
       setDeletedIds([]);

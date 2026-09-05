@@ -44,6 +44,7 @@ type Props = {
   onBankAccountChange: (value: string) => void;
   onFinalEventChange: (value: string) => void;
   onMemberSearchChange: (value: string) => void;
+  onMemberOptionsRequest: () => void;
   onMemberChange: (value: string) => void;
   onMemberLinkStatusChange: (value: TransactionInquiryMemberLinkStatus) => void;
   onPageChange: (value: number) => void;
@@ -102,8 +103,8 @@ export function TransactionInquiryTable(props: Props) {
             {props.eventOptions.map((event) => <option key={event.id} value={event.id}>{event.code} - {event.eventName}</option>)}
           </Select>
           <div className={styles.memberFilterGroup}>
-            <SearchInput value={props.memberSearch} placeholder="Find Member" aria-label="Search Member options" aria-busy={props.memberOptionsLoading} onChange={(event) => props.onMemberSearchChange(event.target.value)} />
-            <Select value={props.memberId} disabled={props.loading || props.memberOptionsLoading} onChange={(event) => props.onMemberChange(event.target.value)} aria-label="Member">
+            <SearchInput value={props.memberSearch} placeholder="Find Member" aria-label="Search Member options" aria-busy={props.memberOptionsLoading} onFocus={props.onMemberOptionsRequest} onChange={(event) => { props.onMemberOptionsRequest(); props.onMemberSearchChange(event.target.value); }} />
+            <Select value={props.memberId} disabled={props.loading || props.memberOptionsLoading} onFocus={props.onMemberOptionsRequest} onChange={(event) => props.onMemberChange(event.target.value)} aria-label="Member">
               <option value="ALL">All Members</option>
               {selectableMembers.map((member) => <option key={member.memberId} value={member.memberId}>{memberLabel(member)}</option>)}
             </Select>

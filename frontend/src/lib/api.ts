@@ -1,4 +1,5 @@
 import { clearWorkspaceTabsSession } from "./workspace-tabs-session";
+import { clearWorkspaceCache } from "./workspace-cache";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
@@ -18,6 +19,7 @@ export function getToken() {
 export function setSession(token: string, user: unknown, remember = true) {
   if (typeof window === "undefined") return;
 
+  clearWorkspaceCache();
   clearWorkspaceTabsSession();
 
   const target = remember ? window.localStorage : window.sessionStorage;
@@ -30,6 +32,7 @@ export function setSession(token: string, user: unknown, remember = true) {
 }
 
 export function clearSession() {
+  clearWorkspaceCache();
   for (const storage of storages()) {
     storage.removeItem(TOKEN_KEY);
     storage.removeItem(USER_KEY);

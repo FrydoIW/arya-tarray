@@ -1,12 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import {
   approveSignApproval,
   getSignApprovalDetail,
   rejectSignApproval
 } from "../api/sign-approval.api";
 import type { SignApprovalDetail } from "../types";
+
+function invalidateDecisionWorkspaces() {
+  invalidateWorkspaceCache("monitoring/dashboard/workspace");
+  invalidateWorkspaceCache("member/data/workspace");
+  invalidateWorkspaceCache("reconciliation/statement-upload/workspace");
+  invalidateWorkspaceCache("reconciliation/edit-income/workspace");
+  invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
+}
 
 export function useSignApprovalDetail(approvalId: string | null) {
   const [detail, setDetail] = useState<SignApprovalDetail | null>(null);
@@ -42,6 +51,7 @@ export function useSignApprovalDetail(approvalId: string | null) {
     setError("");
     try {
       await approveSignApproval(approvalId, remark);
+      invalidateDecisionWorkspaces();
       return true;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Failed to approve request";
@@ -63,6 +73,7 @@ export function useSignApprovalDetail(approvalId: string | null) {
     setError("");
     try {
       await rejectSignApproval(approvalId, remark);
+      invalidateDecisionWorkspaces();
       return true;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Failed to reject request";

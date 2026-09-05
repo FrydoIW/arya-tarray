@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAbortError } from "@/lib/api";
+import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, setWorkspaceCache } from "@/lib/workspace-cache";
 import { executeUserWorkspace, getUserWorkspace } from "../api/user.api";
 import type {
   AddUserDraftInput,
@@ -19,17 +21,20 @@ const EMPTY_WORKSPACE: UserWorkspace = {
   users: [],
   roles: []
 };
+const USER_WORKSPACE_KEY = "configuration/users/workspace";
 
 export function useUsers() {
-  const [serverWorkspace, setServerWorkspace] = useState<UserWorkspace>(EMPTY_WORKSPACE);
-  const [workingUsers, setWorkingUsers] = useState<UserItem[]>([]);
+  const initialWorkspace = getWorkspaceCache<UserWorkspace>(USER_WORKSPACE_KEY)?.value ?? EMPTY_WORKSPACE;
+  const [serverWorkspace, setServerWorkspace] = useState<UserWorkspace>(initialWorkspace);
+  const [workingUsers, setWorkingUsers] = useState<UserItem[]>(initialWorkspace.users);
   const [passwordResets, setPasswordResets] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("ALL");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialWorkspace === EMPTY_WORKSPACE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
 
   const applyWorkspace = useCallback((workspace: UserWorkspace) => {
     setServerWorkspace(workspace);
@@ -37,24 +42,46 @@ export function useUsers() {
     setPasswordResets({});
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (force = false, consumerSignal?: AbortSignal) => {
+    const ownedController = consumerSignal ? null : new AbortController();
+    if (ownedController) {
+      requestRef.current?.abort();
+      requestRef.current = ownedController;
+    }
+    const signal = consumerSignal ?? ownedController!.signal;
+    const read = readWorkspace(USER_WORKSPACE_KEY, getUserWorkspace, { force });
+    if (read.cached) applyWorkspace(read.cached);
+    if (!read.promise) {
+      if (requestRef.current === ownedController) requestRef.current = null;
+      setLoading(false);
+      return true;
+    }
+    setLoading(!read.cached || force);
     setError("");
+    const release = read.release;
+    signal.addEventListener("abort", release, { once: true });
 
     try {
-      const workspace = await getUserWorkspace();
+      const workspace = await read.promise;
+      if (signal.aborted) return false;
       applyWorkspace(workspace);
       return true;
     } catch (err) {
+      if (isAbortError(err) || signal.aborted) return false;
       setError(err instanceof Error ? err.message : "Failed to load users");
       return false;
     } finally {
-      setLoading(false);
+      signal.removeEventListener("abort", release);
+      release();
+      if (requestRef.current === ownedController) requestRef.current = null;
+      if (!signal.aborted) setLoading(false);
     }
   }, [applyWorkspace]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(false, controller.signal);
+    return () => { controller.abort(); requestRef.current?.abort(); };
   }, [load]);
 
   const users = useMemo(() => {
@@ -102,7 +129,7 @@ export function useUsers() {
 
   async function refresh() {
     setMessage("");
-    const success = await load();
+    const success = await load(true);
     if (success) setMessage("Users reloaded from database.");
     return success;
   }
@@ -165,9 +192,9 @@ export function useUsers() {
     setError("");
   }
 
-  function hasPasswordReset(id: string) {
+  const hasPasswordReset = useCallback((id: string) => {
     return Boolean(passwordResets[id]);
-  }
+  }, [passwordResets]);
 
   function clearChanges() {
     setWorkingUsers(serverWorkspace.users);
@@ -234,6 +261,10 @@ export function useUsers() {
         passwordResets: passwordResetPayload
       });
 
+      invalidateWorkspaceCache(USER_WORKSPACE_KEY);
+      invalidateWorkspaceCache("configuration/roles/workspace");
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      setWorkspaceCache(USER_WORKSPACE_KEY, result);
       applyWorkspace(result);
       setMessage(`${result.changedCount} change${result.changedCount === 1 ? "" : "s"} successfully executed.`);
       return true;
