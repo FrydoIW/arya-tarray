@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, Link2, Pencil, RefreshCw, Unlink, UserRoundPlus } from "lucide-react";
 import { ScreenLoader } from "@/components/layout/ScreenLoader";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +23,20 @@ function Field({ label, value, wide = false }: { label: string; value: React.Rea
 
 export function MemberDetailScreen({ memberId }: { memberId: string }) {
   const state = useMemberDetail(memberId); const [tab, setTab] = useState<"profile" | "identities" | "donations">("profile"); const [action, setAction] = useState<Action>(null);
+  const tabs = ["profile", "identities", "donations"] as const;
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = tabs.indexOf(tab);
+    const nextIndex = event.key === "Home" ? 0
+      : event.key === "End" ? tabs.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    const nextTab = tabs[nextIndex];
+    setTab(nextTab);
+    event.currentTarget.parentElement
+      ?.querySelector<HTMLButtonElement>(`#member-tab-${nextTab}`)
+      ?.focus();
+  }
   const columns = useMemo<DataTableColumn<Identity>[]>(() => [
     { key: "accountName", header: "Nama Rekening Mentah", minWidth: "210px", render: row => <div className={styles.name}><strong>{row.accountName}</strong><small>Normalized: {row.normalizedName}</small></div> },
     { key: "initialName", header: "Initial", minWidth: "110px" },
@@ -51,8 +65,12 @@ export function MemberDetailScreen({ memberId }: { memberId: string }) {
       <div><span className={styles.eyebrow}>PROFIL DONATUR</span><h2>{member.memberName}</h2><p>{member.initialName || "Initial belum dicatat"}{member.city ? ` · ${member.city}` : ""}</p></div>
       <StatusBadge active={member.activeFlag} activeLabel="Aktif" inactiveLabel="Nonaktif" />
     </section>
-    <div className={styles.tabs} role="tablist"><button className={tab === "profile" ? styles.activeTab : ""} onClick={() => setTab("profile")}>Profil</button><button className={tab === "identities" ? styles.activeTab : ""} onClick={() => setTab("identities")}>Identitas <span>{member.identities.length}</span></button><button className={tab === "donations" ? styles.activeTab : ""} onClick={() => setTab("donations")}>Riwayat Donasi</button></div>
-    {tab === "profile" ? <section className={styles.detailPanel}>
+    <div className={styles.tabs} role="tablist" aria-label="Detail donatur">
+      <button type="button" id="member-tab-profile" role="tab" aria-selected={tab === "profile"} aria-controls="member-panel-profile" tabIndex={tab === "profile" ? 0 : -1} className={tab === "profile" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("profile")}>Profil</button>
+      <button type="button" id="member-tab-identities" role="tab" aria-selected={tab === "identities"} aria-controls="member-panel-identities" tabIndex={tab === "identities" ? 0 : -1} className={tab === "identities" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("identities")}>Identitas <span>{member.identities.length}</span></button>
+      <button type="button" id="member-tab-donations" role="tab" aria-selected={tab === "donations"} aria-controls="member-panel-donations" tabIndex={tab === "donations" ? 0 : -1} className={tab === "donations" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("donations")}>Riwayat Donasi</button>
+    </div>
+    {tab === "profile" ? <section id="member-panel-profile" role="tabpanel" aria-labelledby="member-tab-profile" tabIndex={0} className={styles.detailPanel}>
       <div className={styles.sectionHead}><div><h2>Informasi profil</h2><p>Data kanonik donatur. Usia dihitung dari tanggal lahir.</p></div><Button icon={<Pencil size={15} />} onClick={() => { state.clearError(); setAction({ kind: "edit-profile" }); }}>Edit profil</Button></div>
       <dl className={styles.profileGrid}>
         <Field label="Kode Member" value={member.memberCode} /><Field label="Nama Donatur" value={member.memberName} />
@@ -62,11 +80,11 @@ export function MemberDetailScreen({ memberId }: { memberId: string }) {
         <Field label="Alamat" value={member.address || "—"} wide /><Field label="Catatan" value={member.remark || "—"} wide />
       </dl>
       <div className={styles.audit}>Terdaftar {formatDateTime(member.registeredAt)}{member.registeredBy ? ` oleh ${member.registeredBy.fullName}` : ""} · Terakhir diperbarui {formatDateTime(member.updatedAt)}{member.updatedBy ? ` oleh ${member.updatedBy.fullName}` : ""}</div>
-    </section> : tab === "identities" ? <section className={styles.detailPanel}>
+    </section> : tab === "identities" ? <section id="member-panel-identities" role="tabpanel" aria-labelledby="member-tab-identities" tabIndex={0} className={styles.detailPanel}>
       <div className={styles.sectionHead}><div><h2>Identitas terhubung</h2><p>Nama rekening mentah dipertahankan sebagai bukti sumber.</p></div><Button icon={<UserRoundPlus size={15} />} disabled={!member.activeFlag} onClick={() => { state.clearError(); setAction({ kind: "add" }); }}>Tambah Identitas</Button></div>
       {!member.activeFlag ? <div className="ui-alert ui-alert-error">Aktifkan donatur sebelum menambahkan identitas baru.</div> : null}
       <DataTable rows={member.identities} columns={columns} rowKey={row => row.memberIdentityId} minWidth="1250px" emptyState={{ title: "Belum ada identitas", description: "Tambahkan identitas belum terverifikasi ketika tersedia." }} />
-    </section> : <MemberDonationHistory memberId={memberId} />}
+    </section> : <div id="member-panel-donations" role="tabpanel" aria-labelledby="member-tab-donations" tabIndex={0}><MemberDonationHistory memberId={memberId} /></div>}
     {action?.kind === "edit-profile" ? <MemberProfileModal member={member} busy={state.busy} error={state.error} onClose={close} onSubmit={state.updateProfile} /> : null}
     {action?.kind === "add" ? <AddIdentityModal memberId={memberId} busy={state.busy} error={state.error} onClose={close} onSubmit={state.attach} /> : null}
     {action?.kind === "edit-identity" ? <EditIdentityModal identity={action.identity} busy={state.busy} error={state.error} onClose={close} onSubmit={input => state.updateIdentity(action.identity.memberIdentityId, input)} /> : null}

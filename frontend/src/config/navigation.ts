@@ -175,5 +175,5 @@ export function getDefaultNavigationPath(menuCodes: string[]) {
     if (child?.href) return child.href;
   }
 
-  return "/dashboard";
+  return "/access-denied";
 }

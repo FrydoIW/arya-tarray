@@ -1,6 +1,5 @@
-import { Router, type ErrorRequestHandler } from "express";
-import { ZodError } from "zod";
-import { asyncHandler, HttpError } from "../../../lib/http.js";
+import { Router } from "express";
+import { asyncHandler, privateErrorHandler } from "../../../lib/http.js";
 import * as controller from "./member-data.controller.js";
 
 export const memberDataRouter = Router();
@@ -15,7 +14,7 @@ memberDataRouter.post("/:memberId/identities/:identityId/move", asyncHandler(con
 memberDataRouter.post("/:memberId/identities/:identityId/detach", asyncHandler(controller.detach));
 memberDataRouter.patch("/:memberId/identities/:identityId", asyncHandler(controller.identityMetadata));
 
-const privateErrorHandler: ErrorRequestHandler = (error, _req, _res, next) => {
-  next(error instanceof HttpError || error instanceof ZodError ? error : new HttpError(500, "Data donatur gagal diproses. Silakan coba lagi."));
-};
-memberDataRouter.use(privateErrorHandler);
+memberDataRouter.use(privateErrorHandler(
+  "member-data",
+  "Data donatur gagal diproses. Silakan coba lagi."
+));

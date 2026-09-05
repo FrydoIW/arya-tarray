@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { isAbortError } from "@/lib/api";
 import { getDashboardSummary } from "../api/dashboard.api";
 import type { DashboardPeriodMode, DashboardSummary } from "../types";
 import { currentDayValue, currentMonthValue } from "../utils/dashboard.utils";
@@ -14,24 +15,33 @@ export function useDashboardWorkspace() {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (silent = false) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     if (!silent) {
       setLoading(true);
       setData(null);
     }
     setError("");
     try {
-      setData(await getDashboardSummary({ mode: periodMode, month, date }));
+      const next = await getDashboardSummary({ mode: periodMode, month, date }, controller.signal);
+      if (!controller.signal.aborted) setData(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load dashboard");
+      if (!isAbortError(err)) setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
-      if (!silent) setLoading(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setLoading(false);
+      }
     }
   }, [date, month, periodMode]);
 
   useEffect(() => {
     void load();
+    return () => requestRef.current?.abort();
   }, [load]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
+import { officialDonationTransactionWhere } from "../../member/member-donation.rules.js";
 
 export type DashboardPeriodRange = {
   periodStart: Date;
@@ -114,9 +115,7 @@ export async function loadTopFinalEvents(range: DashboardPeriodRange) {
     where: {
       AND: [
         transactionPeriodWhere(range),
-        { status: "FINALIZED" },
-        { originalAmount: { gt: 0 } },
-        { eventCodeId: { not: null } }
+        officialDonationTransactionWhere()
       ]
     },
     _count: { _all: true },
@@ -218,10 +217,10 @@ export function loadDashboardViewer(userId: string) {
 }
 
 const officialMemberDonationWhere = (range: DashboardPeriodRange): Prisma.BankTransactionWhereInput => ({
-  transactionDate: { gte: range.periodStart, lt: range.periodEnd },
-  status: "FINALIZED",
-  originalAmount: { gt: 0 },
-  eventCodeId: { not: null }
+  AND: [
+    officialDonationTransactionWhere(),
+    { transactionDate: { gte: range.periodStart, lt: range.periodEnd } }
+  ]
 });
 
 const registrationFollowUpTransactionWhere = (range: DashboardPeriodRange): Prisma.BankTransactionWhereInput => ({

@@ -1,84 +1,49 @@
 # Arya Tarray Development Rules
 
-## Product purpose
-Arya Tarray is an internal operational dashboard for Yayasan Arya Tarray Nusantara. Keep the UI calm, respectful, compact, and operationally useful. Do not turn it into a noisy generic SaaS dashboard.
+## Product and architecture
 
-## Navigation
-1. Overview
-2. Rupang
-   - Rupang Entry
-   - Inquiry
-3. Reconciliation
-   - Statement Upload
-   - Code Management
-   - Transaction Inquiry
+Arya Tarray is a calm, compact internal operations dashboard for Yayasan Arya Tarray Nusantara. Preserve the current Route → Controller → Service → Repository → Prisma backend flow and thin Next.js routes → feature components/hooks/API → `lib/api.ts` frontend flow.
 
-## Rupang workflow
-- Excel upload creates one upload batch and detail rows.
-- New rows start as `PENDING`.
-- Workflow: `PENDING -> VASE_REVIEW -> COMPLETE`.
-- `COMPLETE` rows appear in Rupang Inquiry.
-- Complete rows may still be edited from Inquiry.
-- Every edit/status transition must write history.
-- Preserve source row number and source upload for traceability.
+Current navigation:
 
-## Rupang source mapping
-The current donor spreadsheet columns are:
-- Nomor Rupang
-- Kode
-- Jenis Rupang
-- Size/Bahan
-- PIC
-- Nama di Rupang
-- Nama Contact Person
-- No Telp Contact Person
-- Pemasangan dari
-- Periode (Bln)
-- Ket.
-- Dana Rupang
-- Dana Monkcare
-- month-marker columns beginning at column N
+1. Monitoring — Dashboard
+2. Reconciliation — Statement Upload, Edit Income, Transaction Inquiry
+3. Approval Line — Sign Approval
+4. Donatur — Registrasi Donatur, Data Donatur
+5. Configuration — Role, User, Event Code, Approval, Bank Account
 
-Do not invent a Monkcare amount from the current sheet. `Dana Monkcare` is currently treated as a yes/no marker.
+## Reconciliation invariants
 
-## Bank reconciliation
-- Upload BCA statement Excel files.
-- Parse each transaction group beginning with a dated row.
-- Only incoming (`CR`) transactions participate in suffix-code reconciliation by default.
-- Take the final three digits of the integer rupiah amount as a candidate code when the suffix is not `000`.
-- Keep codes as `CHAR(3)`/strings so leading zeroes are preserved (`017`, `058`, `075`).
-- Active code exists -> UI status `CHECK`.
-- No matching code or no suffix -> UI status `ERROR`.
-- Store internal code status separately (`MATCHED`, `NOT_FOUND`, `NO_CODE`).
-- Manual correction must be auditable.
-- Do not automatically link a bank transaction to a specific Rupang entry until a deterministic matching rule is defined.
+- Preserve the `RAW → CHECK → FINALIZED` lifecycle and audit history.
+- The BCA parser groups transactions from dated rows and preserves source evidence.
+- Only eligible incoming credits participate in suffix classification. Debit, `BUNGA`, and `CR KOREKSI BUNGA` rules must remain intact.
+- Suggested Event and actual Final Event are distinct. Manual correction and approval remain auditable.
+- Event codes are three-character strings so leading zeroes are preserved.
+- Sign Approval uses ANY-ONE semantics.
 
-## Known starter payment codes
-- 017 — Rupang
-- 058 — Sangha Dana
-- 075 — Proyek Bhutan
-These are seed data and remain editable through Code Management.
+## Donatur invariants
 
-## Database
-- MySQL 8.4 / utf8mb4.
-- Production database name: `arya_tarray`.
+- Canonical ownership is `BankTransaction → MemberIdentity → Member`; never add a direct transaction-to-Member relation.
+- Identity states are `UNVERIFIED`, `VERIFIED`, and `IGNORED`. Preserve raw evidence and never fuzzy auto-link.
+- Move changes only current identity ownership. Detach removes canonical ownership while retaining identity and transaction links.
+- Official Member donation means `FINALIZED`, `originalAmount > 0`, actual `eventCodeId`, and a VERIFIED identity resolving to the Member. Never substitute `baseAmount` or store derived donation totals.
+- Historical backfill never creates canonical Members and requires explicit `--dry-run` or human-approved `--apply`.
+
+## Database governance
+
+- MySQL 8.4 / utf8mb4; production database name `arya_tarray`.
+- `backend/prisma/schema.prisma` is the current application contract.
+- Deliver current structural changes only as reviewed manual patches under `backend/prisma/patches/`.
+- Never execute patches automatically from application startup or tooling.
+- The active Prisma migration directory is historical compatibility state, not a current rebuild/bootstrap mechanism. Do not rewrite, delete, or move it without reconciling every target database’s `_prisma_migrations` history.
+- Do not run `prisma migrate dev`, `prisma migrate deploy`, `prisma db push`, `prisma db pull`, reset, or drop/recreate workflows.
+- After an approved physical patch is applied by a human, run `npx prisma generate` and `npx prisma validate`.
 - Never commit credentials.
-- Use migrations; do not modify production tables manually from application code.
 
-## Backend
-- TypeScript + Express + Prisma.
-- Validate request input.
-- Keep parsing/business logic in services, not route handlers.
-- Use transactions for upload batch + detail persistence and history-changing operations.
-- Uploaded files are parsed in memory in this first version; persistence of original files can be added later.
+## Implementation safety
 
-## Frontend
-- Next.js + TypeScript.
-- Arya Tarray visual identity: warm ivory canvas, deep maroon, restrained gold, subtle Tibetan/lotus geometry.
-- Guru portrait may be used as a contextual visual, not as decorative clutter.
-- Use high information hierarchy, generous whitespace, compact cards, and restrained animation.
-- Status colors: pending amber, review blue, complete/check green, error red.
-- Avoid excessive charts. Overview should expose only metrics that change user decisions.
-
-## Implementation preference
-Develop feature slices end-to-end: database/backend/frontend for one workflow, then UAT with real source files. Keep intermediate testing lightweight but do not skip parser and status-transition tests.
+- Validate inputs and keep business rules outside route handlers.
+- Use transactions for statement persistence, identity ownership changes, and approval/history operations.
+- Preserve Asia/Jakarta business-time behavior, admin anti-lockout, permission-based navigation, and automated tests.
+- Prefer end-to-end feature slices, bounded database queries, and batch aggregation. Do not introduce N+1 queries or calculate financial totals from paginated frontend rows.
+- Keep the established warm ivory, deep maroon, and restrained gold UI; do not redesign stable screens during maintenance work.

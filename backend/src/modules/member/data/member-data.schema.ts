@@ -1,12 +1,7 @@
 import { z } from "zod";
-import { currentBusinessDayValue } from "../../../lib/business-time.js";
 import { isValidPeriodDate } from "../../../lib/period.js";
+import { memberProfileFieldSchemas, optionalMemberText } from "../member-profile.schema.js";
 
-const optionalText = (max: number) => z.string().trim().max(max).nullish().transform(value => value || null);
-const birthDate = optionalText(10).refine(
-  value => !value || (isValidPeriodDate(value) && value <= currentBusinessDayValue()),
-  "Birth date must be a valid non-future YYYY-MM-DD date"
-);
 
 export const memberDataWorkspaceQuerySchema = z.object({
   search: z.string().trim().max(150).default(""),
@@ -32,20 +27,20 @@ export const memberOptionQuerySchema = z.object({
 });
 
 export const memberProfileSchema = z.object({
-  memberName: z.string().trim().min(1).max(150).optional(),
-  initialName: optionalText(100).optional(),
-  birthDate: birthDate.optional(),
-  phone: optionalText(50).optional(),
-  email: optionalText(150).refine(value => !value || z.string().email().safeParse(value).success, "Email is invalid").optional(),
-  address: optionalText(500).optional(),
-  city: optionalText(100).optional(),
-  remark: optionalText(500).optional(),
+  memberName: memberProfileFieldSchemas.memberName.optional(),
+  initialName: memberProfileFieldSchemas.initialName.optional(),
+  birthDate: memberProfileFieldSchemas.birthDate.optional(),
+  phone: memberProfileFieldSchemas.phone.optional(),
+  email: memberProfileFieldSchemas.email.optional(),
+  address: memberProfileFieldSchemas.address.optional(),
+  city: memberProfileFieldSchemas.city.optional(),
+  remark: memberProfileFieldSchemas.remark.optional(),
   activeFlag: z.boolean().optional()
 }).strict().refine(value => Object.keys(value).length > 0, "At least one profile field is required");
 
 export const identityMetadataSchema = z.object({
-  initialName: optionalText(100).optional(),
-  remark: optionalText(500).optional()
+  initialName: optionalMemberText(100).optional(),
+  remark: optionalMemberText(500).optional()
 }).strict().refine(value => Object.keys(value).length > 0, "At least one identity field is required");
 
 export const moveIdentitySchema = z.object({ destinationMemberId: z.string().uuid() }).strict();

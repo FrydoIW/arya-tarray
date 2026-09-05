@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAbortError } from "@/lib/api";
 import {
   generateTransactionInquiryReport,
   getTransactionInquiryDetail,
@@ -52,6 +53,8 @@ export function useTransactionInquiry() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState("");
+  const workspaceRequestRef = useRef<AbortController | null>(null);
+  const detailRequestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -62,37 +65,48 @@ export function useTransactionInquiry() {
   }, [searchInput]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setMemberOptionsLoading(true);
       try {
-        const result = await getTransactionInquiryMemberOptions(memberSearch);
-        if (!cancelled) setMemberOptions(result.members);
+        const result = await getTransactionInquiryMemberOptions(memberSearch, controller.signal);
+        if (!controller.signal.aborted) setMemberOptions(result.members);
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : "Failed to load Member options.");
+        if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Member options.");
       } finally {
-        if (!cancelled) setMemberOptionsLoading(false);
+        if (!controller.signal.aborted) setMemberOptionsLoading(false);
       }
     }, 250);
-    return () => { cancelled = true; window.clearTimeout(timer); };
+    return () => { window.clearTimeout(timer); controller.abort(); };
   }, [memberSearch]);
 
   const query = useMemo(() => ({ periodMode, month, date, search, status, bankAccountId, finalEventId, memberId, memberLinkStatus, page, pageSize }), [bankAccountId, date, finalEventId, memberId, memberLinkStatus, month, page, pageSize, periodMode, search, status]);
 
   const load = useCallback(async () => {
+    workspaceRequestRef.current?.abort();
+    const controller = new AbortController();
+    workspaceRequestRef.current = controller;
     setLoading(true);
     setError("");
     try {
-      const next = await getTransactionInquiryWorkspace(query);
-      setWorkspace(next);
+      const next = await getTransactionInquiryWorkspace(query, controller.signal);
+      if (!controller.signal.aborted) setWorkspace(next);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to load Transaction Inquiry.");
+      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Transaction Inquiry.");
     } finally {
-      setLoading(false);
+      if (workspaceRequestRef.current === controller) {
+        workspaceRequestRef.current = null;
+        setLoading(false);
+      }
     }
   }, [query]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => workspaceRequestRef.current?.abort();
+  }, [load]);
+
+  useEffect(() => () => detailRequestRef.current?.abort(), []);
 
   function changePeriod(value: { mode: TransactionInquiryPeriodMode; month: string; date: string }) {
     setPeriodMode(value.mode);
@@ -112,14 +126,21 @@ export function useTransactionInquiry() {
   function changePageSize(value: number) { setPageSize(value); setPage(1); }
 
   async function openDetail(transactionId: string) {
+    detailRequestRef.current?.abort();
+    const controller = new AbortController();
+    detailRequestRef.current = controller;
     setDetailLoading(true);
     setError("");
     try {
-      setDetail(await getTransactionInquiryDetail(transactionId));
+      const next = await getTransactionInquiryDetail(transactionId, controller.signal);
+      if (!controller.signal.aborted) setDetail(next);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to load transaction detail.");
+      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load transaction detail.");
     } finally {
-      setDetailLoading(false);
+      if (detailRequestRef.current === controller) {
+        detailRequestRef.current = null;
+        setDetailLoading(false);
+      }
     }
   }
 

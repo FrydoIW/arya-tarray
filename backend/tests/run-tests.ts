@@ -7,5 +7,6 @@ import "./member-donation.test.js";
 import "./member-operational.test.js";
 import "./transaction-inquiry-member.test.js";
 import "./dashboard-member.test.js";
+import "./refactor-quality.test.js";
 import "./reconciliation-classification.test.js";
 import "./statement-upload-parser.test.js";

@@ -4,6 +4,7 @@ import { HttpError } from "../../../lib/http.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
 import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInput } from "./member-data.schema.js";
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
+import { canonicalMemberDonationWhere, officialDonationTransactionWhere } from "../member-donation.rules.js";
 
 export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string };
 
@@ -44,7 +45,7 @@ export async function workspaceRecords(query: MemberDataWorkspaceQuery) {
 }
 
 const officialDonationWhere = (identityIds: string[]): Prisma.BankTransactionWhereInput => ({
-  memberIdentityId: { in: identityIds }, status: "FINALIZED", originalAmount: { gt: 0 }, eventCodeId: { not: null }
+  AND: [officialDonationTransactionWhere(), { memberIdentityId: { in: identityIds } }]
 });
 
 export async function loadWorkspaceDonationAnalytics(memberIds: string[], filter: MemberDonationFilter) {
@@ -65,10 +66,7 @@ export async function loadWorkspaceDonationAnalytics(memberIds: string[], filter
 }
 
 export async function loadMemberDonationRecords(memberId: string, filter: MemberDonationFilter, page: number, pageSize: number) {
-  const relation: Prisma.BankTransactionWhereInput = {
-    memberIdentity: { is: { memberId, verificationStatus: "VERIFIED" } },
-    status: "FINALIZED", originalAmount: { gt: 0 }, eventCodeId: { not: null }
-  };
+  const relation = canonicalMemberDonationWhere(memberId);
   const periodWhere: Prisma.BankTransactionWhereInput = { AND: [relation, {
     transactionDate: { gte: filter.periodStart, lt: filter.periodEnd }, ...(filter.eventCodeId ? { eventCodeId: filter.eventCodeId } : {})
   }] };

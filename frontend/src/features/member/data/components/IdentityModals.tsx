@@ -1,28 +1,58 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { formatDate } from "@/lib/format";
+import { isAbortError } from "@/lib/api";
 import * as api from "../api/member-data.api";
 import type { Identity, IdentityOption, MemberOption } from "../types";
 import styles from "../styles/member-data.module.css";
 
-function OptionState({ loading, count, noun }: { loading: boolean; count: number; noun: string }) {
+function useOptionLoader<T>(request: (signal: AbortSignal) => Promise<T[]>) {
+  const [options, setOptions] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError("");
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await request(controller.signal);
+        if (!controller.signal.aborted) setOptions(result);
+      } catch (caught) {
+        if (!isAbortError(caught)) {
+          setOptions([]);
+          setLoadError(caught instanceof Error ? caught.message : "Pilihan gagal dimuat.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [request, retryKey]);
+  return { options, loading, loadError, retry: () => setRetryKey(value => value + 1) };
+}
+
+function OptionState({ loading, count, noun, loadError, onRetry }: { loading: boolean; count: number; noun: string; loadError: string; onRetry: () => void }) {
   if (loading) return <p className={styles.optionState}>Mencari…</p>;
+  if (loadError) return <div className="ui-alert ui-alert-error" role="alert">{loadError} <Button type="button" size="sm" variant="ghost" onClick={onRetry}>Coba lagi</Button></div>;
   if (!count) return <p className={styles.optionState}>Tidak ada {noun} yang memenuhi syarat.</p>;
   return null;
 }
 
 export function AddIdentityModal({ memberId, busy, error, onClose, onSubmit }: { memberId: string; busy: boolean; error: string; onClose: () => void; onSubmit: (identityId: string) => Promise<boolean> }) {
-  const [search, setSearch] = useState(""); const [options, setOptions] = useState<IdentityOption[]>([]); const [selected, setSelected] = useState(""); const [loading, setLoading] = useState(true);
-  useEffect(() => { const controller = new AbortController(); const timer = setTimeout(() => { setLoading(true); api.getIdentityOptions(search.trim(), controller.signal).then(setOptions).catch(() => setOptions([])).finally(() => setLoading(false)); }, 250); return () => { clearTimeout(timer); controller.abort(); }; }, [search]);
+  const [search, setSearch] = useState(""); const [selected, setSelected] = useState("");
+  const request = useCallback((signal: AbortSignal) => api.getIdentityOptions(search.trim(), signal), [search]);
+  const { options, loading, loadError, retry } = useOptionLoader<IdentityOption>(request);
   async function submit(event: FormEvent) { event.preventDefault(); if (selected && await onSubmit(selected)) onClose(); }
   return <Modal open title="Tambah identitas" description="Pilih identitas belum terverifikasi. Tidak ada pencocokan otomatis." onClose={onClose}>
     <form className={styles.modalBody} onSubmit={submit}>
       <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama rekening mentah…" />
       <div className={styles.options} role="radiogroup" aria-label="Identitas tersedia">
-        <OptionState loading={loading} count={options.length} noun="identitas" />
+        <OptionState loading={loading} count={options.length} noun="identitas" loadError={loadError} onRetry={retry} />
         {options.map(option => <label key={option.memberIdentityId} className={styles.option}><input type="radio" name="identity" value={option.memberIdentityId} checked={selected === option.memberIdentityId} onChange={() => setSelected(option.memberIdentityId)} /><span><strong>{option.accountName}</strong><small>{option.sourceType} · {formatDate(option.firstSeenAt)}–{formatDate(option.lastSeenAt)} · {option.transactionCount} transaksi</small></span></label>)}
       </div>
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
@@ -33,14 +63,15 @@ export function AddIdentityModal({ memberId, busy, error, onClose, onSubmit }: {
 }
 
 export function MoveIdentityModal({ memberId, identity, busy, error, onClose, onSubmit }: { memberId: string; identity: Identity; busy: boolean; error: string; onClose: () => void; onSubmit: (destinationMemberId: string) => Promise<boolean> }) {
-  const [search, setSearch] = useState(""); const [options, setOptions] = useState<MemberOption[]>([]); const [selected, setSelected] = useState(""); const [loading, setLoading] = useState(true); const [confirmed, setConfirmed] = useState(false);
-  useEffect(() => { const controller = new AbortController(); const timer = setTimeout(() => { setLoading(true); api.getMemberOptions(search.trim(), memberId, controller.signal).then(setOptions).catch(() => setOptions([])).finally(() => setLoading(false)); }, 250); return () => { clearTimeout(timer); controller.abort(); }; }, [search, memberId]);
+  const [search, setSearch] = useState(""); const [selected, setSelected] = useState(""); const [confirmed, setConfirmed] = useState(false);
+  const request = useCallback((signal: AbortSignal) => api.getMemberOptions(search.trim(), memberId, signal), [search, memberId]);
+  const { options, loading, loadError, retry } = useOptionLoader<MemberOption>(request);
   async function submit(event: FormEvent) { event.preventDefault(); if (selected && confirmed && await onSubmit(selected)) onClose(); }
   return <Modal open title="Pindahkan identitas" description={`Identitas “${identity.accountName}” tetap menyimpan seluruh tautan transaksi.`} onClose={onClose}>
     <form className={styles.modalBody} onSubmit={submit}>
       <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari donatur tujuan aktif…" />
       <div className={styles.options} role="radiogroup" aria-label="Donatur tujuan">
-        <OptionState loading={loading} count={options.length} noun="donatur aktif" />
+        <OptionState loading={loading} count={options.length} noun="donatur aktif" loadError={loadError} onRetry={retry} />
         {options.map(option => <label key={option.memberId} className={styles.option}><input type="radio" name="member" value={option.memberId} checked={selected === option.memberId} onChange={() => { setSelected(option.memberId); setConfirmed(false); }} /><span><strong>{option.memberName}</strong><small>{option.memberCode}{option.city ? ` · ${option.city}` : ""}</small></span></label>)}
       </div>
       <label className={styles.confirm}><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>Saya memahami identitas akan berpindah ke donatur yang dipilih.</span></label>

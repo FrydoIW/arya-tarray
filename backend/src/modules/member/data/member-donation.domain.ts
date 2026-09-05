@@ -1,4 +1,5 @@
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
+import { isCanonicalMemberDonationCandidate } from "../member-donation.rules.js";
 
 export type DonationCandidate = {
   status: string;
@@ -11,9 +12,7 @@ export type DonationCandidate = {
 };
 
 export function isOfficialMemberDonation(row: DonationCandidate, memberId: string) {
-  const amount = typeof row.originalAmount === "string" ? row.originalAmount : row.originalAmount.toString();
-  return row.status === "FINALIZED" && decimalStringToCents(amount) > 0n && Boolean(row.eventCodeId)
-    && row.memberId === memberId && row.identityStatus === "VERIFIED";
+  return isCanonicalMemberDonationCandidate(row, memberId);
 }
 
 export function centsToDecimal(value: bigint) {

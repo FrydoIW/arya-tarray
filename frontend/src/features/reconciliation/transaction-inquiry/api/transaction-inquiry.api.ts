@@ -20,21 +20,21 @@ function queryParams(query: Omit<TransactionInquiryQuery, "page" | "pageSize">) 
   return params;
 }
 
-export function getTransactionInquiryMemberOptions(search: string) {
+export function getTransactionInquiryMemberOptions(search: string, signal?: AbortSignal) {
   const params = new URLSearchParams();
   if (search.trim()) params.set("search", search.trim());
-  return apiFetch<TransactionInquiryMemberOptions>(`/reconciliation/transaction-inquiry/member-options?${params.toString()}`);
+  return apiFetch<TransactionInquiryMemberOptions>(`/reconciliation/transaction-inquiry/member-options?${params.toString()}`, { signal });
 }
 
-export function getTransactionInquiryWorkspace(query: TransactionInquiryQuery) {
+export function getTransactionInquiryWorkspace(query: TransactionInquiryQuery, signal?: AbortSignal) {
   const params = queryParams(query);
   params.set("page", String(query.page));
   params.set("pageSize", String(query.pageSize));
-  return apiFetch<TransactionInquiryWorkspace>(`/reconciliation/transaction-inquiry/workspace?${params.toString()}`);
+  return apiFetch<TransactionInquiryWorkspace>(`/reconciliation/transaction-inquiry/workspace?${params.toString()}`, { signal });
 }
 
-export function getTransactionInquiryDetail(transactionId: string) {
-  return apiFetch<TransactionInquiryDetail>(`/reconciliation/transaction-inquiry/${encodeURIComponent(transactionId)}`);
+export function getTransactionInquiryDetail(transactionId: string, signal?: AbortSignal) {
+  return apiFetch<TransactionInquiryDetail>(`/reconciliation/transaction-inquiry/${encodeURIComponent(transactionId)}`, { signal });
 }
 
 export function generateTransactionInquiryReport(
