@@ -47,16 +47,17 @@ export function AddIdentityModal({ memberId, busy, error, onClose, onSubmit }: {
   const [search, setSearch] = useState(""); const [selected, setSelected] = useState("");
   const request = useCallback((signal: AbortSignal) => api.getIdentityOptions(search.trim(), signal), [search]);
   const { options, loading, loadError, retry } = useOptionLoader<IdentityOption>(request);
-  async function submit(event: FormEvent) { event.preventDefault(); if (selected && await onSubmit(selected)) onClose(); }
+  const selectedIsCurrent = options.some(option => option.memberIdentityId === selected);
+  async function submit(event: FormEvent) { event.preventDefault(); if (selectedIsCurrent && await onSubmit(selected)) onClose(); }
   return <Modal open title="Tambah identitas" description="Pilih identitas belum terverifikasi. Tidak ada pencocokan otomatis." onClose={onClose}>
     <form className={styles.modalBody} onSubmit={submit}>
-      <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama rekening mentah…" />
+      <SearchInput value={search} onChange={e => { setSearch(e.target.value); setSelected(""); }} placeholder="Cari nama rekening mentah…" />
       <div className={styles.options} role="radiogroup" aria-label="Identitas tersedia">
         <OptionState loading={loading} count={options.length} noun="identitas" loadError={loadError} onRetry={retry} />
         {options.map(option => <label key={option.memberIdentityId} className={styles.option}><input type="radio" name="identity" value={option.memberIdentityId} checked={selected === option.memberIdentityId} onChange={() => setSelected(option.memberIdentityId)} /><span><strong>{option.accountName}</strong><small>{option.sourceType} · {formatDate(option.firstSeenAt)}–{formatDate(option.lastSeenAt)} · {option.transactionCount} transaksi</small></span></label>)}
       </div>
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
-      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy || !selected}>{busy ? "Menghubungkan…" : "Tambah identitas"}</Button></div>
+      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy || !selectedIsCurrent}>{busy ? "Menghubungkan…" : "Tambah identitas"}</Button></div>
       <input type="hidden" value={memberId} readOnly />
     </form>
   </Modal>;
@@ -66,17 +67,18 @@ export function MoveIdentityModal({ memberId, identity, busy, error, onClose, on
   const [search, setSearch] = useState(""); const [selected, setSelected] = useState(""); const [confirmed, setConfirmed] = useState(false);
   const request = useCallback((signal: AbortSignal) => api.getMemberOptions(search.trim(), memberId, signal), [search, memberId]);
   const { options, loading, loadError, retry } = useOptionLoader<MemberOption>(request);
-  async function submit(event: FormEvent) { event.preventDefault(); if (selected && confirmed && await onSubmit(selected)) onClose(); }
+  const selectedIsCurrent = options.some(option => option.memberId === selected);
+  async function submit(event: FormEvent) { event.preventDefault(); if (selectedIsCurrent && confirmed && await onSubmit(selected)) onClose(); }
   return <Modal open title="Pindahkan identitas" description={`Identitas “${identity.accountName}” tetap menyimpan seluruh tautan transaksi.`} onClose={onClose}>
     <form className={styles.modalBody} onSubmit={submit}>
-      <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari donatur tujuan aktif…" />
+      <SearchInput value={search} onChange={e => { setSearch(e.target.value); setSelected(""); setConfirmed(false); }} placeholder="Cari donatur tujuan aktif…" />
       <div className={styles.options} role="radiogroup" aria-label="Donatur tujuan">
         <OptionState loading={loading} count={options.length} noun="donatur aktif" loadError={loadError} onRetry={retry} />
         {options.map(option => <label key={option.memberId} className={styles.option}><input type="radio" name="member" value={option.memberId} checked={selected === option.memberId} onChange={() => { setSelected(option.memberId); setConfirmed(false); }} /><span><strong>{option.memberName}</strong><small>{option.memberCode}{option.city ? ` · ${option.city}` : ""}</small></span></label>)}
       </div>
       <label className={styles.confirm}><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>Saya memahami identitas akan berpindah ke donatur yang dipilih.</span></label>
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
-      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy || !selected || !confirmed}>{busy ? "Memindahkan…" : "Pindahkan"}</Button></div>
+      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy || !selectedIsCurrent || !confirmed}>{busy ? "Memindahkan…" : "Pindahkan"}</Button></div>
     </form>
   </Modal>;
 }
