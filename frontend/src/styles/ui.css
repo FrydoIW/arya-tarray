@@ -574,3 +574,159 @@
   background: #f7f8fa;
   cursor: not-allowed;
 }
+
+
+/* Enterprise table-first shared components v3 */
+.ui-button {
+  gap: 7px;
+  border-radius: 8px;
+  font-weight: 680;
+  transition: background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease;
+}
+.ui-button-md { min-height: var(--control-height); padding: 0 14px; font-size: 12px; }
+.ui-button-sm { min-height: 34px; padding: 0 11px; font-size: 11.5px; }
+.ui-button:hover:not(:disabled), .ui-button:active:not(:disabled) { transform: none; }
+.ui-button-primary { background: var(--primary-deep); box-shadow: none; }
+.ui-button-primary:hover:not(:disabled) { background: #1d56c9; box-shadow: none; }
+.ui-button-secondary { color: #344054; border-color: #e4e7ec; box-shadow: none; }
+.ui-button-secondary:hover:not(:disabled) { background: #f9fafb; border-color: #d0d5dd; }
+.ui-button-outline { color: #315f98; border-color: #d8e5f3; }
+.ui-button-outline:hover:not(:disabled) { background: #f7fbff; border-color: #bfd5ed; }
+.ui-button-ghost { color: #46698f; }
+.ui-button-ghost:hover:not(:disabled) { background: #f4f8fc; }
+.ui-alert { border-radius: 8px; font-size: 12px; }
+.ui-page-header {
+  align-items: flex-end;
+  gap: 20px;
+  padding: 1px 0 2px;
+}
+.ui-breadcrumb { margin-bottom: 7px; color: #98a2b3; font-size: 10.5px; }
+.ui-breadcrumb span.current { color: #475467; }
+.ui-page-header h1 {
+  color: #101828;
+  font-size: clamp(24px, 1.8vw, 27px);
+  line-height: 1.12;
+  font-weight: 760;
+}
+.ui-page-header p { margin-top: 6px; color: #667085; font-size: 12.5px; line-height: 1.45; }
+.ui-page-header-actions { gap: 8px; }
+.ui-card {
+  background: #fff;
+  border-color: #e4e9f0;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+.ui-metric-card {
+  min-height: 102px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  padding: 15px 16px;
+  border-color: #e4e9f0;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  transition: border-color .14s ease, background-color .14s ease;
+}
+.ui-metric-card::after { display: none; }
+.ui-metric-card:hover { transform: none; box-shadow: var(--shadow-xs); border-color: #d4deea; background: #fcfdff; }
+.ui-metric-icon { width: 36px; height: 36px; border-radius: 9px; box-shadow: none; }
+.ui-metric-copy > span { color: #667085; font-size: 10.5px; font-weight: 720; letter-spacing: .02em; }
+.ui-metric-copy strong { margin-top: 4px; color: #101828; font-size: 21px; }
+.ui-metric-copy small { margin-top: 6px; color: #98a2b3; font-size: 10.5px; }
+.ui-status-badge { padding: 4px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; }
+.ui-search-input,
+.ui-select,
+.ui-period-picker-day,
+.ui-month-picker-trigger {
+  border-color: #e1e6ed;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.ui-search-input { padding: 0 11px; }
+.ui-search-input:focus-within,
+.ui-select:focus-within,
+.ui-period-picker-day:focus-within,
+.ui-month-picker-trigger:focus-visible {
+  border-color: #9ec5f4;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .08);
+}
+.ui-search-input input, .ui-select select { font-size: 12px; }
+.ui-empty-state { min-height: 136px; }
+.ui-empty-state > span { width: 36px; height: 36px; background: #f4f6f8; border-radius: 8px; }
+.ui-data-table-shell { background: #fff; }
+.ui-data-table th {
+  height: 42px;
+  padding: 0 13px;
+  color: #667085;
+  background: #f8fafc;
+  border-top-color: #e6ebf1;
+  border-bottom-color: #e6ebf1;
+  border-right: 1px solid #eef1f5;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ui-data-table th:last-child { border-right: 0; }
+.ui-data-table td {
+  height: 50px;
+  padding: 8px 13px;
+  color: #475467;
+  border-bottom-color: #edf0f4;
+  border-right: 1px solid #f1f3f6;
+  font-size: 11.5px;
+}
+.ui-data-table td:last-child { border-right: 0; }
+.ui-data-table tbody tr:hover { background: #fafcff; }
+.ui-table-input { height: 34px; border-color: #e1e6ed; border-radius: 7px; font-size: 11.5px; }
+.ui-data-table-bottom {
+  min-height: 54px;
+  padding: 8px 13px;
+  border-top-color: #e6ebf1;
+  background: #fff;
+}
+.ui-data-table-count { color: #7a8699; font-size: 10.5px; }
+.ui-data-table-pagination { gap: 5px; }
+.ui-data-table-pagination > button {
+  width: 34px;
+  height: 34px;
+  color: #667085;
+  border-color: #e4e7ec;
+  border-radius: 7px;
+  font-size: 10.5px;
+}
+.ui-data-table-page {
+  min-width: 48px;
+  height: 34px;
+  color: #245fae;
+  background: #f5f9ff;
+  border-color: #dbe7f5;
+  border-radius: 7px;
+  font-size: 10.5px;
+}
+.ui-page-size-select { min-width: 104px; height: 34px; }
+.ui-modal-backdrop { background: rgba(16, 24, 40, .38); backdrop-filter: blur(2px); }
+.ui-modal { border-color: #e4e7ec; border-radius: 12px; box-shadow: 0 20px 60px rgba(16,24,40,.16); }
+.ui-modal-head { min-height: 78px; padding: 17px 19px 14px; border-bottom-color: #e8ecf1; }
+.ui-modal-head h2 { font-size: 18px; }
+.ui-modal-head p { margin-top: 4px; font-size: 12px; }
+.ui-modal-close, .ui-icon-button { border-color: #e4e7ec; border-radius: 7px; background: #fff; box-shadow: none; }
+.ui-modal-close:hover, .ui-icon-button:hover:not(:disabled) { background: #f8fafc; border-color: #d0d5dd; }
+.ui-data-table tbody tr:hover td.ui-data-table-sticky-left,
+.ui-data-table tbody tr:hover td.ui-data-table-sticky-right { background: #fafcff; }
+.ui-data-table th.ui-data-table-sticky-left,
+.ui-data-table th.ui-data-table-sticky-right { background: #f8fafc; }
+.ui-access-matrix th {
+  height: 43px;
+  color: #667085;
+  background: #f8fafc;
+  border-color: #e6ebf1;
+  font-size: 10.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ui-access-matrix td { height: 47px; color: #475467; border-bottom-color: #edf0f4; font-size: 11.5px; }
+.ui-access-matrix-group td, .ui-access-matrix-group .ui-access-matrix-feature { background: #f8fbff; }
+.ui-access-denied { border-radius: 12px; box-shadow: var(--shadow-xs); }
+.ui-month-picker-trigger { border-radius: 8px; }
+.ui-month-picker-popover { border-color: #e1e6ed; border-radius: 10px; box-shadow: 0 14px 36px rgba(16,24,40,.12); }
+.ui-month-picker-year, .ui-month-picker-month { border-color: #e4e9f0; border-radius: 7px; }

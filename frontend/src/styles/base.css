@@ -96,3 +96,16 @@ p { text-wrap: pretty; }
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Enterprise table-first visual skin v3 */
+html, body { background: var(--bg); }
+body {
+  color: var(--ink);
+  background: var(--bg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.page-stack { gap: 16px; }
+.eyebrow { color: var(--primary); letter-spacing: .075em; }
+.screen-loader { background: var(--bg); }

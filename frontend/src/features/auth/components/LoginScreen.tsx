@@ -32,32 +32,27 @@ export function LoginScreen() {
 
   return (
     <main className={styles.page}>
-      <LoginHero />
+      <div className={styles.layout}>
+        <section className={styles.authPanel} aria-labelledby="login-title">
+          <div className={styles.authInner}>
+            <AryaBrand />
 
-      <section className={styles.loginCard} aria-labelledby="login-title">
-        <AryaBrand />
+            <div className={styles.heading}>
+              <h1 id="login-title">Welcome Back</h1>
+              <p>Sign in to continue to your dashboard</p>
+            </div>
 
-        <div className={styles.heading}>
-          <div className={styles.headingDivider} aria-hidden="true">
-            <span />
-            <i>◇</i>
-            <span />
+            <LoginForm loading={loading} error={error} onSubmit={handleSubmit} />
+
+            <footer className={styles.footer}>
+              <p>© 2026 Yayasan Arya Tarray Nusantara</p>
+              <span>All rights reserved.</span>
+            </footer>
           </div>
-          <h1 id="login-title">Welcome Back</h1>
-          <p>Sign in to continue to your dashboard</p>
-        </div>
+        </section>
 
-        <LoginForm loading={loading} error={error} onSubmit={handleSubmit} />
-      </section>
-
-      <footer className={styles.footer}>
-        <div className={styles.footerBlessing}>
-          <span className={styles.footerLotus} aria-hidden="true">♧</span>
-          <span>May all beings be happy and at peace.</span>
-          <i aria-hidden="true" />
-          <span>Sadhu, Sadhu, Sadhu.</span>
-        </div>
-      </footer>
+        <LoginHero />
+      </div>
     </main>
   );
 }

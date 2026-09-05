@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, ShieldCheck, X } from "lucide-react";
 import { navigation } from "@/config/navigation";
+import aryaLogo from "@/assets/brand/arya-logo.png";
 
 interface SidebarProps {
   pathname: string;
@@ -19,11 +21,25 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
   return (
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
       <div className="brand-row">
+        <div className="brand-mark" aria-hidden="true">
+          <Image
+            src={aryaLogo}
+            alt=""
+            width={72}
+            height={48}
+            className="brand-mark-image"
+            priority
+          />
+        </div>
+
         <div className="brand-copy">
           <strong>Arya Tarray</strong>
           <span>NUSANTARA</span>
         </div>
-        <button id="app-sidebar-close" className="sidebar-close" onClick={onClose} aria-label="Close menu"><X size={18} aria-hidden="true" /></button>
+
+        <button id="app-sidebar-close" className="sidebar-close" onClick={onClose} aria-label="Close menu">
+          <X size={18} aria-hidden="true" />
+        </button>
       </div>
 
       <div className="sidebar-rule" />

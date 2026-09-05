@@ -66,3 +66,14 @@
   .ui-data-table-pagination > button { width: 42px; height: 42px; }
   .ui-data-table-page { min-width: 62px; height: 42px; }
 }
+
+
+/* v3 responsive refinements */
+@media (max-width: 1199px) {
+  :root { --shell-content-inline: 20px; }
+  .sidebar { box-shadow: 18px 0 45px rgba(16,24,40,.14); }
+}
+@media (max-width: 767px) {
+  .ui-page-header h1 { font-size: 24px; }
+  .ui-metric-card { min-height: 98px; padding: 14px; }
+}

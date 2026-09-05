@@ -1,1 +1,0 @@
-These images are visual references generated during the Arya Tarray design discussion. The implemented frontend follows the same calm maroon/gold identity but is intentionally less crowded and wired to live backend data.
