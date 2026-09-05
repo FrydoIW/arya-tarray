@@ -1,18 +1,18 @@
 .page {
-  --gold: #b97814;
-  --gold-bright: #e6a52e;
-  --gold-soft: #d6ad66;
-  --cream: #f8ecdc;
-  --cream-strong: #fff8ee;
-  --brown: #3f2d22;
-  --muted: #81756c;
+  --gold: #2f80ed;
+  --gold-bright: #64b5f6;
+  --gold-soft: #8fc8f4;
+  --cream: #edf7ff;
+  --cream-strong: #ffffff;
+  --brown: #173b68;
+  --muted: #7186a2;
   position: relative;
   min-height: 100dvh;
   overflow: hidden;
   isolation: isolate;
   color: var(--brown);
   font-family: var(--font-ui);
-  background: #4a3527;
+  background: #164a7d;
 }
 
 .backgroundLayer {
@@ -30,8 +30,8 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(57, 38, 26, .08) 0%, rgba(57, 38, 26, .03) 45%, rgba(28, 20, 16, .18) 100%),
-    linear-gradient(180deg, rgba(35, 25, 19, .08) 0%, rgba(34, 24, 18, .03) 56%, rgba(25, 17, 13, .42) 100%);
+    linear-gradient(90deg, rgba(22, 76, 124, .12) 0%, rgba(20, 87, 144, .05) 45%, rgba(8, 42, 78, .2) 100%),
+    linear-gradient(180deg, rgba(31, 114, 180, .05) 0%, rgba(18, 83, 137, .03) 56%, rgba(7, 39, 73, .46) 100%);
 }
 
 .loginCard {
@@ -40,13 +40,13 @@
   top: clamp(54px, 7.5vh, 92px);
   left: clamp(48px, 6vw, 92px);
   width: min(554px, calc(100vw - 96px));
-  min-height: 778px;
-  padding: 46px 50px 38px;
+  min-height: 706px;
+  padding: 42px 50px 36px;
   border: 1px solid rgba(255, 255, 255, .72);
-  border-radius: 25px;
-  background: linear-gradient(145deg, rgba(255, 248, 237, .94), rgba(238, 222, 204, .88));
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255,255,255,.96), rgba(234,246,255,.9));
   box-shadow:
-    0 24px 70px rgba(45, 28, 18, .22),
+    0 24px 70px rgba(25, 72, 116, .22),
     inset 0 1px 0 rgba(255, 255, 255, .7);
   backdrop-filter: blur(7px);
   -webkit-backdrop-filter: blur(7px);
@@ -59,20 +59,13 @@
   text-align: center;
 }
 
-.brandMark {
-  width: 92px;
-  height: 92px;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 8px rgba(137, 82, 14, .14));
-}
-
 .brandName {
-  margin: 13px 0 0;
-  color: #49372a;
+  margin: 0;
+  color: #173b68;
   font-family: var(--font-display), Georgia, serif;
-  font-size: clamp(29px, 2.2vw, 35px);
+  font-size: clamp(30px, 2.2vw, 36px);
   line-height: 1.12;
-  font-weight: 500;
+  font-weight: 760;
   letter-spacing: -.02em;
 }
 
@@ -84,7 +77,7 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 14px;
-  color: #c18b39;
+  color: #4d9bd9;
 }
 
 .brandDivider {
@@ -95,7 +88,7 @@
 .headingDivider span,
 .formBlessing span {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(190, 133, 49, .76));
+  background: linear-gradient(90deg, transparent, rgba(77, 155, 217, .66));
 }
 
 .brandDivider span:last-child,
@@ -113,14 +106,14 @@
 
 .brandTagline {
   margin: 14px 0 0;
-  color: #a66416;
+  color: #377db5;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -.01em;
 }
 
 .heading {
-  margin-top: 44px;
+  margin-top: 38px;
   text-align: center;
 }
 
@@ -130,7 +123,7 @@
 
 .heading h1 {
   margin: 0;
-  color: #4d392a;
+  color: #163a67;
   font-family: var(--font-display), Georgia, serif;
   font-size: clamp(44px, 3.25vw, 54px);
   line-height: .98;
@@ -140,7 +133,7 @@
 
 .heading p {
   margin: 28px 0 0;
-  color: #756b64;
+  color: #6f839f;
   font-size: 15px;
   line-height: 1.5;
 }
@@ -173,18 +166,18 @@
   align-items: center;
   gap: 14px;
   padding: 0 14px 0 18px;
-  color: #9e8b79;
-  border: 1px solid rgba(139, 116, 95, .18);
+  color: #7d95af;
+  border: 1px solid rgba(77, 139, 194, .18);
   border-radius: 9px;
   background: rgba(255, 255, 255, .82);
-  box-shadow: 0 8px 18px rgba(81, 55, 35, .045);
+  box-shadow: 0 8px 18px rgba(45, 104, 164, .055);
   transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
 }
 
 .inputShell:focus-within {
-  border-color: rgba(184, 120, 20, .62);
+  border-color: rgba(47, 128, 237, .62);
   background: rgba(255, 255, 255, .96);
-  box-shadow: 0 0 0 3px rgba(210, 147, 43, .12);
+  box-shadow: 0 0 0 3px rgba(47, 128, 237, .12);
 }
 
 .inputShell > svg {
@@ -199,21 +192,21 @@
   border: 0;
   outline: 0;
   background: transparent !important;
-  color: #46372d;
+  color: #244766;
   caret-color: var(--gold);
   font: inherit;
   font-size: 15px;
 }
 
 .inputShell input::placeholder {
-  color: #a79e97;
+  color: #95a7b8;
 }
 
 .inputShell input:-webkit-autofill,
 .inputShell input:-webkit-autofill:hover,
 .inputShell input:-webkit-autofill:focus,
 .inputShell input:-webkit-autofill:active {
-  -webkit-text-fill-color: #46372d !important;
+  -webkit-text-fill-color: #244766 !important;
   -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
   box-shadow: 0 0 0 1000px #fff inset !important;
   caret-color: var(--gold) !important;
@@ -229,14 +222,14 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #a18f7d;
+  color: #8aa0b7;
   cursor: pointer;
 }
 
 .eyeButton:hover,
 .eyeButton:focus-visible {
-  color: #745538;
-  background: rgba(181, 126, 43, .08);
+  color: #2d6fa8;
+  background: rgba(47, 128, 237, .08);
   outline: none;
 }
 
@@ -251,7 +244,7 @@
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  color: #655a53;
+  color: #536f8f;
   font-size: 13px;
   cursor: pointer;
 }
@@ -259,7 +252,7 @@
 .remember input {
   width: 18px;
   height: 18px;
-  accent-color: #d99a27;
+  accent-color: #2f80ed;
 }
 
 .error {
@@ -278,13 +271,13 @@
   align-items: center;
   justify-content: center;
   gap: 17px;
-  border: 1px solid rgba(196, 126, 17, .66);
+  border: 1px solid rgba(47, 128, 237, .68);
   border-radius: 9px;
-  color: #fffaf0;
+  color: #ffffff;
   background:
-    linear-gradient(180deg, rgba(255, 203, 83, .3), rgba(198, 119, 11, .08)),
-    #dc951d;
-  box-shadow: 0 12px 24px rgba(154, 93, 14, .19);
+    linear-gradient(180deg, rgba(113, 190, 249, .3), rgba(38, 116, 194, .08)),
+    #2f80ed;
+  box-shadow: 0 12px 24px rgba(47, 128, 237, .2);
   font: inherit;
   font-size: 15px;
   font-weight: 650;
@@ -295,11 +288,11 @@
 .submitButton:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: brightness(1.04);
-  box-shadow: 0 15px 28px rgba(154, 93, 14, .24);
+  box-shadow: 0 15px 28px rgba(47, 128, 237, .25);
 }
 
 .submitButton:focus-visible {
-  outline: 3px solid rgba(199, 132, 27, .28);
+  outline: 3px solid rgba(47, 128, 237, .28);
   outline-offset: 3px;
 }
 
@@ -310,7 +303,7 @@
 
 .formBlessing {
   margin-top: 5px;
-  color: #c69a58;
+  color: #6aaee0;
 }
 
 .formBlessing svg {
@@ -320,7 +313,7 @@
 
 .protectedText {
   margin: -5px 0 0;
-  color: #93877d;
+  color: #7e91a8;
   text-align: center;
   font-size: 11.5px;
 }
@@ -336,9 +329,9 @@
   display: flex;
   align-items: center;
   padding: 0 clamp(42px, 6.8vw, 104px);
-  color: rgba(255, 248, 237, .9);
-  background: linear-gradient(90deg, rgba(28, 18, 13, .72), rgba(26, 18, 14, .58), rgba(28, 18, 13, .74));
-  border-top: 1px solid rgba(255, 235, 202, .12);
+  color: rgba(235, 247, 255, .92);
+  background: linear-gradient(90deg, rgba(8, 45, 82, .72), rgba(13, 61, 105, .58), rgba(8, 45, 82, .74));
+  border-top: 1px solid rgba(220, 241, 255, .15);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -353,11 +346,11 @@
 .footerBlessing i {
   width: 1px;
   height: 24px;
-  background: rgba(255, 246, 228, .42);
+  background: rgba(232, 247, 255, .42);
 }
 
 .footerLotus {
-  color: #d69728;
+  color: #77b9e9;
   font-size: 27px;
   transform: rotate(180deg);
 }
@@ -366,7 +359,7 @@
   .loginCard {
     left: 42px;
     width: min(520px, calc(100vw - 84px));
-    min-height: 738px;
+    min-height: 680px;
     padding: 38px 44px 32px;
   }
 }
@@ -383,7 +376,7 @@
   }
 
   .backgroundOverlay {
-    background: rgba(42, 29, 20, .34);
+    background: rgba(12, 61, 104, .34);
   }
 
   .loginCard {
@@ -407,18 +400,13 @@
   }
 
   .backgroundOverlay {
-    background: linear-gradient(180deg, rgba(42, 29, 20, .42), rgba(31, 21, 15, .52));
+    background: linear-gradient(180deg, rgba(12, 61, 104, .42), rgba(7, 42, 78, .54));
   }
 
   .loginCard {
     width: 100%;
     padding: 29px 22px 27px;
     border-radius: 20px;
-  }
-
-  .brandMark {
-    width: 72px;
-    height: 72px;
   }
 
   .brandName {

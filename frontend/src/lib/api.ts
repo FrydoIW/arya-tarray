@@ -1,3 +1,5 @@
+import { clearWorkspaceTabsSession } from "./workspace-tabs-session";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
 const TOKEN_KEY = "arya_token";
@@ -16,6 +18,8 @@ export function getToken() {
 export function setSession(token: string, user: unknown, remember = true) {
   if (typeof window === "undefined") return;
 
+  clearWorkspaceTabsSession();
+
   const target = remember ? window.localStorage : window.sessionStorage;
   const other = remember ? window.sessionStorage : window.localStorage;
 
@@ -30,6 +34,7 @@ export function clearSession() {
     storage.removeItem(TOKEN_KEY);
     storage.removeItem(USER_KEY);
   }
+  clearWorkspaceTabsSession();
 }
 
 export function isAbortError(error: unknown) {

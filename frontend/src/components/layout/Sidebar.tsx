@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Flower2, ShieldCheck, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ShieldCheck, X } from "lucide-react";
 import { navigation } from "@/config/navigation";
 
 interface SidebarProps {
@@ -19,7 +19,6 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
   return (
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
       <div className="brand-row">
-        <div className="brand-seal" aria-hidden="true"><Flower2 size={27} /></div>
         <div className="brand-copy">
           <strong>Arya Tarray</strong>
           <span>NUSANTARA</span>

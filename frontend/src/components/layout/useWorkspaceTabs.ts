@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getDefaultNavigationPath, getNavigationByPathname, navigation } from "@/config/navigation";
-
-const WORKSPACE_TABS_KEY = "arya_workspace_tabs";
+import { WORKSPACE_TABS_KEY } from "@/lib/workspace-tabs-session";
 
 export type WorkspaceTab = {
   route: string;
@@ -45,9 +44,6 @@ function storedTabs(allowedMenuCodes: Set<string>): WorkspaceTab[] {
   }
 }
 
-export function clearWorkspaceTabsSession() {
-  if (typeof window !== "undefined") window.sessionStorage.removeItem(WORKSPACE_TABS_KEY);
-}
 
 export function useWorkspaceTabs(userId: string | null, menuCodes: string[], pathname: string) {
   const permissionKey = [...menuCodes].sort().join("|");

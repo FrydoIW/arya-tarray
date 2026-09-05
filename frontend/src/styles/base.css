@@ -7,8 +7,9 @@ body {
   overflow-x: hidden;
   color: var(--ink);
   background:
-    radial-gradient(circle at 100% 0, rgba(195, 39, 61, .025), transparent 28rem),
-    var(--bg);
+    radial-gradient(circle at 85% -10%, rgba(92, 179, 255, .11), transparent 28rem),
+    radial-gradient(circle at 15% 18%, rgba(187, 225, 255, .10), transparent 24rem),
+    linear-gradient(180deg, #f7fbff 0%, var(--bg) 24rem);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.45;
@@ -16,7 +17,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 button, input, select, textarea { font: inherit; }
-button, a, input, select, textarea { -webkit-tap-highlight-color: rgba(20, 87, 242, .1); }
+button, a, input, select, textarea { -webkit-tap-highlight-color: rgba(47, 128, 237, .1); }
 button, a { touch-action: manipulation; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
@@ -25,10 +26,10 @@ h1, h2, h3, p { margin-top: 0; }
 h1, h2, h3 { color: var(--ink-strong); font-family: var(--font-display); }
 h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
-::selection { color: #fff; background: rgba(20, 87, 242, .88); }
+::selection { color: #fff; background: rgba(47, 128, 237, .9); }
 
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid rgba(20, 87, 242, .22);
+  outline: 3px solid rgba(47, 128, 237, .2);
   outline-offset: 2px;
 }
 
@@ -40,7 +41,7 @@ p { text-wrap: pretty; }
   padding: 10px 14px;
   color: #fff;
   background: var(--ink-strong);
-  border-radius: 9px;
+  border-radius: 10px;
   transform: translateY(-160%);
   transition: transform .15s ease;
 }
@@ -74,12 +75,14 @@ p { text-wrap: pretty; }
   align-content: center;
   gap: 12px;
   color: var(--muted);
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(103, 183, 248, .12), transparent 17rem),
+    var(--bg);
 }
 .screen-loader-mark {
   width: 34px;
   height: 34px;
-  border: 3px solid #dfe6f4;
+  border: 3px solid #dce9f6;
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin .9s linear infinite;

@@ -12,7 +12,7 @@ import { ScreenLoader } from "./ScreenLoader";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { WorkspaceTabs } from "./WorkspaceTabs";
-import { clearWorkspaceTabsSession, useWorkspaceTabs } from "./useWorkspaceTabs";
+import { useWorkspaceTabs } from "./useWorkspaceTabs";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -29,7 +29,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     getCurrentUser()
       .then(setUser)
       .catch(() => {
-        clearWorkspaceTabsSession();
         clearSession();
         router.replace("/login");
       });
@@ -70,7 +69,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const workspaceTabs = useWorkspaceTabs(user?.id ?? null, user?.menuCodes ?? [], pathname);
 
   function logout() {
-    clearWorkspaceTabsSession();
     clearSession();
     router.replace("/login");
   }
