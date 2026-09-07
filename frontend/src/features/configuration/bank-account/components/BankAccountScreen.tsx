@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { BankAccount } from "../types";
 import { useBankAccountWorkspace } from "../hooks/useBankAccountWorkspace";
@@ -17,6 +18,7 @@ export function BankAccountScreen() {
   const [modalMode, setModalMode] = useState<"ADD" | "EDIT">("ADD");
   const [selected, setSelected] = useState<BankAccount | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [executeOpen, setExecuteOpen] = useState(false);
 
   function openAdd() {
     setModalMode("ADD");
@@ -41,7 +43,9 @@ export function BankAccountScreen() {
             <Button type="button" variant="secondary" icon={<RotateCcw size={16} />} onClick={workspace.clearChanges} disabled={workspace.loading || workspace.saving}>
               Clear
             </Button>
-            <Button type="button" icon={<Play size={16} />} onClick={() => void workspace.executeChanges()} disabled={workspace.loading || workspace.saving}>
+            <Button type="button" icon={<Play size={16} />} onClick={() => {
+              if (workspace.prepareExecute()) setExecuteOpen(true);
+            }} disabled={workspace.loading || workspace.saving}>
               {workspace.saving ? "Executing..." : "Execute"}
             </Button>
           </>
@@ -87,6 +91,18 @@ export function BankAccountScreen() {
             workspace.updateAccount(selected.id, value);
           }
           setModalOpen(false);
+        }}
+      />
+      <ConfirmDialog
+        open={executeOpen}
+        title="Confirm Execute"
+        message="Are you sure you want to execute these changes?"
+        confirmLabel="Execute"
+        loading={workspace.saving}
+        onCancel={() => setExecuteOpen(false)}
+        onConfirm={async () => {
+          await workspace.executeChanges();
+          setExecuteOpen(false);
         }}
       />
     </div>

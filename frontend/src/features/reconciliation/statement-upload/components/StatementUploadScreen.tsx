@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Play, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useStatementUploadWorkspace } from "../hooks/useStatementUploadWorkspace";
 import { DraftReviewSummary } from "./DraftReviewSummary";
@@ -13,6 +15,7 @@ import styles from "../styles/statement-upload.module.css";
 
 export function StatementUploadScreen() {
   const workspace = useStatementUploadWorkspace();
+  const [executeOpen, setExecuteOpen] = useState(false);
 
   return (
     <div className={`${styles.page} page-stack`}>
@@ -35,7 +38,9 @@ export function StatementUploadScreen() {
               type="button"
               icon={<Play size={16} />}
               disabled={!workspace.canExecute || workspace.loading || workspace.busy}
-              onClick={() => void workspace.execute()}
+              onClick={() => {
+                if (workspace.canExecute) setExecuteOpen(true);
+              }}
               title={workspace.canExecute ? "Submit draft for approval" : "Resolve all required incoming transactions before Execute"}
             >
               Execute
@@ -78,6 +83,18 @@ export function StatementUploadScreen() {
         relevantIncoming={workspace.relevantIncoming}
         canExecute={workspace.canExecute}
         lifecycleEditable={!workspace.workspace.statement || workspace.workspace.statement.status === "RAW"}
+      />
+      <ConfirmDialog
+        open={executeOpen}
+        title="Confirm Execute"
+        message="Are you sure you want to execute these changes?"
+        confirmLabel="Execute"
+        loading={workspace.busy}
+        onCancel={() => setExecuteOpen(false)}
+        onConfirm={async () => {
+          await workspace.execute();
+          setExecuteOpen(false);
+        }}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Eye, PencilLine, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
@@ -9,17 +9,19 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDateTime } from "@/lib/format";
-import type { Role, RoleStatusFilter } from "../types";
+import type { MatrixMode, Role, RoleStatusFilter } from "../types";
 import styles from "../styles/role.module.css";
 
 type RoleTableProps = {
   items: Role[];
   search: string;
   statusFilter: RoleStatusFilter;
+  mode: MatrixMode;
   loading: boolean;
   disabled: boolean;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: RoleStatusFilter) => void;
+  onModeChange: (mode: MatrixMode) => void;
   onReload: () => void;
   onCellChange: (id: string, field: string, value: unknown) => void;
   onDelete: (id: string) => void;
@@ -31,10 +33,12 @@ export function RoleTable({
   items,
   search,
   statusFilter,
+  mode,
   loading,
   disabled,
   onSearchChange,
   onStatusFilterChange,
+  onModeChange,
   onReload,
   onCellChange,
   onDelete,
@@ -56,7 +60,7 @@ export function RoleTable({
       width: "170px",
       minWidth: "160px",
       sticky: "left",
-      editable: (row) => Boolean(row.isDraft),
+      editable: (row) => mode === "EDIT" && Boolean(row.isDraft),
       placeholder: "ROLE_CODE",
       render: (row) => <span className={styles.roleCodeReadonly}>{row.roleCode}</span>
     },
@@ -64,14 +68,14 @@ export function RoleTable({
       key: "roleName",
       header: "Role Name",
       minWidth: "240px",
-      editable: true,
+      editable: mode === "EDIT",
       placeholder: "Role name"
     },
     {
       key: "description",
       header: "Description",
       minWidth: "390px",
-      editable: true,
+      editable: mode === "EDIT",
       placeholder: "Optional description"
     },
     {
@@ -79,7 +83,13 @@ export function RoleTable({
       header: "Status",
       width: "160px",
       minWidth: "150px",
-      editable: true,
+      editable: mode === "EDIT",
+      render: (row) => (
+        <span className={`${styles.statusSelect} ${row.activeFlag ? styles.active : styles.inactive}`}>
+          <span className={styles.statusDot} />
+          <span>{row.activeFlag ? "Active" : "Inactive"}</span>
+        </span>
+      ),
       renderEditor: ({ value, onChange }) => (
         <label className={`${styles.statusSelect} ${Boolean(value) ? styles.active : styles.inactive}`}>
           <span className={styles.statusDot} />
@@ -133,14 +143,14 @@ export function RoleTable({
                   : `Delete Role ${row.roleCode}`}
               icon={<Trash2 size={16} />}
               variant="danger"
-              disabled={disabled || assigned}
+              disabled={disabled || mode !== "EDIT" || assigned}
               onClick={() => onDelete(row.id)}
             />
           </div>
         );
       }
     }
-  ], [disabled, onDelete]);
+  ], [disabled, mode, onDelete]);
 
   return (
     <CollapsibleSection
@@ -150,6 +160,26 @@ export function RoleTable({
       summary={`${totalCount} roles`}
       defaultExpanded={false}
       actions={<div className={styles.tableToolbar}>
+          <Button
+            type="button"
+            variant={mode === "INQUIRY" ? "primary" : "secondary"}
+            size="sm"
+            icon={<Eye size={15} />}
+            onClick={() => onModeChange("INQUIRY")}
+            disabled={loading || disabled}
+          >
+            Inquiry
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "EDIT" ? "primary" : "secondary"}
+            size="sm"
+            icon={<PencilLine size={15} />}
+            onClick={() => onModeChange("EDIT")}
+            disabled={loading || disabled}
+          >
+            Edit Roles
+          </Button>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -190,7 +220,7 @@ export function RoleTable({
         columns={columns}
         rowKey={(row) => row.id}
         loading={loading}
-        disabled={disabled}
+        disabled={disabled || mode !== "EDIT"}
         minWidth="1580px"
         emptyState={{
           title: "No roles found",
@@ -211,7 +241,7 @@ export function RoleTable({
           <Button type="button" variant="outline" size="sm" icon={<Plus size={16} />} onClick={() => {
             onAdd();
             setPage(Math.max(1, Math.ceil((totalCount + 1) / pageSize)));
-          }} disabled={disabled}>
+          }} disabled={disabled || mode !== "EDIT"}>
             Add
           </Button>
         )}

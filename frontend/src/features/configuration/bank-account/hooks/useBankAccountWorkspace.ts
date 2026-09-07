@@ -122,7 +122,7 @@ export function useBankAccountWorkspace() {
     setMessage("Draft Bank Account removed.");
   }
 
-  async function executeChanges() {
+  function prepareExecute() {
     const validation = validateBankAccountWorkspace(workingAccounts, supportedBanks);
     if (validation) {
       setError(validation);
@@ -132,8 +132,14 @@ export function useBankAccountWorkspace() {
     if (!dirty) {
       setError("");
       setMessage("No changes to execute.");
-      return true;
+      return false;
     }
+
+    return true;
+  }
+
+  async function executeChanges() {
+    if (!prepareExecute()) return false;
 
     setSaving(true);
     setError("");
@@ -174,6 +180,7 @@ export function useBankAccountWorkspace() {
     addDraft,
     updateAccount,
     removeDraft,
+    prepareExecute,
     executeChanges
   };
 }

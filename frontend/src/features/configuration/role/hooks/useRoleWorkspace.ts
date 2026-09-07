@@ -44,6 +44,7 @@ export function useRoleWorkspace() {
 
   const [roleSearch, setRoleSearch] = useState("");
   const [roleStatusFilter, setRoleStatusFilter] = useState<RoleStatusFilter>("ALL");
+  const [roleMode, setRoleMode] = useState<MatrixMode>("INQUIRY");
   const [menuSearch, setMenuSearch] = useState("");
   const [menuStatusFilter, setMenuStatusFilter] = useState<MenuStatusFilter>("ALL");
   const [menuTypeFilter, setMenuTypeFilter] = useState<MenuTypeFilter>("ALL");
@@ -59,6 +60,7 @@ export function useRoleWorkspace() {
     setServerRoles(workspace.roles);
     setWorkingRoles(workspace.roles);
     setDeletedRoleIds([]);
+    setRoleMode("INQUIRY");
     setServerMenus(workspace.menus);
     setWorkingMenus(workspace.menus);
     setDeletedMenuIds([]);
@@ -153,11 +155,21 @@ export function useRoleWorkspace() {
   function clearChanges() {
     setWorkingRoles(serverRoles);
     setDeletedRoleIds([]);
+    setRoleMode("INQUIRY");
     setWorkingMenus(serverMenus);
     setDeletedMenuIds([]);
     setWorkingAccess(new Set(serverAccess));
     setMessage("Unsaved changes cleared.");
     setError("");
+  }
+
+  function changeRoleMode(mode: MatrixMode) {
+    if (mode === "INQUIRY" && rolesDirty) {
+      setError("Role Master has unsaved changes. Use Clear to discard them before returning to Inquiry mode.");
+      setMessage("");
+      return;
+    }
+    setRoleMode(mode);
   }
 
   function updateRoleCell(id: string, field: string, value: unknown) {
@@ -325,7 +337,7 @@ export function useRoleWorkspace() {
     return workingAccess.has(roleMenuKey(roleId, menuId));
   }
 
-  async function executeChanges() {
+  function prepareExecute() {
     const roleValidation = validateRoles(workingRoles);
     if (roleValidation) {
       setError(roleValidation);
@@ -341,8 +353,15 @@ export function useRoleWorkspace() {
     if (!dirty) {
       setMessage("No changes to execute.");
       setError("");
-      return true;
+      setRoleMode("INQUIRY");
+      return false;
     }
+
+    return true;
+  }
+
+  async function executeChanges() {
+    if (!prepareExecute()) return false;
 
     setSaving(true);
     setError("");
@@ -394,6 +413,8 @@ export function useRoleWorkspace() {
     setRoleSearch,
     roleStatusFilter,
     setRoleStatusFilter,
+    roleMode,
+    changeRoleMode,
     updateRoleCell,
     addRoleDraft,
     removeRole,
@@ -424,6 +445,7 @@ export function useRoleWorkspace() {
     message,
     refresh,
     clearChanges,
+    prepareExecute,
     executeChanges
   };
 }

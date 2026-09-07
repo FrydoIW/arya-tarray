@@ -185,7 +185,7 @@ export function useEventCodes() {
     setError("");
   }
 
-  async function executeChanges() {
+  function prepareExecute() {
     const validationError = validateRows(workingItems);
     if (validationError) {
       setError(validationError);
@@ -196,8 +196,14 @@ export function useEventCodes() {
     if (!dirty) {
       setMessage("No changes to execute.");
       setError("");
-      return true;
+      return false;
     }
+
+    return true;
+  }
+
+  async function executeChanges() {
+    if (!prepareExecute()) return false;
 
     setSaving(true);
     setError("");
@@ -263,6 +269,7 @@ export function useEventCodes() {
     addDraft,
     removeRow,
     clearChanges,
+    prepareExecute,
     executeChanges
   };
 }

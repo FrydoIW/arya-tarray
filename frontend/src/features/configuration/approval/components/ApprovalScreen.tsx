@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { ApprovalConfiguration } from "../types";
 import { useApprovalWorkspace } from "../hooks/useApprovalWorkspace";
@@ -16,6 +17,7 @@ export function ApprovalScreen() {
   const workspace = useApprovalWorkspace();
   const [modalMode, setModalMode] = useState<"ADD" | "EDIT" | null>(null);
   const [editingConfiguration, setEditingConfiguration] = useState<ApprovalConfiguration | null>(null);
+  const [executeOpen, setExecuteOpen] = useState(false);
 
   function openAdd() {
     workspace.setSearch("");
@@ -55,7 +57,9 @@ export function ApprovalScreen() {
             <Button
               type="button"
               icon={<Play size={16} />}
-              onClick={() => void workspace.executeChanges()}
+              onClick={() => {
+                if (workspace.prepareExecute()) setExecuteOpen(true);
+              }}
               disabled={workspace.loading || workspace.saving}
             >
               {workspace.saving ? "Executing..." : "Execute"}
@@ -117,6 +121,18 @@ export function ApprovalScreen() {
             });
           }
           closeModal();
+        }}
+      />
+      <ConfirmDialog
+        open={executeOpen}
+        title="Confirm Execute"
+        message="Are you sure you want to execute these changes?"
+        confirmLabel="Execute"
+        loading={workspace.saving}
+        onCancel={() => setExecuteOpen(false)}
+        onConfirm={async () => {
+          await workspace.executeChanges();
+          setExecuteOpen(false);
         }}
       />
     </div>

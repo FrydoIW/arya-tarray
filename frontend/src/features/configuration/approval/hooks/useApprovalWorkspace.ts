@@ -144,7 +144,7 @@ export function useApprovalWorkspace() {
     setMessage("Draft Approval Configuration removed.");
   }
 
-  async function executeChanges() {
+  function prepareExecute() {
     const validation = validateApprovalWorkspace({
       serverRows: serverConfigurations,
       workingRows: workingConfigurations,
@@ -159,8 +159,14 @@ export function useApprovalWorkspace() {
     if (!dirty) {
       setError("");
       setMessage("No changes to execute.");
-      return true;
+      return false;
     }
+
+    return true;
+  }
+
+  async function executeChanges() {
+    if (!prepareExecute()) return false;
 
     setSaving(true);
     setError("");
@@ -205,6 +211,7 @@ export function useApprovalWorkspace() {
     addDraft,
     updateConfiguration,
     removeDraft,
+    prepareExecute,
     executeChanges
   };
 }

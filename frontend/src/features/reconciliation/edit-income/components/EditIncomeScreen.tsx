@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useEditIncomeWorkspace } from "../hooks/useEditIncomeWorkspace";
 import { EditIncomeCorrectionWorkspace } from "./EditIncomeCorrectionWorkspace";
@@ -12,6 +14,7 @@ import styles from "../styles/edit-income.module.css";
 
 export function EditIncomeScreen() {
   const workspace = useEditIncomeWorkspace();
+  const [executeOpen, setExecuteOpen] = useState(false);
 
   return (
     <div className={`${styles.page} page-stack`}>
@@ -22,7 +25,9 @@ export function EditIncomeScreen() {
         actions={(
           <>
             <Button type="button" variant="secondary" icon={<RotateCcw size={16} />} disabled={!workspace.detail || workspace.busy || workspace.modifiedTransactions === 0} onClick={workspace.clearChanges}>Clear</Button>
-            <Button type="button" icon={<Play size={16} />} disabled={!workspace.canExecute || workspace.loading || workspace.busy} onClick={() => void workspace.execute()} title={workspace.canExecute ? "Submit correction for re-approval" : "Select a Complete statement and make at least one correction first"}>Execute</Button>
+            <Button type="button" icon={<Play size={16} />} disabled={!workspace.canExecute || workspace.loading || workspace.busy} onClick={() => {
+              if (workspace.canExecute) setExecuteOpen(true);
+            }} title={workspace.canExecute ? "Submit correction for re-approval" : "Select a Complete statement and make at least one correction first"}>Execute</Button>
           </>
         )}
       />
@@ -84,6 +89,18 @@ export function EditIncomeScreen() {
           <span>Select a Complete statement and click Edit. Changes stay local until Execute, then require approval again.</span>
         </div>
       )}
+      <ConfirmDialog
+        open={executeOpen}
+        title="Confirm Execute"
+        message="Are you sure you want to execute these changes?"
+        confirmLabel="Execute"
+        loading={workspace.busy}
+        onCancel={() => setExecuteOpen(false)}
+        onConfirm={async () => {
+          await workspace.execute();
+          setExecuteOpen(false);
+        }}
+      />
     </div>
   );
 }

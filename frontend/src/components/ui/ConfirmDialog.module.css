@@ -1,0 +1,16 @@
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: 16px 19px 18px;
+}
+
+@media (max-width: 640px) {
+  .actions {
+    padding: 14px 16px 16px;
+  }
+
+  .actions > * {
+    flex: 1;
+  }
+}

@@ -203,7 +203,7 @@ export function useUsers() {
     setMessage("Unsaved changes cleared.");
   }
 
-  async function executeChanges() {
+  function prepareExecute() {
     const validationError = validateUsers(workingUsers, serverWorkspace.roles);
     if (validationError) {
       setError(validationError);
@@ -223,8 +223,14 @@ export function useUsers() {
     if (!dirty) {
       setMessage("No changes to execute.");
       setError("");
-      return true;
+      return false;
     }
+
+    return true;
+  }
+
+  async function executeChanges() {
+    if (!prepareExecute()) return false;
 
     const serverMap = new Map(serverWorkspace.users.map((item) => [item.id, item]));
     const creates = workingUsers
@@ -297,6 +303,7 @@ export function useUsers() {
     stagePasswordReset,
     hasPasswordReset,
     clearChanges,
+    prepareExecute,
     executeChanges
   };
 }

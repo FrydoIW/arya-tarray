@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { UserItem } from "../types";
 import { useUsers } from "../hooks/useUsers";
@@ -17,6 +18,7 @@ export function UserScreen() {
   const users = useUsers();
   const [addOpen, setAddOpen] = useState(false);
   const [resetUser, setResetUser] = useState<UserItem | null>(null);
+  const [executeOpen, setExecuteOpen] = useState(false);
 
   return (
     <div className={`${styles.page} page-stack`}>
@@ -38,7 +40,9 @@ export function UserScreen() {
             <Button
               type="button"
               icon={<Play size={16} />}
-              onClick={() => void users.executeChanges()}
+              onClick={() => {
+                if (users.prepareExecute()) setExecuteOpen(true);
+              }}
               disabled={users.loading || users.saving}
             >
               {users.saving ? "Executing..." : "Execute"}
@@ -85,6 +89,18 @@ export function UserScreen() {
         disabled={users.saving}
         onClose={() => setResetUser(null)}
         onStage={users.stagePasswordReset}
+      />
+      <ConfirmDialog
+        open={executeOpen}
+        title="Confirm Execute"
+        message="Are you sure you want to execute these changes?"
+        confirmLabel="Execute"
+        loading={users.saving}
+        onCancel={() => setExecuteOpen(false)}
+        onConfirm={async () => {
+          await users.executeChanges();
+          setExecuteOpen(false);
+        }}
       />
     </div>
   );

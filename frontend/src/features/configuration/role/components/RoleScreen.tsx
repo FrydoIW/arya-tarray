@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { MenuRegistryTable } from "./MenuRegistryTable";
 import { RoleAccessMatrix } from "./RoleAccessMatrix";
@@ -13,6 +15,7 @@ import styles from "../styles/role.module.css";
 
 export function RoleScreen() {
   const workspace = useRoleWorkspace();
+  const [executeOpen, setExecuteOpen] = useState(false);
 
   function addRole() {
     workspace.setRoleSearch("");
@@ -47,7 +50,9 @@ export function RoleScreen() {
             <Button
               type="button"
               icon={<Play size={16} />}
-              onClick={() => void workspace.executeChanges()}
+              onClick={() => {
+                if (workspace.prepareExecute()) setExecuteOpen(true);
+              }}
               disabled={workspace.loading || workspace.saving}
             >
               {workspace.saving ? "Executing..." : "Execute"}
@@ -66,10 +71,12 @@ export function RoleScreen() {
         items={workspace.roles}
         search={workspace.roleSearch}
         statusFilter={workspace.roleStatusFilter}
+        mode={workspace.roleMode}
         loading={workspace.loading}
         disabled={workspace.saving}
         onSearchChange={workspace.setRoleSearch}
         onStatusFilterChange={workspace.setRoleStatusFilter}
+        onModeChange={workspace.changeRoleMode}
         onReload={() => void workspace.refresh()}
         onCellChange={workspace.updateRoleCell}
         onDelete={workspace.removeRole}
@@ -104,6 +111,18 @@ export function RoleScreen() {
         hasAccess={workspace.hasAccess}
         onToggle={workspace.toggleAccess}
         onReload={() => void workspace.refresh()}
+      />
+      <ConfirmDialog
+        open={executeOpen}
+        title="Confirm Execute"
+        message="Are you sure you want to execute these changes?"
+        confirmLabel="Execute"
+        loading={workspace.saving}
+        onCancel={() => setExecuteOpen(false)}
+        onConfirm={async () => {
+          await workspace.executeChanges();
+          setExecuteOpen(false);
+        }}
       />
     </div>
   );

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { RotateCcw, Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EventCodeMatchingRule } from "./EventCodeMatchingRule";
 import { EventCodeSummary } from "./EventCodeSummary";
@@ -11,6 +13,7 @@ import styles from "../styles/event-code.module.css";
 
 export function EventCodeScreen() {
   const eventCodes = useEventCodes();
+  const [executeOpen, setExecuteOpen] = useState(false);
 
   function addRow() {
     eventCodes.setSearch("");
@@ -38,7 +41,9 @@ export function EventCodeScreen() {
             <Button
               type="button"
               icon={<Play size={16} />}
-              onClick={() => void eventCodes.executeChanges()}
+              onClick={() => {
+                if (eventCodes.prepareExecute()) setExecuteOpen(true);
+              }}
               disabled={eventCodes.loading || eventCodes.saving}
             >
               {eventCodes.saving ? "Executing..." : "Execute"}
@@ -66,6 +71,18 @@ export function EventCodeScreen() {
         onDelete={eventCodes.removeRow}
         totalCount={eventCodes.allItems.length}
         onAdd={addRow}
+      />
+      <ConfirmDialog
+        open={executeOpen}
+        title="Confirm Execute"
+        message="Are you sure you want to execute these changes?"
+        confirmLabel="Execute"
+        loading={eventCodes.saving}
+        onCancel={() => setExecuteOpen(false)}
+        onConfirm={async () => {
+          await eventCodes.executeChanges();
+          setExecuteOpen(false);
+        }}
       />
     </div>
   );
