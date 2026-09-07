@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { FileSpreadsheet, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { Select } from "@/components/ui/Select";
 import { formatDateTime } from "@/lib/format";
 import type { BankAccountOption, StatementDraft } from "../types";
@@ -41,14 +41,14 @@ export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, upload
   const statusTone = statement ? getStatementStatusTone(statement.status) : "draft";
 
   return (
-    <Card className={styles.workspaceCard}>
-      <div className={styles.sectionHeading}>
-        <div>
-          <h2>Draft Workspace</h2>
-          <p>Upload a BCA statement workbook, then review the persisted draft transactions returned by the backend.</p>
-        </div>
-      </div>
-
+    <CollapsibleSection
+      className="ui-card"
+      title="Draft Workspace"
+      description="Upload a BCA statement workbook, then review the persisted draft transactions returned by the backend."
+      summary={statement ? getStatementStatusLabel(statement.status) : "No active draft"}
+      defaultExpanded={false}
+    >
+      <div className={styles.workspaceCard}>
       {statement?.rejectionRemark ? (
         <div className={styles.returnNotice}>
           <strong>Returned for correction</strong>
@@ -121,6 +121,7 @@ export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, upload
           <span className={styles.uploadHelp}>Supported format: .xlsx · Max file size: 50MB</span>
         </div>
       </div>
-    </Card>
+      </div>
+    </CollapsibleSection>
   );
 }

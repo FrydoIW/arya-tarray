@@ -1,6 +1,7 @@
 "use client";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDateTime, formatMoney } from "@/lib/format";
@@ -27,16 +28,15 @@ export function MemberCandidateTable(props: Props) {
       <Button size="sm" variant="secondary" disabled={props.busy} onClick={() => props.onAction("ignore", row)}>Ignore</Button>
     </div> : "—" }
   ];
-  return <section className={styles.panel}>
-    <div className={styles.toolbar}>
+  return <CollapsibleSection className={styles.panel} title="Daftar Identitas" summary={`${props.workspace.pagination.total} identitas`} defaultExpanded={false} actions={<div className={`${styles.toolbar} ${styles.collapsibleToolbar}`}>
       <SearchInput value={props.search} maxLength={150} placeholder="Search nama rekening / initial" aria-label="Cari identitas donatur" onChange={e => props.onSearch(e.target.value)} />
       <Select value={props.query.status} aria-label="Status registrasi" onChange={e => props.onStatus(e.target.value as WorkspaceQuery["status"])}>
         <option value="UNVERIFIED">Belum Registrasi</option><option value="VERIFIED">Terverifikasi</option><option value="IGNORED">Diabaikan</option><option value="ALL">Semua Status</option>
       </Select>
       <Button variant="secondary" disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button>
-    </div>
+    </div>}>
     <DataTable rows={props.workspace.rows} columns={columns} rowKey={row => row.memberIdentityId} loading={props.loading} minWidth="1250px"
       emptyState={{ title: "Tidak ada identitas donatur", description: "Ubah pencarian/status atau registrasi donatur secara manual." }}
       pagination={{ mode: "server", page: props.workspace.pagination.page, pageSize: props.query.pageSize, total: props.workspace.pagination.total, onPageChange: props.onPage, onPageSizeChange: props.onPageSize, pageSizeOptions: [10, 25, 50, 100] }} />
-  </section>;
+  </CollapsibleSection>;
 }

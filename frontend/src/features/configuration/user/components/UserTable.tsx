@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -179,14 +180,13 @@ export function UserTable({
   ], [disabled, hasPasswordReset, onRemoveDraft, onResetPassword, roles]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>User Master</h2>
-          <p>Edit user identity, role, and status directly. Existing users are deactivated instead of hard-deleted.</p>
-        </div>
-
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="User Master"
+      description="Edit user identity, role, and status directly. Existing users are deactivated instead of hard-deleted."
+      summary={`${allItems.length} users`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -219,8 +219,8 @@ export function UserTable({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={items}
@@ -260,6 +260,6 @@ export function UserTable({
           </Button>
         )}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

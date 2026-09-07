@@ -8,6 +8,7 @@ import {
   type AccessMatrixGroup
 } from "@/components/ui/AccessMatrix";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { MatrixMode, MenuRegistryItem, Role } from "../types";
 import styles from "../styles/role.module.css";
 
@@ -81,13 +82,13 @@ export function RoleAccessMatrix({
   }, [menus]);
 
   return (
-    <section className={styles.matrixPanel}>
-      <div className={styles.matrixHeader}>
-        <div>
-          <h2>Role Access Matrix</h2>
-          <p>Inquiry shows the current working access. Use Edit Access to stage checkbox changes, then press Execute at the top of the page.</p>
-        </div>
-        <div className={styles.matrixActions}>
+    <CollapsibleSection
+      className={styles.matrixPanel}
+      title="Role Access Matrix"
+      description="Inquiry shows the current working access. Use Edit Access to stage checkbox changes, then press Execute at the top of the page."
+      summary={`${columns.length} roles`}
+      defaultExpanded={false}
+      actions={<div className={styles.matrixActions}>
           <Button
             type="button"
             variant={mode === "INQUIRY" ? "primary" : "secondary"}
@@ -119,8 +120,8 @@ export function RoleAccessMatrix({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <AccessMatrix
         columns={columns}
@@ -136,6 +137,6 @@ export function RoleAccessMatrix({
           description: "Register at least one PAGE menu in Menu Registry and Execute it first. Persisted Roles will appear as matrix columns."
         }}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

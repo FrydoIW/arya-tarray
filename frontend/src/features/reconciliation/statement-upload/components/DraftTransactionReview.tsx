@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { CheckCircle2, CircleMinus, RotateCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
@@ -159,13 +160,13 @@ export function DraftTransactionReview({
   ], [disabled, eventCodes]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>Draft Transaction Review</h2>
-          <p>Suggested Event is read-only. Final Event is the operator classification used for reconciliation.</p>
-        </div>
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Draft Transaction Review"
+      description="Suggested Event is read-only. Final Event is the operator classification used for reconciliation."
+      summary={`${rows.length} transactions`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             disabled={loading}
@@ -194,8 +195,8 @@ export function DraftTransactionReview({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={rows}
@@ -217,6 +218,6 @@ export function DraftTransactionReview({
           onPageSizeChange
         }}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

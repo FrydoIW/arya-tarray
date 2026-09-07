@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -161,14 +162,13 @@ export function ApprovalTable({
   ], [disabled, onEdit, onRemoveDraft, onStatusChange]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>Approval Configuration</h2>
-          <p>Assign approvers for supported processes. Existing Process/Menu identity is read-only after the first Execute.</p>
-        </div>
-
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Approval Configuration"
+      description="Assign approvers for supported processes. Existing Process/Menu identity is read-only after the first Execute."
+      summary={`${allItems.length} configurations`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -201,8 +201,8 @@ export function ApprovalTable({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={items}
@@ -244,6 +244,6 @@ export function ApprovalTable({
           </Button>
         )}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

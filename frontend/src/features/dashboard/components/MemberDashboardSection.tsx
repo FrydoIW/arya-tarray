@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, BadgeDollarSign, ReceiptText, UserRoundSearch, UsersRound } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { DashboardSummary } from "../types";
 import { DashboardPanelLoading } from "./DashboardPanelLoading";
@@ -24,12 +25,14 @@ export function MemberDashboardSection({ data, loading, periodLabel, canViewMemb
   const followUp = data?.registrationFollowUp ?? { unverifiedIdentityCount: 0, identities: [] };
 
   return (
-    <section className="dashboard-member-section" aria-labelledby="dashboard-member-title">
-      <div className="dashboard-member-heading">
-        <div><span>Member monitoring</span><h2 id="dashboard-member-title">Donatur</h2><p>Finalized Member donations and registration coverage for {periodLabel}.</p></div>
-        <span className="dashboard-member-period">{periodLabel}</span>
-      </div>
-
+    <CollapsibleSection
+      className="ui-card"
+      title="Donatur"
+      description={`Finalized Member donations and registration coverage for ${periodLabel}.`}
+      summary={periodLabel}
+      defaultExpanded={false}
+    >
+      <div className="dashboard-member-collapsible-content">
       <div className="dashboard-member-metrics">
         <MetricCard label="Donasi Terhubung" value={loading ? "—" : formatMoney(summary.linkedAmount)} detail="Finalized · verified Member" icon={<BadgeDollarSign size={19} />} tone="maroon" />
         <MetricCard label="Donatur Aktif" value={loading ? "—" : summary.contributingMemberCount.toLocaleString("id-ID")} detail="Distinct contributing Members" icon={<UsersRound size={19} />} tone="green" />
@@ -119,6 +122,7 @@ export function MemberDashboardSection({ data, loading, periodLabel, canViewMemb
           )}
         </article>
       </div>
-    </section>
+      </div>
+    </CollapsibleSection>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -123,13 +124,13 @@ export function BankAccountTable({
   ], [disabled, onEdit, onRemoveDraft]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>Bank Account Configuration</h2>
-          <p>Maintain bank accounts that may be used for statement upload. Persisted Bank and Account Number are stable identities.</p>
-        </div>
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Bank Account Configuration"
+      description="Maintain bank accounts that may be used for statement upload. Persisted Bank and Account Number are stable identities."
+      summary={`${allItems.length} accounts`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             onChange={(event) => { setPage(1); onSearchChange(event.target.value); }}
@@ -148,8 +149,8 @@ export function BankAccountTable({
           <Button type="button" variant="outline" size="sm" icon={<RefreshCw size={16} />} onClick={onReload} disabled={loading || disabled} title="Reload database state and discard unsaved changes.">
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={items}
@@ -178,6 +179,6 @@ export function BankAccountTable({
           </Button>
         )}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

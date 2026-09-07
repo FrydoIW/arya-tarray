@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Pencil, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -112,10 +113,13 @@ export function EditIncomeStatementTable(props: Props) {
   const context = periodContext(props.periodMode, props.month, props.date);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div><h2>Edit Income Workspace</h2><p>Showing approved statements available {context}.</p></div>
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Edit Income Workspace"
+      description={`Showing approved statements available ${context}.`}
+      summary={`${props.rows.length} statements`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <PeriodPicker
             className={styles.periodFilter}
             value={{ mode: props.periodMode, month: props.month, date: props.date }}
@@ -136,8 +140,8 @@ export function EditIncomeStatementTable(props: Props) {
             {props.bankAccounts.map((account) => <option value={account.id} key={account.id}>{account.bankCode} - {account.accountNo}</option>)}
           </Select>
           <Button className={styles.reloadButton} type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button>
-        </div>
-      </div>
+        </div>}
+    >
       <DataTable
         rows={props.rows}
         columns={columns}
@@ -154,6 +158,6 @@ export function EditIncomeStatementTable(props: Props) {
           onPageSizeChange: props.onPageSizeChange
         }}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

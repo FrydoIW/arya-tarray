@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { ContactRound, RefreshCw, UserCheck, UserMinus, UserRoundCheck, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable } from "@/components/ui/DataTable";
 import type { DataTableColumn } from "@/components/ui/DataTable/types";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -46,8 +47,7 @@ export function MemberDataScreen() {
       <MetricCard label="Manual" value={summary.manual} detail="Registrasi langsung" icon={<ContactRound size={18} />} tone="gold" />
       <MetricCard label="Dari Statement" value={summary.statement} detail="Berawal dari identitas" icon={<UserRoundCheck size={18} />} tone="blue" />
     </div>
-    <section className={styles.panel}>
-      <div className={styles.toolbar}>
+    <CollapsibleSection className={styles.panel} title="Daftar Donatur" summary={`${state.workspace.pagination.total} donatur`} defaultExpanded={false} actions={<div className={`${styles.toolbar} ${styles.collapsibleToolbar}`}>
         <SearchInput value={state.search} onChange={event => state.setSearch(event.target.value)} placeholder="Cari kode, nama, kontak, atau identitas…" />
         <PeriodPicker value={{ mode: state.query.periodMode, month: state.query.month, date: state.query.date }} disabled={state.loading}
           maxMonth={currentBusinessMonthValue()} maxDate={currentBusinessDayValue()} ariaLabel="Konteks donasi"
@@ -64,11 +64,11 @@ export function MemberDataScreen() {
         <Select aria-label="Filter sumber registrasi" value={state.query.registrationSource} onChange={event => state.updateQuery({ registrationSource: event.target.value as typeof state.query.registrationSource })}>
           <option value="ALL">Semua sumber</option><option value="MANUAL">Manual</option><option value="STATEMENT">Statement</option>
         </Select>
-      </div>
+      </div>}>
       <DataTable rows={state.workspace.rows} columns={columns} rowKey={row => row.memberId} loading={state.loading}
         loadingText="Memuat data donatur…" emptyState={{ title: "Belum ada donatur", description: "Sesuaikan filter atau registrasikan donatur terlebih dahulu." }} minWidth="1470px"
         pagination={{ mode: "server", page: state.workspace.pagination.page, pageSize: state.workspace.pagination.pageSize,
           total: state.workspace.pagination.total, onPageChange: page => state.updateQuery({ page }), onPageSizeChange: pageSize => state.updateQuery({ pageSize }) }} />
-    </section>
+    </CollapsibleSection>
   </div>;
 }

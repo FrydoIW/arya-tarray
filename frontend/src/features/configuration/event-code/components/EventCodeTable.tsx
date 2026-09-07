@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -133,14 +134,13 @@ export function EventCodeTable({
   ], [disabled, onDelete]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>Event Code Master</h2>
-          <p>Edit rows directly. Add, edit, status changes, and delete are only saved after Execute.</p>
-        </div>
-
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Event Code Master"
+      description="Edit rows directly. Add, edit, status changes, and delete are only saved after Execute."
+      summary={`${totalCount} event codes`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -173,8 +173,8 @@ export function EventCodeTable({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={items}
@@ -207,6 +207,6 @@ export function EventCodeTable({
           </Button>
         )}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

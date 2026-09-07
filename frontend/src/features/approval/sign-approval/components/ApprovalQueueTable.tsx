@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Eye, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
@@ -141,13 +142,13 @@ export function ApprovalQueueTable({
   ], [disabled, onReview]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>Approval Queue</h2>
-          <p>Statement approval requests available to you under the active approval configuration.</p>
-        </div>
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Approval Queue"
+      description="Statement approval requests available to you under the active approval configuration."
+      summary={`${items.length} requests`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             onChange={(event: ChangeEvent<HTMLInputElement>) => onSearchChange(event.target.value)}
@@ -174,8 +175,8 @@ export function ApprovalQueueTable({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={items}
@@ -199,6 +200,6 @@ export function ApprovalQueueTable({
           }
         }}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

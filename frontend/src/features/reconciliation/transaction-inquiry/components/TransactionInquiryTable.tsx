@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Eye, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -85,10 +86,13 @@ export function TransactionInquiryTable(props: Props) {
     : props.memberOptions;
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div><h2>Transaction Inquiry</h2><p>Search and review reconciliation transactions {periodContext(props.periodMode, props.month, props.date)}.</p></div>
-        <div className={styles.toolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Transaction Inquiry"
+      description={`Search and review reconciliation transactions ${periodContext(props.periodMode, props.month, props.date)}.`}
+      summary={`${props.total} transactions`}
+      defaultExpanded={false}
+      actions={<div className={styles.toolbar}>
           <PeriodPicker className={styles.periodFilter} value={{ mode: props.periodMode, month: props.month, date: props.date }} maxMonth={props.maxMonth} maxDate={props.maxDate} disabled={props.loading} ariaLabel="Transaction Inquiry period" onChange={props.onPeriodChange} />
           <SearchInput className={styles.searchFilter} value={props.search} disabled={props.loading} placeholder="Search description or reference" onChange={(event) => props.onSearchChange(event.target.value)} />
           <Select className={styles.statusFilter} value={props.status} disabled={props.loading} onChange={(event) => props.onStatusChange(event.target.value as TransactionInquiryStatus)} aria-label="Transaction status">
@@ -113,8 +117,8 @@ export function TransactionInquiryTable(props: Props) {
             <option value="ALL">All Member Links</option><option value="LINKED">Linked</option><option value="UNLINKED">Unlinked</option>
           </Select>
           <Button className={styles.reloadButton} type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading} onClick={props.onReload}>Reload</Button>
-        </div>
-      </div>
+        </div>}
+    >
       <DataTable
         rows={props.rows}
         columns={columns}
@@ -124,6 +128,6 @@ export function TransactionInquiryTable(props: Props) {
         emptyState={{ title: `No transactions ${periodContext(props.periodMode, props.month, props.date)}`, description: "Choose another period or adjust the search and filters." }}
         pagination={{ mode: "server", page: props.page, pageSize: props.pageSize, total: props.total, pageSizeOptions: [10, 25, 50, 100], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -212,14 +213,13 @@ export function MenuRegistryTable({
   ], [allItems, disabled, groupOptions, onDelete]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>Menu Registry</h2>
-          <p>Register menu groups and pages known by the system. Existing code, type, and route stay read-only after the first Execute.</p>
-        </div>
-
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Menu Registry"
+      description="Register menu groups and pages known by the system. Existing code, type, and route stay read-only after the first Execute."
+      summary={`${allItems.length} menus`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -264,8 +264,8 @@ export function MenuRegistryTable({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={items}
@@ -307,6 +307,6 @@ export function MenuRegistryTable({
           </Button>
         )}
       />
-    </section>
+    </CollapsibleSection>
   );
 }

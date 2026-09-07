@@ -30,6 +30,7 @@
 .summary, .donationSummary { gap: 10px; }
 .panel, .detailPanel { border-color: #e4e9f0; border-radius: 11px; box-shadow: var(--shadow-xs); }
 .toolbar { padding: 13px 14px; border-bottom: 1px solid #eef1f5; background: #fff; }
+.collapsibleToolbar { padding: 0; border-bottom: 0; background: transparent; }
 .hero { padding: 18px 20px; border-color: #e4e9f0; border-radius: 11px; background: #fff; }
 .monogram { width: 52px; height: 52px; border-radius: 12px; box-shadow: none; font-size: 22px; }
 .hero h2 { color: #1d2939; font-size: 20px; }

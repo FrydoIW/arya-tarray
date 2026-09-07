@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -142,14 +143,13 @@ export function RoleTable({
   ], [disabled, onDelete]);
 
   return (
-    <section className={styles.tablePanel}>
-      <div className={styles.tableHeader}>
-        <div>
-          <h2>Role Master</h2>
-          <p>Edit role name, description, and status directly. New Role Code is editable only before the first Execute.</p>
-        </div>
-
-        <div className={styles.tableToolbar}>
+    <CollapsibleSection
+      className={styles.tablePanel}
+      title="Role Master"
+      description="Edit role name, description, and status directly. New Role Code is editable only before the first Execute."
+      summary={`${totalCount} roles`}
+      defaultExpanded={false}
+      actions={<div className={styles.tableToolbar}>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -182,8 +182,8 @@ export function RoleTable({
           >
             Reload
           </Button>
-        </div>
-      </div>
+        </div>}
+    >
 
       <DataTable
         rows={items}
@@ -216,6 +216,6 @@ export function RoleTable({
           </Button>
         )}
       />
-    </section>
+    </CollapsibleSection>
   );
 }
