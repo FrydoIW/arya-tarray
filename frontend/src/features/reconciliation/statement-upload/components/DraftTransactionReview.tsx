@@ -32,6 +32,7 @@ type Props = {
   pageSize: number;
   loading: boolean;
   disabled: boolean;
+  selectedStatementId: string | null;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: DraftRowStatusFilter) => void;
   onPageChange: (page: number) => void;
@@ -59,6 +60,7 @@ export function DraftTransactionReview({
   pageSize,
   loading,
   disabled,
+  selectedStatementId,
   onSearchChange,
   onStatusFilterChange,
   onPageChange,
@@ -208,7 +210,9 @@ export function DraftTransactionReview({
         onCellChange={(row, columnKey, value) => {
           if (columnKey === "eventCodeId") onFinalEventChange(row.id, value ? String(value) : null);
         }}
-        emptyState={{ title: "No draft transactions", description: "Try another search or review-status filter." }}
+        emptyState={selectedStatementId
+          ? { title: "No draft transactions", description: "Try another search or review-status filter." }
+          : { title: "No draft selected", description: "Select a statement draft above to continue." }}
         pagination={{
           page,
           pageSize,

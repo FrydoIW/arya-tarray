@@ -42,6 +42,7 @@ export type SignApprovalWorkspace = {
     approvedToday: number;
     rejectedToday: number;
     totalDecided: number;
+    legacyPendingApproval: number;
   };
   approvals: SignApprovalQueueItem[];
 };

@@ -11,3 +11,4 @@ import "./refactor-quality.test.js";
 import "./reconciliation-classification.test.js";
 import "./statement-upload-parser.test.js";
 import "./event-code-bulk.test.js";
+import "./core-flow-hardening.test.js";

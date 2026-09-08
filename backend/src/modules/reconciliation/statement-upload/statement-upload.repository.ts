@@ -5,6 +5,8 @@ import { storedTransactionRequiresClassification } from "../reconciliation-class
 import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../reconciliation-approval.js";
 import { discoverMemberIdentities } from "../../member/member-identity/member-identity.service.js";
 import { memberTransaction } from "../../member/member-identity/member-transaction.js";
+import { buildApprovalApproverSnapshot, LEGACY_APPROVAL_SNAPSHOT_MESSAGE } from "../../approval/sign-approval/approval-snapshot.domain.js";
+import { statementsHaveIdenticalContent } from "./statement-upload.duplicate.js";
 
 const bankAccountSelect = {
   id: true,
@@ -44,32 +46,20 @@ const statementInclude = {
   }
 } satisfies Prisma.BankStatementUploadInclude;
 
-async function findDefaultCurrentStatement() {
-  const raw = await prisma.bankStatementUpload.findFirst({
-    where: { status: "RAW" },
-    include: statementInclude,
-    orderBy: [{ uploadedAt: "desc" }, { createdAt: "desc" }]
-  });
-  if (raw) return raw;
-
-  const check = await prisma.bankStatementUpload.findFirst({
-    where: { status: "CHECK" },
-    include: statementInclude,
-    orderBy: [{ uploadedAt: "desc" }, { createdAt: "desc" }]
-  });
-  if (check) return check;
-
-  return prisma.bankStatementUpload.findFirst({
-    include: statementInclude,
-    orderBy: [{ uploadedAt: "desc" }, { createdAt: "desc" }]
-  });
-}
-
 export function loadRawStatementsForSummary() {
   return prisma.bankStatementUpload.findMany({
     where: { status: "RAW" },
     select: {
       id: true,
+      bankAccountId: true,
+      fileName: true,
+      periodFrom: true,
+      periodTo: true,
+      totalTransaction: true,
+      status: true,
+      uploadedAt: true,
+      bankAccount: { select: bankAccountSelect },
+      uploadedBy: { select: { id: true, fullName: true } },
       transactions: {
         select: {
           transactionType: true,
@@ -96,11 +86,24 @@ export async function loadStatementUploadWorkspaceRecords(statementId?: string) 
     }),
     loadRawStatementsForSummary(),
     statementId
-      ? prisma.bankStatementUpload.findUnique({ where: { id: statementId }, include: statementInclude })
-      : findDefaultCurrentStatement()
+      ? prisma.bankStatementUpload.findFirst({ where: { id: statementId, status: "RAW" }, include: statementInclude })
+      : Promise.resolve(null)
   ]);
 
-  return { bankAccounts, activeEventCodes, rawStatements, currentStatement };
+  const overlappingStatements = currentStatement?.periodFrom && currentStatement.periodTo
+    ? await prisma.bankStatementUpload.findMany({
+        where: {
+          id: { not: currentStatement.id },
+          bankAccountId: currentStatement.bankAccountId,
+          periodFrom: { lte: currentStatement.periodTo },
+          periodTo: { gte: currentStatement.periodFrom }
+        },
+        select: { id: true, fileName: true, periodFrom: true, periodTo: true, status: true },
+        orderBy: [{ periodFrom: "asc" }, { uploadedAt: "asc" }]
+      })
+    : [];
+
+  return { bankAccounts, activeEventCodes, rawStatements, currentStatement, overlappingStatements };
 }
 
 export function findActiveBankAccount(bankAccountId: string) {
@@ -115,29 +118,6 @@ export function listActiveEventCodesForClassification() {
     where: { activeFlag: true },
     select: eventCodeSelect,
     orderBy: { code: "asc" }
-  });
-}
-
-export function findPotentialDuplicateStatement(input: {
-  bankAccountId: string;
-  fileName: string;
-  periodFrom: Date;
-  periodTo: Date;
-  totalTransaction: number;
-  totalCredit: string;
-  totalDebit: string;
-}) {
-  return prisma.bankStatementUpload.findFirst({
-    where: {
-      bankAccountId: input.bankAccountId,
-      fileName: input.fileName,
-      periodFrom: input.periodFrom,
-      periodTo: input.periodTo,
-      totalTransaction: input.totalTransaction,
-      totalCredit: new Prisma.Decimal(input.totalCredit),
-      totalDebit: new Prisma.Decimal(input.totalDebit)
-    },
-    select: { id: true, status: true, uploadedAt: true }
   });
 }
 
@@ -166,53 +146,98 @@ export type PersistParsedStatementInput = {
 };
 
 export async function persistParsedStatement(input: PersistParsedStatementInput) {
-  return prisma.$transaction(async (tx) => {
-    const statement = await tx.bankStatementUpload.create({
-      data: {
-        bankAccountId: input.bankAccountId,
-        fileName: input.fileName,
-        periodFrom: input.periodFrom,
-        periodTo: input.periodTo,
-        totalTransaction: input.totalTransaction,
-        totalCredit: new Prisma.Decimal(input.totalCredit),
-        totalDebit: new Prisma.Decimal(input.totalDebit),
-        status: "RAW",
-        uploadedById: input.uploadedById
-      },
-      select: { id: true }
-    });
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const candidates = await tx.bankStatementUpload.findMany({
+          where: {
+            bankAccountId: input.bankAccountId,
+            periodFrom: input.periodFrom,
+            periodTo: input.periodTo,
+            totalTransaction: input.totalTransaction,
+            totalCredit: new Prisma.Decimal(input.totalCredit),
+            totalDebit: new Prisma.Decimal(input.totalDebit)
+          },
+          select: {
+            id: true,
+            transactions: {
+              select: {
+                rowNo: true,
+                transactionDate: true,
+                transactionType: true,
+                referenceNo: true,
+                senderName: true,
+                description: true,
+                originalAmount: true
+              },
+              orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }]
+            }
+          }
+        });
+        const duplicate = candidates.find((candidate) =>
+          statementsHaveIdenticalContent(input.transactions, candidate.transactions)
+        );
+        if (duplicate) {
+          throw new HttpError(
+            409,
+            `An identical statement batch already exists (${duplicate.id}). Select that draft or statement instead of uploading it again.`
+          );
+        }
 
-    await tx.bankTransaction.createMany({
-      data: input.transactions.map((transaction) => ({
-        statementUploadId: statement.id,
-        rowNo: transaction.rowNo,
-        transactionDate: transaction.transactionDate,
-        transactionType: transaction.transactionType,
-        referenceNo: transaction.referenceNo,
-        senderName: transaction.senderName,
-        description: transaction.description,
-        originalAmount: new Prisma.Decimal(transaction.originalAmount),
-        suffixCode: transaction.suffixCode,
-        suggestedEventCodeId: transaction.suggestedEventCodeId,
-        eventCodeId: transaction.eventCodeId,
-        baseAmount: new Prisma.Decimal(transaction.baseAmount),
-        status: "RAW"
-      }))
-    });
+        const statement = await tx.bankStatementUpload.create({
+          data: {
+            bankAccountId: input.bankAccountId,
+            fileName: input.fileName,
+            periodFrom: input.periodFrom,
+            periodTo: input.periodTo,
+            totalTransaction: input.totalTransaction,
+            totalCredit: new Prisma.Decimal(input.totalCredit),
+            totalDebit: new Prisma.Decimal(input.totalDebit),
+            status: "RAW",
+            uploadedById: input.uploadedById
+          },
+          select: { id: true }
+        });
 
-    return statement;
-  });
+        await tx.bankTransaction.createMany({
+          data: input.transactions.map((transaction) => ({
+            statementUploadId: statement.id,
+            rowNo: transaction.rowNo,
+            transactionDate: transaction.transactionDate,
+            transactionType: transaction.transactionType,
+            referenceNo: transaction.referenceNo,
+            senderName: transaction.senderName,
+            description: transaction.description,
+            originalAmount: new Prisma.Decimal(transaction.originalAmount),
+            suffixCode: transaction.suffixCode,
+            suggestedEventCodeId: transaction.suggestedEventCodeId,
+            eventCodeId: transaction.eventCodeId,
+            baseAmount: new Prisma.Decimal(transaction.baseAmount),
+            status: "RAW"
+          }))
+        });
+
+        return statement;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      const retryableConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+      if (!retryableConflict || attempt === 3) throw error;
+    }
+  }
+
+  throw new Error("Statement persistence retry limit reached");
 }
 
 export async function updateTransactionFinalEventAtomic(input: {
+  statementId: string;
   transactionId: string;
   eventCodeId: string | null;
   remark?: string;
   userId: string;
 }) {
   return prisma.$transaction(async (tx) => {
-    const current = await tx.bankTransaction.findUnique({
-      where: { id: input.transactionId },
+    const current = await tx.bankTransaction.findFirst({
+      where: { id: input.transactionId, statementUploadId: input.statementId },
       include: {
         statementUpload: { select: { id: true, status: true } },
         suggestedEventCode: { select: eventCodeSelect },
@@ -220,7 +245,7 @@ export async function updateTransactionFinalEventAtomic(input: {
       }
     });
 
-    if (!current) throw new HttpError(404, "Bank transaction not found");
+    if (!current) throw new HttpError(404, "Bank transaction not found in the selected statement");
     if (current.statementUpload.status !== "RAW") {
       throw new HttpError(409, "This statement is no longer a Draft. Reload the Statement Upload workspace.");
     }
@@ -288,7 +313,8 @@ export async function executeStatementAtomic(input: { statementId: string; userI
         approval: {
           select: {
             id: true,
-            status: true
+            status: true,
+            _count: { select: { approvers: true } }
           }
         }
       }
@@ -349,7 +375,13 @@ export async function executeStatementAtomic(input: { statementId: string; userI
         select: { id: true }
       });
       approvalId = approval.id;
+      await tx.reconciliationApprovalApprover.createMany({
+        data: buildApprovalApproverSnapshot(approvalId, approvalConfig.approvers)
+      });
     } else if (statement.approval.status === "REJECTED") {
+      if (statement.approval._count.approvers === 0) {
+        throw new HttpError(409, LEGACY_APPROVAL_SNAPSHOT_MESSAGE);
+      }
       const approval = await tx.reconciliationApproval.update({
         where: { id: statement.approval.id },
         data: {

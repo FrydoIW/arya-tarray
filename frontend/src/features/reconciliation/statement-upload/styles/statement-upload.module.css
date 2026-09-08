@@ -146,6 +146,41 @@
   font-size: 11px;
 }
 
+.selectionNotice,
+.overlapNotice {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.selectionNotice {
+  color: #667085;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+}
+
+.overlapNotice {
+  display: grid;
+  gap: 3px;
+  color: #8a5a08;
+  background: #fff9e8;
+  border: 1px solid #efdfb0;
+}
+
+.primaryCell {
+  display: grid;
+  gap: 2px;
+  color: #34415d;
+  font-size: 11px;
+}
+
+.primaryCell small {
+  color: #8995aa;
+  font-size: 10px;
+}
+
 .returnNotice strong {
   font-size: 11px;
 }

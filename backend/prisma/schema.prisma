@@ -134,6 +134,7 @@ model User {
   transactionHistory     BankTransactionHistory[]       @relation("TransactionHistoryChangedBy")
   submittedApprovals     ReconciliationApproval[]       @relation("ApprovalSubmittedBy")
   decidedApprovals       ReconciliationApproval[]       @relation("ApprovalDecidedBy")
+  reconciliationApprovalAssignments ReconciliationApprovalApprover[] @relation("ReconciliationApprovalApproverUser")
   approvalHistoryActions          ReconciliationApprovalHistory[] @relation("ApprovalHistoryActionBy")
   createdApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigCreatedBy")
   updatedApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigUpdatedBy")
@@ -329,9 +330,24 @@ model ReconciliationApproval {
   submittedBy     User                             @relation("ApprovalSubmittedBy", fields: [submittedById], references: [id])
   decidedBy       User?                            @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
   history         ReconciliationApprovalHistory[]
+  approvers       ReconciliationApprovalApprover[]
 
   @@index([status, submittedAt])
   @@map("arya_reconciliation_approval")
+}
+
+model ReconciliationApprovalApprover {
+  id         String   @id @default(uuid()) @map("reconciliation_approval_approver_id") @db.Char(36)
+  approvalId String   @map("reconciliation_approval_id") @db.Char(36)
+  userId     String   @map("user_id") @db.Char(36)
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(0)
+
+  approval ReconciliationApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_reconciliation_approval_approver_approval")
+  user     User                   @relation("ReconciliationApprovalApproverUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_reconciliation_approval_approver_user")
+
+  @@unique([approvalId, userId], map: "uk_reconciliation_approval_approver")
+  @@index([userId], map: "idx_reconciliation_approval_approver_user")
+  @@map("arya_reconciliation_approval_approver")
 }
 
 model ReconciliationApprovalHistory {

@@ -14,6 +14,7 @@ import { getDraftRowStatus, requiresEventClassification } from "../utils/stateme
 
 const EMPTY_WORKSPACE: StatementUploadWorkspace = {
   summary: { draftStatements: 0, totalTransactions: 0, needsReview: 0, readyForSubmission: 0 },
+  drafts: [],
   statement: null,
   transactions: [],
   eventCodes: [],
@@ -152,18 +153,23 @@ export function useStatementUploadWorkspace() {
     setError("");
     setMessage("");
     try {
-      const result = await updateDraftTransactionFinalEvent({ transactionId, eventCodeId });
+      const statementId = workspace.statement?.id;
+      if (!statementId) return;
+      const result = await updateDraftTransactionFinalEvent({ statementId, transactionId, eventCodeId });
+      const transactions = workspace.transactions.map((transaction) =>
+        transaction.id === result.transaction.id ? result.transaction : transaction
+      );
       const nextWorkspace = {
         ...workspace,
         summary: result.summary,
-        transactions: workspace.transactions.map((transaction) =>
-          transaction.id === result.transaction.id ? result.transaction : transaction
-        )
+        drafts: workspace.drafts.map((draft) => draft.id === statementId
+          ? { ...draft, needsReview: transactions.filter((transaction) => getDraftRowStatus(transaction) === "NEEDS_REVIEW").length }
+          : draft),
+        transactions
       };
       invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
-      setWorkspaceCache(statementWorkspaceKey(), nextWorkspace);
-      if (nextWorkspace.statement?.id) setWorkspaceCache(statementWorkspaceKey(nextWorkspace.statement.id), nextWorkspace);
+      setWorkspaceCache(statementWorkspaceKey(statementId), nextWorkspace);
       setWorkspace(nextWorkspace);
       setMessage("Final Event saved.");
     } catch (caught) {
@@ -187,7 +193,6 @@ export function useStatementUploadWorkspace() {
       invalidateWorkspaceCache("reconciliation/edit-income/workspace");
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       selectedStatementId.current = next.statement?.id;
-      setWorkspaceCache(statementWorkspaceKey(), next);
       if (next.statement?.id) setWorkspaceCache(statementWorkspaceKey(next.statement.id), next);
       setWorkspace(next);
       setSearchInput("");
@@ -217,13 +222,30 @@ export function useStatementUploadWorkspace() {
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       selectedStatementId.current = next.statement?.id;
       setWorkspaceCache(statementWorkspaceKey(), next);
-      if (next.statement?.id) setWorkspaceCache(statementWorkspaceKey(next.statement.id), next);
       setWorkspace(next);
       setMessage("Draft submitted for approval. Status is now Pending Approval.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to submit the draft for approval.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function selectDraft(statementId: string) {
+    if (busy || loading || statementId === selectedStatementId.current) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await loadWorkspace(statementId);
+      setSearchInput("");
+      setSearch("");
+      setStatusFilter("ALL");
+      setPage(1);
+    } catch (caught) {
+      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to open statement draft.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -246,11 +268,13 @@ export function useStatementUploadWorkspace() {
     canEditDraft,
     canUpload,
     canExecute,
+    selectedStatementId: workspace.statement?.id ?? null,
     setSearch: setSearchInput,
     setStatusFilter,
     setPage,
     setPageSize,
     refresh,
+    selectDraft,
     updateFinalEvent,
     upload,
     execute

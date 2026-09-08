@@ -3,6 +3,7 @@ import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
 import { storedTransactionRequiresClassification } from "../reconciliation-classification.js";
 import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../reconciliation-approval.js";
+import { LEGACY_APPROVAL_SNAPSHOT_MESSAGE } from "../../approval/sign-approval/approval-snapshot.domain.js";
 
 const bankAccountSelect = {
   id: true,
@@ -136,7 +137,8 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
               where: { action: "APPROVED" },
               select: { id: true },
               take: 1
-            }
+            },
+            _count: { select: { approvers: true } }
           }
         },
         transactions: {
@@ -158,6 +160,9 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
     }
     if (!statement.approval || statement.approval.history.length === 0) {
       throw new HttpError(409, "This statement has no previous approved reconciliation result.");
+    }
+    if (statement.approval._count.approvers === 0) {
+      throw new HttpError(409, LEGACY_APPROVAL_SNAPSHOT_MESSAGE);
     }
     if (!["APPROVED", "REJECTED"].includes(statement.approval.status)) {
       throw new HttpError(409, "This statement already has an active approval request. Reload the Edit Income workspace.");

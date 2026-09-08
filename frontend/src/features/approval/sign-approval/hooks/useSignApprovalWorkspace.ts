@@ -11,7 +11,8 @@ const EMPTY_WORKSPACE: SignApprovalWorkspace = {
     pendingApproval: 0,
     approvedToday: 0,
     rejectedToday: 0,
-    totalDecided: 0
+    totalDecided: 0,
+    legacyPendingApproval: 0
   },
   approvals: []
 };

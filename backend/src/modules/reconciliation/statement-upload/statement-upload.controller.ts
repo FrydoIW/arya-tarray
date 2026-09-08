@@ -28,9 +28,9 @@ export async function uploadStatementController(req: Request, res: Response) {
 }
 
 export async function updateFinalEventController(req: Request, res: Response) {
-  const { transactionId } = transactionParamsSchema.parse(req.params);
+  const { statementId, transactionId } = transactionParamsSchema.parse(req.params);
   const input = updateFinalEventSchema.parse(req.body ?? {});
-  res.json(await updateFinalEvent(transactionId, input, req.auth!.userId));
+  res.json(await updateFinalEvent(statementId, transactionId, input, req.auth!.userId));
 }
 
 export async function executeStatementController(req: Request, res: Response) {

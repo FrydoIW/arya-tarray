@@ -49,12 +49,11 @@ export function SignApprovalScreen() {
       {activeTab === "QUEUE" ? (
         <>
           {queue.error ? <div className="ui-alert ui-alert-error">{queue.error}</div> : null}
-          {!queue.loading && !queue.workspace.eligible ? (
-            <div className={styles.accessNotice}>
-              You currently have Sign Approval menu access, but you are not assigned to the active Statement Upload approval configuration.
+          {!queue.loading && queue.workspace.summary.legacyPendingApproval > 0 ? (
+            <div className="ui-alert ui-alert-error">
+              {queue.workspace.summary.legacyPendingApproval} legacy pending approval request(s) have no approver snapshot and cannot be actioned. Resolve them operationally before deploying this feature; no current-configuration fallback is used.
             </div>
           ) : null}
-
           <SignApprovalSummary summary={queue.workspace.summary} />
           <SignApprovalFlow />
           <ApprovalQueueTable

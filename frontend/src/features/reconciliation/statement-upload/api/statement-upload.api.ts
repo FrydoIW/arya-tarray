@@ -25,7 +25,7 @@ export function updateDraftTransactionFinalEvent(
   input: UpdateFinalEventInput
 ): Promise<UpdateFinalEventResponse> {
   return apiFetch<UpdateFinalEventResponse>(
-    `/reconciliation/statement-upload/transactions/${encodeURIComponent(input.transactionId)}/final-event`,
+    `/reconciliation/statement-upload/${encodeURIComponent(input.statementId)}/transactions/${encodeURIComponent(input.transactionId)}/final-event`,
     {
       method: "PATCH",
       body: JSON.stringify({ eventCodeId: input.eventCodeId })

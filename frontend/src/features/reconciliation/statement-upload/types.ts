@@ -30,6 +30,27 @@ export type StatementDraft = {
   uploadedAt: string;
   uploadedBy: string;
   rejectionRemark?: string | null;
+  overlaps: Array<{
+    id: string;
+    fileName: string;
+    periodFrom: string | null;
+    periodTo: string | null;
+    status: StatementLifecycleStatus;
+  }>;
+};
+
+export type StatementDraftListItem = {
+  id: string;
+  bankAccountLabel: string;
+  accountNo: string;
+  fileName: string;
+  periodFrom: string | null;
+  periodTo: string | null;
+  totalTransaction: number;
+  needsReview: number;
+  uploadedBy: string;
+  uploadedAt: string;
+  status: "RAW";
 };
 
 export type DraftTransaction = {
@@ -59,6 +80,7 @@ export type StatementUploadSummary = {
 
 export type StatementUploadWorkspace = {
   summary: StatementUploadSummary;
+  drafts: StatementDraftListItem[];
   statement: StatementDraft | null;
   transactions: DraftTransaction[];
   eventCodes: EventCodeOption[];
@@ -66,6 +88,7 @@ export type StatementUploadWorkspace = {
 };
 
 export type UpdateFinalEventInput = {
+  statementId: string;
   transactionId: string;
   eventCodeId: string | null;
 };

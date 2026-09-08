@@ -186,7 +186,7 @@ export function ApprovalQueueTable({
         loadingText="Loading approval queue…"
         emptyState={{
           title: statusFilter === "PENDING" ? "No pending approvals" : "No approval requests found",
-          description: "Only requests available to your current configured approver access are shown here."
+          description: "Only requests assigned to you when each approval was submitted are shown here."
         }}
         minWidth="1320px"
         pagination={{

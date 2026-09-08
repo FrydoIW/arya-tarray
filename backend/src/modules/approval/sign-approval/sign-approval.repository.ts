@@ -1,19 +1,14 @@
-import type { Prisma } from "@prisma/client";
-import {
-  SIGN_APPROVAL_MENU_CODE,
-  STATEMENT_UPLOAD_APPROVAL_MENU_CODE
-} from "../../../constants/approval.js";
 import { businessDayUtcRange } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
+import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
 const ALREADY_DECIDED_MESSAGE = "This approval request has already been decided. Reload the approval queue.";
 
-type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
-
-const configuredApproverSelect = {
-  approverUser: {
+const snapshotApproverSelect = {
+  userId: true,
+  user: {
     select: {
       id: true,
       fullName: true,
@@ -22,64 +17,6 @@ const configuredApproverSelect = {
     }
   }
 } as const;
-
-function activeStatementApprovalConfigForUser(client: PrismaClientLike, userId: string) {
-  return client.approvalConfig.findFirst({
-    where: {
-      activeFlag: true,
-      menu: {
-        is: {
-          menuCode: STATEMENT_UPLOAD_APPROVAL_MENU_CODE,
-          menuType: "PAGE",
-          activeFlag: true
-        }
-      },
-      approvers: {
-        some: {
-          approverUserId: userId,
-          approverUser: {
-            is: {
-              status: "ACTIVE",
-              userRoles: {
-                some: {
-                  role: {
-                    is: {
-                      activeFlag: true,
-                      roleMenus: {
-                        some: {
-                          menu: {
-                            is: {
-                              menuCode: SIGN_APPROVAL_MENU_CODE,
-                              menuType: "PAGE",
-                              activeFlag: true
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    include: {
-      menu: {
-        select: {
-          id: true,
-          menuCode: true,
-          menuName: true
-        }
-      },
-      approvers: {
-        select: configuredApproverSelect,
-        orderBy: { createdAt: "asc" }
-      }
-    }
-  });
-}
 
 const queueItemInclude = {
   statementUpload: {
@@ -118,64 +55,52 @@ const queueItemInclude = {
 } as const;
 
 export async function loadSignApprovalWorkspace(userId: string) {
-  const config = await activeStatementApprovalConfigForUser(prisma, userId);
-
-  if (!config) {
-    return {
-      eligible: false as const,
-      config: null,
-      summary: {
-        pendingApproval: 0,
-        approvedToday: 0,
-        rejectedToday: 0,
-        totalDecided: 0
-      },
-      approvals: []
-    };
-  }
-
   const { start: today, end: tomorrow } = businessDayUtcRange();
+  const approvalScope = { approvers: { some: { userId } } } as const;
 
-  const [approvals, pendingApproval, approvedToday, rejectedToday, totalDecided] = await Promise.all([
+  const [approvals, pendingApproval, approvedToday, rejectedToday, totalDecided, legacyPendingApproval] = await Promise.all([
     prisma.reconciliationApproval.findMany({
+      where: approvalScope,
       include: queueItemInclude,
       orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }]
     }),
-    prisma.reconciliationApproval.count({ where: { status: "PENDING" } }),
+    prisma.reconciliationApproval.count({ where: { ...approvalScope, status: "PENDING" } }),
     prisma.reconciliationApprovalHistory.count({
       where: {
         action: "APPROVED",
-        actionAt: { gte: today, lt: tomorrow }
+        actionAt: { gte: today, lt: tomorrow },
+        approval: { is: approvalScope }
       }
     }),
     prisma.reconciliationApprovalHistory.count({
       where: {
         action: "REJECTED",
-        actionAt: { gte: today, lt: tomorrow }
+        actionAt: { gte: today, lt: tomorrow },
+        approval: { is: approvalScope }
       }
     }),
     prisma.reconciliationApprovalHistory.count({
-      where: { action: { in: [...DECIDED_STATUSES] } }
+      where: { action: { in: [...DECIDED_STATUSES] }, approval: { is: approvalScope } }
+    }),
+    prisma.reconciliationApproval.count({
+      where: { status: "PENDING", approvers: { none: {} } }
     })
   ]);
 
   return {
     eligible: true as const,
-    config,
     summary: {
       pendingApproval,
       approvedToday,
       rejectedToday,
-      totalDecided
+      totalDecided,
+      legacyPendingApproval
     },
     approvals
   };
 }
 
 export async function loadSignApprovalDetail(approvalId: string, userId: string) {
-  const config = await activeStatementApprovalConfigForUser(prisma, userId);
-  if (!config) return { eligible: false as const, config: null, approval: null, checkedTransactions: 0 };
-
   const approval = await prisma.reconciliationApproval.findUnique({
     where: { id: approvalId },
     include: {
@@ -244,6 +169,10 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
           }
         },
         orderBy: [{ actionAt: "asc" }, { id: "asc" }]
+      },
+      approvers: {
+        select: snapshotApproverSelect,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }]
       }
     }
   });
@@ -251,12 +180,13 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
   if (!approval) {
     return {
       eligible: true as const,
-      config,
       approval: null,
       checkedTransactions: 0,
       needsReviewTransactions: 0
     };
   }
+
+  requireApprovalSnapshotMembership(approval.approvers, userId);
 
   const [checkedTransactions, needsReviewTransactions] = await Promise.all([
     prisma.bankTransaction.count({
@@ -275,8 +205,8 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
 
   return {
     eligible: true as const,
-    config,
     approval,
+    approvers: approval.approvers,
     checkedTransactions,
     needsReviewTransactions
   };
@@ -291,14 +221,6 @@ export async function decideSignApprovalAtomic(input: {
   remark?: string;
 }) {
   return prisma.$transaction(async (tx) => {
-    const config = await activeStatementApprovalConfigForUser(tx, input.userId);
-    if (!config) {
-      throw new HttpError(
-        403,
-        "You are no longer an eligible configured approver for Statement Upload. Reload the approval queue."
-      );
-    }
-
     const current = await tx.reconciliationApproval.findUnique({
       where: { id: input.approvalId },
       select: {
@@ -308,11 +230,13 @@ export async function decideSignApprovalAtomic(input: {
         statementUploadId: true,
         statementUpload: {
           select: { id: true, status: true }
-        }
+        },
+        approvers: { select: { userId: true } }
       }
     });
 
     if (!current) throw new HttpError(404, "Approval request not found");
+    requireApprovalSnapshotMembership(current.approvers, input.userId);
     if (current.status !== "PENDING") throw new HttpError(409, ALREADY_DECIDED_MESSAGE);
     if (current.statementUpload.status !== "CHECK") {
       throw new HttpError(409, "This statement is no longer Pending Approval. Reload the approval queue.");

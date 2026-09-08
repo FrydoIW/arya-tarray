@@ -9,6 +9,7 @@ export const uploadStatementBodySchema = z.object({
 });
 
 export const transactionParamsSchema = z.object({
+  statementId: z.string().uuid(),
   transactionId: z.string().uuid()
 });
 

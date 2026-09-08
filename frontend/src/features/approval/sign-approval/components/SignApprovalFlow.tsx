@@ -8,7 +8,7 @@ export function SignApprovalFlow() {
       <div className={styles.sectionHeading}>
         <div>
           <h2>How sign approval works</h2>
-          <p>Review the submitted statement and make one final decision as an eligible configured approver.</p>
+          <p>Review the submitted statement and make one final decision as an approver assigned at submission time.</p>
         </div>
       </div>
 

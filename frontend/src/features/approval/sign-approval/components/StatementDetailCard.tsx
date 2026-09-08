@@ -47,7 +47,7 @@ export function StatementDetailCard({ detail }: StatementDetailCardProps) {
         </dl>
 
         <div className={styles.approverBlock}>
-          <span>Configured Approvers</span>
+          <span>Approval Approvers (at submission)</span>
           <div className={styles.approverList}>
             {configuredApprovers.map((approver) => (
               <div key={approver.id} className={styles.approverChip}>

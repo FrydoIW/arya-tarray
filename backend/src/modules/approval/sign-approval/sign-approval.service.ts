@@ -71,13 +71,13 @@ function ensureEligibleDetail(records: DetailRecords) {
   if (!records.eligible) {
     throw new HttpError(403, "You are not an eligible configured approver for Statement Upload");
   }
-  if (!records.approval) throw new HttpError(404, "Approval request not found");
-  return records.approval;
+  if (!records.approval || !records.approvers) throw new HttpError(404, "Approval request not found");
+  return { approval: records.approval, approvers: records.approvers };
 }
 
 export async function getSignApprovalDetail(approvalId: string, userId: string) {
   const records = await loadSignApprovalDetailRecord(approvalId, userId);
-  const approval = ensureEligibleDetail(records);
+  const { approval, approvers } = ensureEligibleDetail(records);
   const statement = approval.statementUpload;
 
   return {
@@ -101,10 +101,10 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
       totalTransaction: statement._count.transactions,
       totalAmount: totalAmount(statement.totalCredit, statement.totalDebit)
     },
-    configuredApprovers: records.config!.approvers.map((assignment) => ({
-      id: assignment.approverUser.id,
-      fullName: assignment.approverUser.fullName,
-      email: assignment.approverUser.email
+    configuredApprovers: approvers.map((assignment) => ({
+      id: assignment.user.id,
+      fullName: assignment.user.fullName,
+      email: assignment.user.email
     })),
     summary: {
       totalTransactions: statement._count.transactions,

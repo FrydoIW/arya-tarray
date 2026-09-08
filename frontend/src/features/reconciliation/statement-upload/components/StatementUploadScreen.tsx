@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useStatementUploadWorkspace } from "../hooks/useStatementUploadWorkspace";
 import { DraftReviewSummary } from "./DraftReviewSummary";
 import { DraftTransactionReview } from "./DraftTransactionReview";
+import { DraftStatements } from "./DraftStatements";
 import { DraftWorkspace } from "./DraftWorkspace";
 import { StatementUploadFlow } from "./StatementUploadFlow";
 import { StatementUploadSummary } from "./StatementUploadSummary";
@@ -54,6 +55,13 @@ export function StatementUploadScreen() {
 
       <StatementUploadSummary summary={workspace.workspace.summary} />
       <StatementUploadFlow />
+      <DraftStatements
+        rows={workspace.workspace.drafts}
+        selectedStatementId={workspace.selectedStatementId}
+        loading={workspace.loading}
+        busy={workspace.busy}
+        onOpen={(statementId) => void workspace.selectDraft(statementId)}
+      />
       <DraftWorkspace
         statement={workspace.workspace.statement}
         bankAccounts={workspace.workspace.bankAccounts}
@@ -70,6 +78,7 @@ export function StatementUploadScreen() {
         pageSize={workspace.pageSize}
         loading={workspace.loading}
         disabled={!workspace.canEditDraft || workspace.busy || Boolean(workspace.savingTransactionId)}
+        selectedStatementId={workspace.selectedStatementId}
         onSearchChange={workspace.setSearch}
         onStatusFilterChange={workspace.setStatusFilter}
         onPageChange={workspace.setPage}

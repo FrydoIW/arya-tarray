@@ -14,7 +14,7 @@ const statementUpload = createMemoryUpload(50);
 statementUploadRouter.get("/workspace", asyncHandler(getStatementUploadWorkspaceController));
 statementUploadRouter.post("/upload", statementUpload.single("file"), asyncHandler(uploadStatementController));
 statementUploadRouter.patch(
-  "/transactions/:transactionId/final-event",
+  "/:statementId/transactions/:transactionId/final-event",
   asyncHandler(updateFinalEventController)
 );
 statementUploadRouter.post("/:statementId/execute", asyncHandler(executeStatementController));

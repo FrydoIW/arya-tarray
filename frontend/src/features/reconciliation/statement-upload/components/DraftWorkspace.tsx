@@ -43,12 +43,21 @@ export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, upload
   return (
     <CollapsibleSection
       className="ui-card"
-      title="Draft Workspace"
-      description="Upload a BCA statement workbook, then review the persisted draft transactions returned by the backend."
-      summary={statement ? getStatementStatusLabel(statement.status) : "No active draft"}
+      title="Selected Draft Workspace"
+      description="Upload a new BCA workbook or inspect the RAW statement selected from Draft Statements."
+      summary={statement ? getStatementStatusLabel(statement.status) : "No draft selected"}
       defaultExpanded={false}
     >
       <div className={styles.workspaceCard}>
+      {!statement ? (
+        <div className={styles.selectionNotice}>No draft selected. Select a statement draft above to continue.</div>
+      ) : null}
+      {statement?.overlaps?.length ? (
+        <div className={styles.overlapNotice}>
+          <strong>Overlapping statement period detected</strong>
+          <span>This draft overlaps {statement.overlaps.map((item) => `${item.id} (${item.fileName})`).join(", ")} for the same bank account. The drafts remain separate; verify the source evidence before Execute.</span>
+        </div>
+      ) : null}
       {statement?.rejectionRemark ? (
         <div className={styles.returnNotice}>
           <strong>Returned for correction</strong>

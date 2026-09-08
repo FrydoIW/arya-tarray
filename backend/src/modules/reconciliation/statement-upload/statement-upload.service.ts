@@ -12,7 +12,6 @@ import type { UpdateFinalEventInput } from "./statement-upload.schema.js";
 import {
   executeStatementAtomic,
   findActiveBankAccount,
-  findPotentialDuplicateStatement,
   listActiveEventCodesForClassification,
   loadRawStatementsForSummary,
   loadStatementUploadWorkspaceRecords,
@@ -93,6 +92,24 @@ function mapWorkspace(records: WorkspaceRecords) {
   const statement = records.currentStatement;
   return {
     summary: mapSummary(records.rawStatements),
+    drafts: records.rawStatements.map((draft) => {
+      const needsReview = draft.transactions.filter((transaction) =>
+        storedTransactionRequiresClassification(transaction) && !transaction.eventCodeId
+      ).length;
+      return {
+        id: draft.id,
+        bankAccountLabel: `${draft.bankAccount.bankName} - ${draft.bankAccount.accountName}`,
+        accountNo: draft.bankAccount.accountNo,
+        fileName: draft.fileName,
+        periodFrom: draft.periodFrom,
+        periodTo: draft.periodTo,
+        totalTransaction: draft.totalTransaction,
+        needsReview,
+        uploadedBy: draft.uploadedBy.fullName,
+        uploadedAt: draft.uploadedAt,
+        status: draft.status
+      };
+    }),
     statement: statement
       ? {
           id: statement.id,
@@ -108,7 +125,8 @@ function mapWorkspace(records: WorkspaceRecords) {
           status: statement.status,
           uploadedAt: statement.uploadedAt,
           uploadedBy: statement.uploadedBy.fullName,
-          rejectionRemark: statement.approval?.status === "REJECTED" ? statement.approval.remark : null
+          rejectionRemark: statement.approval?.status === "REJECTED" ? statement.approval.remark : null,
+          overlaps: records.overlappingStatements
         }
       : null,
     transactions: statement ? statement.transactions.map(mapTransaction) : [],
@@ -126,7 +144,11 @@ function mapWorkspace(records: WorkspaceRecords) {
 }
 
 export async function getStatementUploadWorkspace(statementId?: string) {
-  return mapWorkspace(await loadStatementUploadWorkspaceRecords(statementId));
+  const records = await loadStatementUploadWorkspaceRecords(statementId);
+  if (statementId && !records.currentStatement) {
+    throw new HttpError(404, "RAW statement draft not found. Reload the draft list.");
+  }
+  return mapWorkspace(records);
 }
 
 function assertUploadFile(file: Express.Multer.File | undefined) {
@@ -232,23 +254,6 @@ export async function uploadStatement(input: {
   const totalCredit = centsToDecimalString(totalCreditCents);
   const totalDebit = centsToDecimalString(totalDebitCents);
 
-  const duplicate = await findPotentialDuplicateStatement({
-    bankAccountId: bankAccount.id,
-    fileName: file.originalname,
-    periodFrom: parsed.periodFrom,
-    periodTo: parsed.periodTo,
-    totalTransaction: transactions.length,
-    totalCredit,
-    totalDebit
-  });
-
-  if (duplicate) {
-    throw new HttpError(
-      409,
-      `A matching statement batch already exists (${duplicate.id}). Reload the workspace instead of uploading it again.`
-    );
-  }
-
   const statement = await persistParsedStatement({
     bankAccountId: bankAccount.id,
     fileName: file.originalname,
@@ -265,11 +270,13 @@ export async function uploadStatement(input: {
 }
 
 export async function updateFinalEvent(
+  statementId: string,
   transactionId: string,
   input: UpdateFinalEventInput,
   userId: string
 ) {
   const updatedTransaction = await updateTransactionFinalEventAtomic({
+    statementId,
     transactionId,
     eventCodeId: input.eventCodeId,
     remark: input.remark,
@@ -285,5 +292,5 @@ export async function updateFinalEvent(
 
 export async function executeStatement(statementId: string, userId: string) {
   await executeStatementAtomic({ statementId, userId });
-  return getStatementUploadWorkspace(statementId);
+  return getStatementUploadWorkspace();
 }
