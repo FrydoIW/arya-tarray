@@ -7,6 +7,7 @@ import { executeUserWorkspace, getUserWorkspace } from "../api/user.api";
 import type {
   AddUserDraftInput,
   UserItem,
+  UserMode,
   UserStatus,
   UserStatusFilter,
   UserWorkspace
@@ -30,6 +31,7 @@ export function useUsers() {
   const [passwordResets, setPasswordResets] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("ALL");
+  const [mode, setMode] = useState<UserMode>("INQUIRY");
   const [loading, setLoading] = useState(initialWorkspace === EMPTY_WORKSPACE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +42,7 @@ export function useUsers() {
     setServerWorkspace(workspace);
     setWorkingUsers(workspace.users);
     setPasswordResets({});
+    setMode("INQUIRY");
   }, []);
 
   const load = useCallback(async (force = false, consumerSignal?: AbortSignal) => {
@@ -199,8 +202,18 @@ export function useUsers() {
   function clearChanges() {
     setWorkingUsers(serverWorkspace.users);
     setPasswordResets({});
+    setMode("INQUIRY");
     setError("");
     setMessage("Unsaved changes cleared.");
+  }
+
+  function changeMode(nextMode: UserMode) {
+    if (nextMode === "INQUIRY" && dirty) {
+      setError("User Master has unsaved changes. Use Clear to discard them before returning to Inquiry mode.");
+      setMessage("");
+      return;
+    }
+    setMode(nextMode);
   }
 
   function prepareExecute() {
@@ -292,6 +305,8 @@ export function useUsers() {
     setSearch,
     statusFilter,
     setStatusFilter,
+    mode,
+    changeMode,
     loading,
     saving,
     error,

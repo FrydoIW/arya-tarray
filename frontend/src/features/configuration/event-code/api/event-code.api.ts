@@ -1,5 +1,5 @@
-import { apiFetch } from "@/lib/api";
-import type { EventCode, EventCodeExecutePayload, EventCodeUser } from "../types";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
+import type { EventCode, EventCodeBulkPreview, EventCodeExecutePayload, EventCodeUser } from "../types";
 
 type EventCodeApiUser = {
   id: string;
@@ -58,4 +58,22 @@ export async function executeEventCodeChanges(payload: EventCodeExecutePayload) 
     changedCount: result.changedCount,
     items: result.items.map(mapEventCode)
   };
+}
+
+export async function getEventCodeTemplate() {
+  const { blob } = await apiFetchBlob("/configuration/event-codes/template");
+  return {
+    blob,
+    fileName: "arya-tarray-event-code-template.xlsx"
+  };
+}
+
+export function previewEventCodeBulkUpload(file: File, stagedCodes: string[]) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("stagedCodes", JSON.stringify(stagedCodes));
+  return apiFetch<EventCodeBulkPreview>("/configuration/event-codes/bulk-preview", {
+    method: "POST",
+    body: form
+  });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Download, Eye, PencilLine, Plus, RefreshCw, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
@@ -9,17 +9,22 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDateTime } from "@/lib/format";
-import type { EventCode, EventCodeStatusFilter } from "../types";
+import type { EventCode, EventCodeMode, EventCodeStatusFilter } from "../types";
 import styles from "../styles/event-code.module.css";
 
 type EventCodeTableProps = {
   items: EventCode[];
   search: string;
   statusFilter: EventCodeStatusFilter;
+  mode: EventCodeMode;
   loading: boolean;
   disabled: boolean;
+  templateDownloading: boolean;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: EventCodeStatusFilter) => void;
+  onModeChange: (mode: EventCodeMode) => void;
+  onDownloadTemplate: () => void;
+  onBulkUpload: () => void;
   onReload: () => void;
   onCellChange: (id: string, field: string, value: unknown) => void;
   onDelete: (id: string) => void;
@@ -31,10 +36,15 @@ export function EventCodeTable({
   items,
   search,
   statusFilter,
+  mode,
   loading,
   disabled,
+  templateDownloading,
   onSearchChange,
   onStatusFilterChange,
+  onModeChange,
+  onDownloadTemplate,
+  onBulkUpload,
   onReload,
   onCellChange,
   onDelete,
@@ -56,28 +66,29 @@ export function EventCodeTable({
       width: "150px",
       minWidth: "140px",
       sticky: "left",
-      editable: true,
+      editable: mode === "EDIT",
+      render: (row) => <span className={styles.eventCodeText}>{row.code}</span>,
       placeholder: "000"
     },
     {
       key: "eventName",
       header: "Event Name",
       minWidth: "240px",
-      editable: true,
+      editable: mode === "EDIT",
       placeholder: "Event name"
     },
     {
       key: "category",
       header: "Category",
       minWidth: "180px",
-      editable: true,
+      editable: mode === "EDIT",
       placeholder: "e.g. RUPANG"
     },
     {
       key: "description",
       header: "Description",
       minWidth: "380px",
-      editable: true,
+      editable: mode === "EDIT",
       placeholder: "Optional description"
     },
     {
@@ -85,7 +96,13 @@ export function EventCodeTable({
       header: "Status",
       width: "160px",
       minWidth: "150px",
-      editable: true,
+      editable: mode === "EDIT",
+      render: (row) => (
+        <span className={`${styles.statusBadge} ${row.activeFlag ? styles.active : styles.inactive}`}>
+          <span className={styles.statusDot} />
+          {row.activeFlag ? "Active" : "Inactive"}
+        </span>
+      ),
       renderEditor: ({ value, onChange }) => (
         <label className={`${styles.statusSelect} ${Boolean(value) ? styles.active : styles.inactive}`}>
           <span className={styles.statusDot} />
@@ -125,22 +142,66 @@ export function EventCodeTable({
             label={row.isDraft ? "Remove draft row" : `Delete Event Code ${row.code}`}
             icon={<Trash2 size={16} />}
             variant="danger"
-            disabled={disabled}
+            disabled={disabled || mode !== "EDIT"}
             onClick={() => onDelete(row.id)}
           />
         </div>
       )
     }
-  ], [disabled, onDelete]);
+  ], [disabled, mode, onDelete]);
 
   return (
     <CollapsibleSection
       className={styles.tablePanel}
       title="Event Code Master"
-      description="Edit rows directly. Add, edit, status changes, and delete are only saved after Execute."
+      description="Review current values in Inquiry, or use Edit Event Codes to stage changes. Nothing is saved until Execute."
       summary={`${totalCount} event codes`}
       defaultExpanded={false}
       actions={<div className={styles.tableToolbar}>
+          <div className={styles.toolbarGroup}>
+            <Button
+              type="button"
+              variant={mode === "INQUIRY" ? "primary" : "secondary"}
+              size="sm"
+              icon={<Eye size={15} />}
+              onClick={() => onModeChange("INQUIRY")}
+              disabled={loading || disabled}
+            >
+              Inquiry
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "EDIT" ? "primary" : "secondary"}
+              size="sm"
+              icon={<PencilLine size={15} />}
+              onClick={() => onModeChange("EDIT")}
+              disabled={loading || disabled}
+            >
+              Edit Event Codes
+            </Button>
+          </div>
+          <div className={styles.toolbarGroup}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              icon={<Download size={15} />}
+              onClick={onDownloadTemplate}
+              disabled={loading || disabled || templateDownloading}
+            >
+              {templateDownloading ? "Downloading..." : "Download Template"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              icon={<UploadCloud size={15} />}
+              onClick={onBulkUpload}
+              disabled={loading || disabled || mode !== "EDIT"}
+            >
+              Bulk Upload
+            </Button>
+          </div>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -181,7 +242,7 @@ export function EventCodeTable({
         columns={columns}
         rowKey={(row) => row.id}
         loading={loading}
-        disabled={disabled}
+        disabled={disabled || mode !== "EDIT"}
         minWidth="1600px"
         emptyState={{
           title: "No event codes found",
@@ -202,7 +263,7 @@ export function EventCodeTable({
           <Button type="button" variant="outline" size="sm" icon={<Plus size={16} />} onClick={() => {
             onAdd();
             setPage(Math.max(1, Math.ceil((totalCount + 1) / pageSize)));
-          }} disabled={disabled}>
+          }} disabled={disabled || mode !== "EDIT"}>
             Add
           </Button>
         )}

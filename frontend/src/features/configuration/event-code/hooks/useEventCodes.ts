@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import { executeEventCodeChanges, getEventCodes } from "../api/event-code.api";
-import type { EventCode, EventCodeInput, EventCodeStatusFilter } from "../types";
+import type { EventCode, EventCodeInput, EventCodeMode, EventCodeStatusFilter } from "../types";
 
 function normalizeInput(item: EventCode): EventCodeInput {
   return {
@@ -55,6 +55,7 @@ export function useEventCodes() {
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EventCodeStatusFilter>("ALL");
+  const [mode, setMode] = useState<EventCodeMode>("INQUIRY");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -69,6 +70,7 @@ export function useEventCodes() {
       setServerItems(items);
       setWorkingItems(items);
       setDeletedIds([]);
+      setMode("INQUIRY");
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load event codes");
@@ -162,6 +164,30 @@ export function useEventCodes() {
     return id;
   }
 
+  function addBulkDrafts(inputs: EventCodeInput[]) {
+    if (mode !== "EDIT" || inputs.length === 0) return false;
+    const usedCodes = new Set(workingItems.map((item) => item.code.trim()).filter(Boolean));
+    for (const input of inputs) {
+      const code = input.code.trim();
+      if (usedCodes.has(code)) {
+        setError(`Event Code ${code} already exists in the current workspace.`);
+        setMessage("");
+        return false;
+      }
+      usedCodes.add(code);
+    }
+    const drafts: EventCode[] = inputs.map((input) => ({
+      id: `draft-${crypto.randomUUID()}`,
+      ...input,
+      updatedBy: null,
+      isDraft: true
+    }));
+    setWorkingItems((current) => [...current, ...drafts]);
+    setMessage(`${drafts.length} Event Code draft${drafts.length === 1 ? "" : "s"} added. Execute to save.`);
+    setError("");
+    return true;
+  }
+
   function removeRow(id: string) {
     const target = workingItems.find((item) => item.id === id);
     if (!target) return;
@@ -181,8 +207,18 @@ export function useEventCodes() {
   function clearChanges() {
     setWorkingItems(serverItems);
     setDeletedIds([]);
+    setMode("INQUIRY");
     setMessage("Unsaved changes cleared.");
     setError("");
+  }
+
+  function changeMode(nextMode: EventCodeMode) {
+    if (nextMode === "INQUIRY" && dirty) {
+      setError("Event Code Master has unsaved changes. Use Clear to discard them before returning to Inquiry mode.");
+      setMessage("");
+      return;
+    }
+    setMode(nextMode);
   }
 
   function prepareExecute() {
@@ -241,6 +277,7 @@ export function useEventCodes() {
       setServerItems(result.items);
       setWorkingItems(result.items);
       setDeletedIds([]);
+      setMode("INQUIRY");
       setMessage(`${result.changedCount} change${result.changedCount === 1 ? "" : "s"} successfully executed.`);
       return true;
     } catch (err) {
@@ -260,6 +297,8 @@ export function useEventCodes() {
     setSearch,
     statusFilter,
     setStatusFilter,
+    mode,
+    changeMode,
     loading,
     saving,
     error,
@@ -267,6 +306,7 @@ export function useEventCodes() {
     refresh: reloadFromDatabase,
     updateCell,
     addDraft,
+    addBulkDrafts,
     removeRow,
     clearChanges,
     prepareExecute,

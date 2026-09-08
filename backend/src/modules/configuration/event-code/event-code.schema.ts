@@ -7,7 +7,7 @@ const category = z
   .optional()
   .transform((value) => value || null);
 
-const eventCodeExecuteValueSchema = z.object({
+export const eventCodeExecuteValueSchema = z.object({
   code,
   eventName,
   category,
@@ -31,6 +31,18 @@ export const eventCodeExecuteSchema = z
 
 export const eventCodeListSchema = z.object({
   search: z.string().trim().optional()
+});
+
+export const eventCodeBulkPreviewBodySchema = z.object({
+  stagedCodes: z.preprocess((value) => {
+    if (value === undefined || value === "") return [];
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }, z.array(code).max(1000))
 });
 
 export type EventCodeExecuteInput = z.infer<typeof eventCodeExecuteSchema>;

@@ -62,10 +62,12 @@ export function UserScreen() {
         roles={users.roles}
         search={users.search}
         statusFilter={users.statusFilter}
+        mode={users.mode}
         loading={users.loading}
         disabled={users.saving}
         onSearchChange={users.setSearch}
         onStatusFilterChange={users.setStatusFilter}
+        onModeChange={users.changeMode}
         onReload={() => void users.refresh()}
         onCellChange={users.updateCell}
         onRemoveDraft={users.removeDraft}

@@ -1,5 +1,6 @@
 export type UserStatus = "ACTIVE" | "INACTIVE";
 export type UserStatusFilter = "ALL" | UserStatus;
+export type UserMode = "INQUIRY" | "EDIT";
 
 export type AuditUser = {
   id: string;

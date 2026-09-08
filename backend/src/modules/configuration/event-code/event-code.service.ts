@@ -1,5 +1,6 @@
 import { HttpError } from "../../../lib/http.js";
 import type { EventCodeExecuteInput } from "./event-code.schema.js";
+import { createEventCodeTemplate, parseEventCodeBulkWorkbook } from "./event-code.workbook.js";
 import {
   applyEventCodeChangesAtomic,
   findEventCodeUsage,
@@ -38,6 +39,35 @@ function toResponse(item: EventCodeRecord) {
 export async function listEventCodes(search?: string) {
   const items = await listEventCodeRecords(search);
   return items.map(toResponse);
+}
+
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+export async function downloadEventCodeTemplate() {
+  return createEventCodeTemplate();
+}
+
+export async function previewEventCodeBulkUpload(input: {
+  file?: Express.Multer.File;
+  stagedCodes: string[];
+}) {
+  const file = input.file;
+  if (!file) throw new HttpError(400, "Choose an XLSX workbook to upload.");
+  if (file.size <= 0) throw new HttpError(400, "The uploaded workbook is empty.");
+  if (!file.originalname.toLowerCase().endsWith(".xlsx")) {
+    throw new HttpError(400, "Unsupported file type. Please upload an .xlsx workbook.");
+  }
+  if (file.mimetype !== XLSX_MIME && file.mimetype !== "application/octet-stream") {
+    throw new HttpError(400, "Unsupported file type. Please upload a valid XLSX workbook.");
+  }
+
+  const existingItems = await listEventCodeRecords();
+  const preview = await parseEventCodeBulkWorkbook(file.buffer, {
+    existingCodes: existingItems.map((item) => item.code),
+    stagedCodes: input.stagedCodes
+  });
+  const fileName = file.originalname.split(/[\\/]/).pop() || "event-codes.xlsx";
+  return { fileName, ...preview };
 }
 
 export async function executeEventCodeChanges(input: EventCodeExecuteInput, userId: string) {

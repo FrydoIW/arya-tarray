@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Eye, KeyRound, PencilLine, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
@@ -9,7 +9,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDateTime } from "@/lib/format";
-import type { UserItem, UserRoleOption, UserStatus, UserStatusFilter } from "../types";
+import type { UserItem, UserMode, UserRoleOption, UserStatus, UserStatusFilter } from "../types";
 import styles from "../styles/user.module.css";
 
 type UserTableProps = {
@@ -18,10 +18,12 @@ type UserTableProps = {
   roles: UserRoleOption[];
   search: string;
   statusFilter: UserStatusFilter;
+  mode: UserMode;
   loading: boolean;
   disabled: boolean;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: UserStatusFilter) => void;
+  onModeChange: (mode: UserMode) => void;
   onReload: () => void;
   onCellChange: (id: string, field: string, value: unknown) => void;
   onRemoveDraft: (id: string) => void;
@@ -36,10 +38,12 @@ export function UserTable({
   roles,
   search,
   statusFilter,
+  mode,
   loading,
   disabled,
   onSearchChange,
   onStatusFilterChange,
+  onModeChange,
   onReload,
   onCellChange,
   onRemoveDraft,
@@ -61,24 +65,28 @@ export function UserTable({
       header: "Full Name",
       minWidth: "245px",
       sticky: "left",
-      editable: (row) => Boolean(row.isDraft) || row.roleCount <= 1,
+      editable: (row) => mode === "EDIT" && (Boolean(row.isDraft) || row.roleCount <= 1),
       placeholder: "Full name"
     },
     {
       key: "email",
       header: "Email",
       minWidth: "265px",
-      editable: (row) => Boolean(row.isDraft) || row.roleCount <= 1,
+      editable: (row) => mode === "EDIT" && (Boolean(row.isDraft) || row.roleCount <= 1),
       placeholder: "name@aryatarray.local"
     },
     {
       key: "roleId",
       header: "Role",
       minWidth: "210px",
-      editable: (row) => Boolean(row.isDraft) || row.roleCount <= 1,
+      editable: (row) => mode === "EDIT" && (Boolean(row.isDraft) || row.roleCount <= 1),
       render: (row) => (
         <span className={`${styles.readOnlyRole} ${row.role?.activeFlag === false ? styles.roleInactiveText : ""}`}>
-          {row.roleCount > 1 ? `Multiple roles (${row.roleCount})` : (row.role?.roleCode ?? "No role")}
+          {row.roleCount > 1
+            ? `Multiple roles (${row.roleCount})`
+            : row.role
+              ? `${row.role.roleCode} — ${row.role.roleName}`
+              : "No role"}
         </span>
       ),
       renderEditor: ({ value, onChange }) => {
@@ -106,7 +114,7 @@ export function UserTable({
       header: "Status",
       width: "155px",
       minWidth: "145px",
-      editable: (row) => Boolean(row.isDraft) || row.roleCount <= 1,
+      editable: (row) => mode === "EDIT" && (Boolean(row.isDraft) || row.roleCount <= 1),
       render: (row) => (
         <span className={`${styles.readOnlyStatus} ${row.status === "ACTIVE" ? styles.active : styles.inactive}`}>
           <span className={styles.statusDot} />
@@ -120,7 +128,7 @@ export function UserTable({
             <span className={styles.statusDot} />
             <select
               value={active ? "ACTIVE" : "INACTIVE"}
-              disabled={disabled}
+              disabled={disabled || mode !== "EDIT"}
               onChange={(event) => onChange(event.target.value as UserStatus)}
             >
               <option value="ACTIVE">Active</option>
@@ -168,7 +176,7 @@ export function UserTable({
               <IconButton
                 label={hasPasswordReset(row.id) ? `Password reset staged for ${row.fullName}` : `Reset password for ${row.fullName}`}
                 icon={<KeyRound size={16} />}
-                disabled={disabled}
+                disabled={disabled || mode !== "EDIT"}
                 onClick={() => onResetPassword(row)}
               />
               {hasPasswordReset(row.id) ? <i className={styles.pendingDot} aria-hidden="true" /> : null}
@@ -177,7 +185,7 @@ export function UserTable({
         </div>
       )
     }
-  ], [disabled, hasPasswordReset, onRemoveDraft, onResetPassword, roles]);
+  ], [disabled, hasPasswordReset, mode, onRemoveDraft, onResetPassword, roles]);
 
   return (
     <CollapsibleSection
@@ -187,6 +195,26 @@ export function UserTable({
       summary={`${allItems.length} users`}
       defaultExpanded={false}
       actions={<div className={styles.tableToolbar}>
+          <Button
+            type="button"
+            variant={mode === "INQUIRY" ? "primary" : "secondary"}
+            size="sm"
+            icon={<Eye size={15} />}
+            onClick={() => onModeChange("INQUIRY")}
+            disabled={loading || disabled}
+          >
+            Inquiry
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "EDIT" ? "primary" : "secondary"}
+            size="sm"
+            icon={<PencilLine size={15} />}
+            onClick={() => onModeChange("EDIT")}
+            disabled={loading || disabled}
+          >
+            Edit Users
+          </Button>
           <SearchInput
             value={search}
             onChange={(event) => {
@@ -227,7 +255,7 @@ export function UserTable({
         columns={columns}
         rowKey={(row) => row.id}
         loading={loading}
-        disabled={disabled}
+        disabled={disabled || mode !== "EDIT"}
         minWidth="1430px"
         emptyState={{
           title: "No users found",
@@ -254,7 +282,7 @@ export function UserTable({
               onAdd();
               setPage(Math.max(1, Math.ceil((allItems.length + 1) / pageSize)));
             }}
-            disabled={disabled}
+            disabled={disabled || mode !== "EDIT"}
           >
             Add
           </Button>
