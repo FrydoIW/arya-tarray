@@ -320,9 +320,11 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
         date: formatDate(transaction.transactionDate),
         description: transaction.description ?? transaction.senderName ?? "-",
         referenceNo: transaction.referenceNo ?? "-",
-        type: decimalToCents(transaction.originalAmount) >= 0n ? "Credit" : "Debit",
+        type: decimalToCents(transaction.originalAmount) >= 0n ? "Incoming" : "Outgoing",
         amount: formatIdr(absDecimal(transaction.originalAmount)),
-        finalEvent: transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}` : "N/A",
+        finalEvent: decimalToCents(transaction.originalAmount) < 0n
+          ? "Outgoing"
+          : transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}` : "N/A",
         member: member ? `${member.memberCode} - ${member.memberName}${member.activeFlag ? "" : " (Inactive)"}` : "Belum Terhubung",
         status: statusLabel(transaction.status)
       };

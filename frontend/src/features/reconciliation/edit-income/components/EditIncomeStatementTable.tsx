@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Pencil, RotateCw } from "lucide-react";
+import { Eye, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
@@ -36,7 +37,7 @@ type Props = {
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onReload: () => void;
-  onEdit: (statementId: string) => void;
+  onOpen: (statementId: string) => void;
 };
 
 export function EditIncomeStatementTable(props: Props) {
@@ -69,7 +70,7 @@ export function EditIncomeStatementTable(props: Props) {
     {
       key: "totalTransaction",
       header: "Transactions",
-      minWidth: "110px",
+      minWidth: "76px",
       align: "right"
     },
     {
@@ -96,19 +97,16 @@ export function EditIncomeStatementTable(props: Props) {
       sticky: "right",
       align: "center",
       render: (row) => (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          icon={<Pencil size={13} />}
+        <IconButton
+          label={row.editable ? "Open statement" : "Statement pending re-approval"}
+          title={row.editable ? "Open statement" : "Statement pending re-approval"}
+          icon={<Eye size={15} />}
           disabled={!row.editable || props.busy}
-          onClick={() => props.onEdit(row.id)}
-        >
-          {row.editable ? "Edit" : "Pending"}
-        </Button>
+          onClick={() => props.onOpen(row.id)}
+        />
       )
     }
-  ], [props.busy, props.onEdit]);
+  ], [props.busy, props.onOpen]);
 
   const context = periodContext(props.periodMode, props.month, props.date);
 

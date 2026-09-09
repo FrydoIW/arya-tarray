@@ -135,6 +135,11 @@ model User {
   submittedApprovals     ReconciliationApproval[]       @relation("ApprovalSubmittedBy")
   decidedApprovals       ReconciliationApproval[]       @relation("ApprovalDecidedBy")
   reconciliationApprovalAssignments ReconciliationApprovalApprover[] @relation("ReconciliationApprovalApproverUser")
+  proposedReconciliationCorrections ReconciliationCorrectionProposal[] @relation("ReconciliationCorrectionProposedBy")
+  decidedReconciliationCorrections ReconciliationCorrectionProposal[] @relation("ReconciliationCorrectionDecidedBy")
+  reconciliationCorrectionAssignments ReconciliationCorrectionApprover[] @relation("ReconciliationCorrectionApproverUser")
+  manualBankTransactions BankTransaction[] @relation("BankTransactionManualAddedBy")
+  excludedBankTransactions BankTransaction[] @relation("BankTransactionExcludedBy")
   approvalHistoryActions          ReconciliationApprovalHistory[] @relation("ApprovalHistoryActionBy")
   createdApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigCreatedBy")
   updatedApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigUpdatedBy")
@@ -212,6 +217,8 @@ model EventCode {
   updatedBy             User?             @relation("EventCodeUpdatedBy", fields: [updatedById], references: [id])
   suggestedTransactions BankTransaction[] @relation("SuggestedEventCode")
   transactions          BankTransaction[] @relation("FinalEventCode")
+  correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCode")
+  correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCode")
 
   @@map("arya_event_code")
 }
@@ -223,6 +230,9 @@ model BankAccount {
   accountNo    String   @map("account_no") @db.VarChar(100)
   accountName  String   @map("account_name") @db.VarChar(200)
   currencyCode String   @default("IDR") @map("currency_code") @db.Char(3)
+  openingBalance         Decimal?  @map("opening_balance") @db.Decimal(19, 2)
+  openingBalanceDate     DateTime? @map("opening_balance_date") @db.Date
+  openingBalanceLockedAt DateTime? @map("opening_balance_locked_at") @db.DateTime(3)
   activeFlag   Boolean  @default(true) @map("active_flag")
   createdById  String?  @map("created_by") @db.Char(36)
   updatedById  String?  @map("updated_by") @db.Char(36)
@@ -264,6 +274,7 @@ model BankStatementUpload {
   finalizedBy User?       @relation("StatementFinalizedBy", fields: [finalizedById], references: [id])
   transactions BankTransaction[]
   approval     ReconciliationApproval?
+  correctionProposals ReconciliationCorrectionProposal[]
 
   @@map("arya_bank_statement_upload")
 }
@@ -287,14 +298,27 @@ model BankTransaction {
   baseAmount           Decimal?  @map("base_amount") @db.Decimal(20, 2)
   status               String    @default("RAW") @db.VarChar(20)
   remark               String?   @db.VarChar(1000)
+  sourceType           String    @default("BANK") @map("source_type") @db.VarChar(20)
+  correctionReason     String?   @map("correction_reason") @db.VarChar(1000)
+  manualAddedAt        DateTime? @map("manual_added_at") @db.DateTime(0)
+  manualAddedById      String?   @map("manual_added_by") @db.Char(36)
+  reconciliationExcludedAt DateTime? @map("reconciliation_excluded_at") @db.DateTime(0)
+  reconciliationExcludedById String? @map("reconciliation_excluded_by") @db.Char(36)
+  reconciliationExclusionReason String? @map("reconciliation_exclusion_reason") @db.VarChar(1000)
   createdAt            DateTime  @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt            DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
 
   statementUpload    BankStatementUpload       @relation(fields: [statementUploadId], references: [id])
   suggestedEventCode EventCode?                @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
   eventCode          EventCode?                @relation("FinalEventCode", fields: [eventCodeId], references: [id])
+  manualAddedBy      User?                     @relation("BankTransactionManualAddedBy", fields: [manualAddedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_manual_added_by")
+  reconciliationExcludedBy User?               @relation("BankTransactionExcludedBy", fields: [reconciliationExcludedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_excluded_by")
   history            BankTransactionHistory[]
+  correctionItems    ReconciliationCorrectionItem[]
 
+  @@index([manualAddedById], map: "idx_bank_transaction_manual_added_by")
+  @@index([reconciliationExcludedAt], map: "idx_bank_transaction_reconciliation_excluded")
+  @@index([reconciliationExcludedById], map: "idx_bank_transaction_excluded_by")
   @@map("arya_bank_transaction")
 }
 
@@ -331,6 +355,7 @@ model ReconciliationApproval {
   decidedBy       User?                            @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
   history         ReconciliationApprovalHistory[]
   approvers       ReconciliationApprovalApprover[]
+  correctionProposals ReconciliationCorrectionProposal[]
 
   @@index([status, submittedAt])
   @@map("arya_reconciliation_approval")
@@ -348,6 +373,74 @@ model ReconciliationApprovalApprover {
   @@unique([approvalId, userId], map: "uk_reconciliation_approval_approver")
   @@index([userId], map: "idx_reconciliation_approval_approver_user")
   @@map("arya_reconciliation_approval_approver")
+}
+
+model ReconciliationCorrectionProposal {
+  id                String    @id @default(uuid()) @map("correction_proposal_id") @db.Char(36)
+  approvalId        String    @map("approval_id") @db.Char(36)
+  statementUploadId String    @map("statement_upload_id") @db.Char(36)
+  status            String    @default("PENDING") @db.VarChar(20)
+  proposedAt        DateTime  @default(now()) @map("proposed_at") @db.DateTime(0)
+  proposedById      String    @map("proposed_by") @db.Char(36)
+  decidedAt         DateTime? @map("decided_at") @db.DateTime(0)
+  decidedById       String?   @map("decided_by") @db.Char(36)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
+
+  approval       ReconciliationApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_approval")
+  statementUpload BankStatementUpload @relation(fields: [statementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_statement")
+  proposedBy     User @relation("ReconciliationCorrectionProposedBy", fields: [proposedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_proposed_by")
+  decidedBy      User? @relation("ReconciliationCorrectionDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_decided_by")
+  items          ReconciliationCorrectionItem[]
+  approvers      ReconciliationCorrectionApprover[]
+
+  @@index([approvalId, status], map: "idx_correction_proposal_approval_status")
+  @@index([statementUploadId, status], map: "idx_correction_proposal_statement_status")
+  @@index([proposedById], map: "idx_correction_proposal_proposed_by")
+  @@index([decidedById], map: "idx_correction_proposal_decided_by")
+  @@map("arya_reconciliation_correction_proposal")
+}
+
+model ReconciliationCorrectionItem {
+  id                    String    @id @default(uuid()) @map("correction_item_id") @db.Char(36)
+  proposalId            String    @map("correction_proposal_id") @db.Char(36)
+  action                String    @db.VarChar(20)
+  bankTransactionId     String?   @map("bank_transaction_id") @db.Char(36)
+  beforeEventCodeId     String?   @map("before_event_code_id") @db.Char(36)
+  proposedEventCodeId   String?   @map("proposed_event_code_id") @db.Char(36)
+  beforeRemark          String?   @map("before_remark") @db.VarChar(1000)
+  proposedRemark        String?   @map("proposed_remark") @db.VarChar(1000)
+  correctionReason      String?   @map("correction_reason") @db.VarChar(1000)
+  manualTransactionDate DateTime? @map("manual_transaction_date") @db.Date
+  manualTransactionType String?   @map("manual_transaction_type") @db.VarChar(20)
+  manualDescription     String?   @map("manual_description") @db.Text
+  manualOriginalAmount  Decimal?  @map("manual_original_amount") @db.Decimal(20, 2)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+
+  proposal          ReconciliationCorrectionProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposal")
+  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_transaction")
+  beforeEventCode   EventCode? @relation("CorrectionBeforeEventCode", fields: [beforeEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event")
+  proposedEventCode EventCode? @relation("CorrectionProposedEventCode", fields: [proposedEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event")
+
+  @@index([proposalId, action], map: "idx_correction_item_proposal_action")
+  @@index([bankTransactionId], map: "idx_correction_item_transaction")
+  @@index([beforeEventCodeId], map: "idx_correction_item_before_event")
+  @@index([proposedEventCodeId], map: "idx_correction_item_proposed_event")
+  @@map("arya_reconciliation_correction_item")
+}
+
+model ReconciliationCorrectionApprover {
+  id         String   @id @default(uuid()) @map("correction_approver_id") @db.Char(36)
+  proposalId String   @map("correction_proposal_id") @db.Char(36)
+  userId     String   @map("user_id") @db.Char(36)
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(0)
+
+  proposal ReconciliationCorrectionProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_approver_proposal")
+  user     User @relation("ReconciliationCorrectionApproverUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_approver_user")
+
+  @@unique([proposalId, userId], map: "uk_correction_approver")
+  @@index([userId], map: "idx_correction_approver_user")
+  @@map("arya_reconciliation_correction_approver")
 }
 
 model ReconciliationApprovalHistory {

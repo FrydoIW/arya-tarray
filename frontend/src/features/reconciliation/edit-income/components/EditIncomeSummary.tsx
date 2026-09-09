@@ -18,7 +18,7 @@ export function EditIncomeSummary({ summary, modifiedTransactions, periodMode, m
     <section className={styles.metrics}>
       <MetricCard label="Finalized Statements" value={summary.finalizedStatements} detail={`available ${context}`} icon={<CheckCircle2 size={20} />} tone="green" />
       <MetricCard label="Total Transactions" value={summary.totalTransactions.toLocaleString("en-US")} detail={`finalized ${context}`} icon={<ListChecks size={20} />} tone="blue" />
-      <MetricCard label="Modified Transactions" value={modifiedTransactions} detail="not yet submitted" icon={<PencilLine size={20} />} tone="gold" />
+      <MetricCard label="Staged Corrections" value={modifiedTransactions} detail="not yet submitted" icon={<PencilLine size={20} />} tone="gold" />
       <MetricCard label="Pending Re-approval" value={summary.pendingReapproval} detail={context} icon={<Clock3 size={20} />} tone="violet" />
     </section>
   );

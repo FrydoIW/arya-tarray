@@ -9,6 +9,14 @@ export type SupportedBank = {
   currencyCode: string;
 };
 
+export type BankAccountBalance = {
+  configured: boolean;
+  finalizedIncoming: string | null;
+  finalizedOutgoing: string | null;
+  reconciledBalance: string | null;
+  pendingMovement: string | null;
+};
+
 export type BankAccount = {
   id: string;
   bankCode: string;
@@ -16,6 +24,11 @@ export type BankAccount = {
   accountNo: string;
   accountName: string;
   currencyCode: string;
+  openingBalance: string | null;
+  openingBalanceDate: string | null;
+  openingBalanceLockedAt: string | null;
+  openingBalanceEditable: boolean;
+  balance: BankAccountBalance;
   activeFlag: boolean;
   statementCount: number;
   createdAt?: string;
@@ -30,6 +43,8 @@ export type BankAccountCreateInput = {
   accountNo: string;
   accountName: string;
   activeFlag: boolean;
+  openingBalance: string | null;
+  openingBalanceDate: string | null;
 };
 
 export type BankAccountUpdateInput = {
@@ -37,6 +52,8 @@ export type BankAccountUpdateInput = {
   input: {
     accountName: string;
     activeFlag: boolean;
+    openingBalance: string | null;
+    openingBalanceDate: string | null;
   };
 };
 

@@ -18,10 +18,11 @@ test("official donation helper preserves financial and canonical Member invarian
   assert.equal(isOfficialDonationCandidate({ ...base, status: "CHECK" }), false);
   assert.equal(isOfficialDonationCandidate({ ...base, originalAmount: "-1.00" }), false);
   assert.equal(isOfficialDonationCandidate({ ...base, eventCodeId: null }), false);
+  assert.equal(isOfficialDonationCandidate({ ...base, reconciliationExcludedAt: new Date() }), false);
   assert.equal(isCanonicalMemberDonationCandidate({ ...base, memberId: "member-a", identityStatus: "VERIFIED" }, "member-a"), true);
   assert.equal(isCanonicalMemberDonationCandidate({ ...base, memberId: null, identityStatus: "UNVERIFIED" }, "member-a"), false);
   assert.deepEqual(officialDonationTransactionWhere(), {
-    status: "FINALIZED", originalAmount: { gt: 0 }, eventCodeId: { not: null }
+    status: "FINALIZED", originalAmount: { gt: 0 }, eventCodeId: { not: null }, reconciliationExcludedAt: null
   });
 });
 

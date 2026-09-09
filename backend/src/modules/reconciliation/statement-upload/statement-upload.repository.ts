@@ -217,6 +217,14 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
           }))
         });
 
+        await tx.bankAccount.updateMany({
+          where: {
+            id: input.bankAccountId,
+            openingBalanceLockedAt: null
+          },
+          data: { openingBalanceLockedAt: new Date() }
+        });
+
         return statement;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {

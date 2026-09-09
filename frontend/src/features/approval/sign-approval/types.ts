@@ -78,6 +78,28 @@ export type ApprovalHistoryItem = {
   actionBy: ApprovalPerson;
 };
 
+export type ApprovalCorrectionItem = {
+  id: string;
+  action: "MODIFIED" | "ADDED" | "EXCLUDED";
+  transaction: {
+    id: string;
+    rowNo: number | null;
+    transactionDate: string | null;
+    referenceNo: string | null;
+    description: string | null;
+    originalAmount: string;
+  } | null;
+  beforeEvent: ApprovalEventCode | null;
+  proposedEvent: ApprovalEventCode | null;
+  beforeRemark: string | null;
+  proposedRemark: string | null;
+  correctionReason: string | null;
+  manualTransactionDate: string | null;
+  manualTransactionType: string | null;
+  manualDescription: string | null;
+  manualOriginalAmount: string | null;
+};
+
 export type SignApprovalDetail = {
   approval: {
     id: string;
@@ -100,6 +122,18 @@ export type SignApprovalDetail = {
     totalAmount: string;
   };
   configuredApprovers: ApprovalConfiguredApprover[];
+  correctionProposal: {
+    id: string;
+    status: SignApprovalStatus;
+    proposedAt: string;
+    proposedBy: ApprovalPerson;
+    decidedAt: string | null;
+    decidedBy: ApprovalPerson | null;
+    originalStatementAmount: string;
+    proposedCorrectedAmount: string;
+    summary: { modifiedTransactions: number; addedAdjustments: number; excludedTransactions: number };
+    items: ApprovalCorrectionItem[];
+  } | null;
   summary: {
     totalTransactions: number;
     totalAmount: string;

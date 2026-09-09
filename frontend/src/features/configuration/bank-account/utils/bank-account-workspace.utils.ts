@@ -1,5 +1,6 @@
 import type {
   BankAccount,
+  BankAccountBalance,
   BankAccountExecutePayload,
   BankAccountStatusFilter,
   SupportedBank
@@ -11,10 +12,58 @@ export function canonicalAccountNo(value: string) {
   return `${digits.slice(0, 3)}-${digits.slice(3)}`;
 }
 
+export function canonicalOpeningBalance(value: string | null) {
+  if (value == null) return null;
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
+  if (!match) return value.trim();
+  const integer = match[2].replace(/^0+(?=\d)/, "");
+  const decimal = (match[3] ?? "").padEnd(2, "0");
+  const negative = match[1] === "-" && (integer !== "0" || decimal !== "00");
+  return `${negative ? "-" : ""}${integer}.${decimal}`;
+}
+
+function moneyToCents(value: string) {
+  const normalized = canonicalOpeningBalance(value) ?? "0.00";
+  const negative = normalized.startsWith("-");
+  const [whole, fraction] = (negative ? normalized.slice(1) : normalized).split(".");
+  const cents = BigInt(whole) * BigInt(100) + BigInt(fraction);
+  return negative ? -cents : cents;
+}
+
+function centsToMoney(value: bigint) {
+  const negative = value < BigInt(0);
+  const absolute = negative ? -value : value;
+  return `${negative ? "-" : ""}${absolute / BigInt(100)}.${(absolute % BigInt(100)).toString().padStart(2, "0")}`;
+}
+
+export function rebaseBankAccountBalance(balance: BankAccountBalance, openingBalance: string | null): BankAccountBalance {
+  if (openingBalance == null) {
+    return {
+      configured: false,
+      finalizedIncoming: null,
+      finalizedOutgoing: null,
+      reconciledBalance: null,
+      pendingMovement: null
+    };
+  }
+
+  const incoming = balance.finalizedIncoming ?? "0.00";
+  const outgoing = balance.finalizedOutgoing ?? "0.00";
+  return {
+    configured: true,
+    finalizedIncoming: incoming,
+    finalizedOutgoing: outgoing,
+    reconciledBalance: centsToMoney(moneyToCents(openingBalance) + moneyToCents(incoming) - moneyToCents(outgoing)),
+    pendingMovement: balance.pendingMovement ?? "0.00"
+  };
+}
+
 function comparable(row: BankAccount) {
   return {
     accountName: row.accountName.trim(),
-    activeFlag: row.activeFlag
+    activeFlag: row.activeFlag,
+    openingBalance: canonicalOpeningBalance(row.openingBalance),
+    openingBalanceDate: row.openingBalanceDate
   };
 }
 
@@ -28,7 +77,10 @@ export function bankAccountsAreDirty(serverRows: BankAccount[], workingRows: Ban
     if (!original) return true;
     const a = comparable(row);
     const b = comparable(original);
-    return a.accountName !== b.accountName || a.activeFlag !== b.activeFlag;
+    return a.accountName !== b.accountName
+      || a.activeFlag !== b.activeFlag
+      || a.openingBalance !== b.openingBalance
+      || a.openingBalanceDate !== b.openingBalanceDate;
   });
 }
 
@@ -47,6 +99,15 @@ export function validateBankAccountWorkspace(rows: BankAccount[], supportedBanks
     }
     if (!row.accountName.trim()) {
       return `Row ${index + 1}: Account Name wajib diisi.`;
+    }
+
+    const hasOpeningBalance = row.openingBalance != null && row.openingBalance.trim() !== "";
+    const hasOpeningBalanceDate = Boolean(row.openingBalanceDate);
+    if (hasOpeningBalance !== hasOpeningBalanceDate) {
+      return `Row ${index + 1}: Opening Balance and Balance As Of must be supplied together or both omitted.`;
+    }
+    if (hasOpeningBalance && !/^-?\d{1,17}(?:\.\d{1,2})?$/.test(row.openingBalance!.trim())) {
+      return `Row ${index + 1}: Opening Balance must be a valid amount with at most 2 decimal places.`;
     }
 
     const identity = `${row.bankCode}::${digits}`;
@@ -71,7 +132,9 @@ export function buildBankAccountPayload(serverRows: BankAccount[], workingRows: 
         bankCode: row.bankCode,
         accountNo: canonicalAccountNo(row.accountNo),
         accountName: row.accountName.trim(),
-        activeFlag: row.activeFlag
+        activeFlag: row.activeFlag,
+        openingBalance: canonicalOpeningBalance(row.openingBalance),
+        openingBalanceDate: row.openingBalanceDate
       });
       continue;
     }
@@ -80,7 +143,10 @@ export function buildBankAccountPayload(serverRows: BankAccount[], workingRows: 
     if (!original) continue;
     const next = comparable(row);
     const before = comparable(original);
-    if (next.accountName !== before.accountName || next.activeFlag !== before.activeFlag) {
+    if (next.accountName !== before.accountName
+      || next.activeFlag !== before.activeFlag
+      || next.openingBalance !== before.openingBalance
+      || next.openingBalanceDate !== before.openingBalanceDate) {
       updates.push({ id: row.id, input: next });
     }
   }

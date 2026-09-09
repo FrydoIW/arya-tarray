@@ -1,6 +1,7 @@
 import { businessDayUtcRange } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
+import { Prisma } from "@prisma/client";
 import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
@@ -56,7 +57,12 @@ const queueItemInclude = {
 
 export async function loadSignApprovalWorkspace(userId: string) {
   const { start: today, end: tomorrow } = businessDayUtcRange();
-  const approvalScope = { approvers: { some: { userId } } } as const;
+  const approvalScope: Prisma.ReconciliationApprovalWhereInput = {
+    OR: [
+      { approvers: { some: { userId } } },
+      { correctionProposals: { some: { approvers: { some: { userId } } } } }
+    ]
+  };
 
   const [approvals, pendingApproval, approvedToday, rejectedToday, totalDecided, legacyPendingApproval] = await Promise.all([
     prisma.reconciliationApproval.findMany({
@@ -173,6 +179,35 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
       approvers: {
         select: snapshotApproverSelect,
         orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+      },
+      correctionProposals: {
+        include: {
+          proposedBy: { select: { id: true, fullName: true } },
+          decidedBy: { select: { id: true, fullName: true } },
+          approvers: {
+            select: snapshotApproverSelect,
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+          },
+          items: {
+            include: {
+              bankTransaction: {
+                select: {
+                  id: true,
+                  rowNo: true,
+                  transactionDate: true,
+                  referenceNo: true,
+                  description: true,
+                  originalAmount: true
+                }
+              },
+              beforeEventCode: { select: { id: true, code: true, eventName: true } },
+              proposedEventCode: { select: { id: true, code: true, eventName: true } }
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+          }
+        },
+        orderBy: [{ proposedAt: "desc" }, { createdAt: "desc" }],
+        take: 1
       }
     }
   });
@@ -186,9 +221,11 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
     };
   }
 
-  requireApprovalSnapshotMembership(approval.approvers, userId);
+  const correctionProposal = approval.correctionProposals[0] ?? null;
+  const effectiveApprovers = correctionProposal?.approvers ?? approval.approvers;
+  requireApprovalSnapshotMembership(effectiveApprovers, userId);
 
-  const [checkedTransactions, needsReviewTransactions] = await Promise.all([
+  const [checkedTransactions, needsReviewTransactions, approvedManualAdjustments, approvedExcludedBankTransactions] = await Promise.all([
     prisma.bankTransaction.count({
       where: {
         statementUploadId: approval.statementUploadId,
@@ -200,15 +237,36 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
         statementUploadId: approval.statementUploadId,
         status: { not: "CHECK" }
       }
+    }),
+    prisma.bankTransaction.aggregate({
+      where: {
+        statementUploadId: approval.statementUploadId,
+        status: "FINALIZED",
+        sourceType: "MANUAL",
+        reconciliationExcludedAt: null
+      },
+      _sum: { originalAmount: true }
+    }),
+    prisma.bankTransaction.aggregate({
+      where: {
+        statementUploadId: approval.statementUploadId,
+        status: "FINALIZED",
+        sourceType: "BANK",
+        reconciliationExcludedAt: { not: null }
+      },
+      _sum: { originalAmount: true }
     })
   ]);
 
   return {
     eligible: true as const,
     approval,
-    approvers: approval.approvers,
+    correctionProposal,
+    approvers: effectiveApprovers,
     checkedTransactions,
-    needsReviewTransactions
+    needsReviewTransactions,
+    approvedManualAdjustmentAmount: approvedManualAdjustments._sum.originalAmount,
+    approvedExcludedBankAmount: approvedExcludedBankTransactions._sum.originalAmount
   };
 }
 
@@ -231,12 +289,49 @@ export async function decideSignApprovalAtomic(input: {
         statementUpload: {
           select: { id: true, status: true }
         },
-        approvers: { select: { userId: true } }
+        approvers: { select: { userId: true } },
+        correctionProposals: {
+          where: { status: "PENDING" },
+          select: {
+            id: true,
+            status: true,
+            proposedById: true,
+            approvers: { select: { userId: true } },
+            items: {
+              select: {
+                id: true,
+                action: true,
+                bankTransactionId: true,
+                beforeEventCodeId: true,
+                proposedEventCodeId: true,
+                beforeRemark: true,
+                proposedRemark: true,
+                correctionReason: true,
+                manualTransactionDate: true,
+                manualTransactionType: true,
+                manualDescription: true,
+                manualOriginalAmount: true,
+                bankTransaction: {
+                  select: {
+                    id: true,
+                    eventCodeId: true,
+                    remark: true,
+                    reconciliationExcludedAt: true
+                  }
+                }
+              },
+              orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+            }
+          },
+          orderBy: [{ proposedAt: "desc" }, { createdAt: "desc" }],
+          take: 1
+        }
       }
     });
 
     if (!current) throw new HttpError(404, "Approval request not found");
-    requireApprovalSnapshotMembership(current.approvers, input.userId);
+    const correctionProposal = current.correctionProposals[0] ?? null;
+    requireApprovalSnapshotMembership(correctionProposal?.approvers ?? current.approvers, input.userId);
     if (current.status !== "PENDING") throw new HttpError(409, ALREADY_DECIDED_MESSAGE);
     if (current.statementUpload.status !== "CHECK") {
       throw new HttpError(409, "This statement is no longer Pending Approval. Reload the approval queue.");
@@ -258,74 +353,111 @@ export async function decideSignApprovalAtomic(input: {
 
     if (updateResult.count !== 1) throw new HttpError(409, ALREADY_DECIDED_MESSAGE);
 
-    const priorApprovedCount = await tx.reconciliationApprovalHistory.count({
-      where: {
-        approvalId: current.id,
-        action: "APPROVED",
-        actionAt: { lt: current.submittedAt }
+    if (correctionProposal) {
+      if (input.decision === "APPROVED") {
+        for (const item of correctionProposal.items) {
+          if (item.action === "MODIFIED") {
+            if (!item.bankTransaction || item.bankTransaction.eventCodeId !== item.beforeEventCodeId
+              || (item.bankTransaction.remark?.trim() || null) !== item.beforeRemark) {
+              throw new HttpError(409, "Official transaction data changed after this correction was proposed. No correction was applied.");
+            }
+            await tx.bankTransaction.update({
+              where: { id: item.bankTransaction.id },
+              data: { eventCodeId: item.proposedEventCodeId, remark: item.proposedRemark }
+            });
+            if (item.beforeEventCodeId !== item.proposedEventCodeId) {
+              await tx.bankTransactionHistory.create({ data: {
+                bankTransactionId: item.bankTransaction.id,
+                fieldName: "event_code_id",
+                oldValue: item.beforeEventCodeId,
+                newValue: item.proposedEventCodeId,
+                remark: "Approved Edit Income correction",
+                changedAt: now,
+                changedById: input.userId
+              } });
+            }
+            if (item.beforeRemark !== item.proposedRemark) {
+              await tx.bankTransactionHistory.create({ data: {
+                bankTransactionId: item.bankTransaction.id,
+                fieldName: "remark",
+                oldValue: item.beforeRemark,
+                newValue: item.proposedRemark,
+                remark: "Approved Edit Income correction",
+                changedAt: now,
+                changedById: input.userId
+              } });
+            }
+          } else if (item.action === "EXCLUDED") {
+            if (!item.bankTransaction || item.bankTransaction.reconciliationExcludedAt) {
+              throw new HttpError(409, "An excluded transaction changed after this correction was proposed. No correction was applied.");
+            }
+            await tx.bankTransaction.update({
+              where: { id: item.bankTransaction.id },
+              data: {
+                reconciliationExcludedAt: now,
+                reconciliationExcludedById: input.userId,
+                reconciliationExclusionReason: item.correctionReason
+              }
+            });
+            await tx.bankTransactionHistory.create({ data: {
+              bankTransactionId: item.bankTransaction.id,
+              fieldName: "reconciliation_excluded_at",
+              oldValue: null,
+              newValue: now.toISOString(),
+              remark: item.correctionReason,
+              changedAt: now,
+              changedById: input.userId
+            } });
+          } else if (item.action === "ADDED") {
+            const transaction = await tx.bankTransaction.create({
+              data: {
+                statementUploadId: current.statementUploadId,
+                rowNo: null,
+                transactionDate: item.manualTransactionDate,
+                transactionType: item.manualTransactionType,
+                description: item.manualDescription,
+                originalAmount: item.manualOriginalAmount!,
+                baseAmount: item.manualOriginalAmount && item.manualOriginalAmount.greaterThan(0)
+                  ? item.manualOriginalAmount
+                  : null,
+                eventCodeId: item.proposedEventCodeId,
+                remark: item.proposedRemark,
+                status: "FINALIZED",
+                sourceType: "MANUAL",
+                correctionReason: item.correctionReason,
+                manualAddedAt: now,
+                manualAddedById: correctionProposal.proposedById
+              },
+              select: { id: true }
+            });
+            await tx.reconciliationCorrectionItem.update({
+              where: { id: item.id },
+              data: { bankTransactionId: transaction.id }
+            });
+            await tx.bankTransactionHistory.create({ data: {
+              bankTransactionId: transaction.id,
+              fieldName: "source_type",
+              oldValue: null,
+              newValue: "MANUAL",
+              remark: item.correctionReason,
+              changedAt: now,
+              changedById: input.userId
+            } });
+          }
+        }
       }
-    });
-    const correctionSubmission = priorApprovedCount > 0;
 
-    if (input.decision === "REJECTED" && correctionSubmission) {
-      const correctionHistory = await tx.bankTransactionHistory.findMany({
-        where: {
-          changedAt: current.submittedAt,
-          fieldName: { in: ["event_code_id", "remark"] },
-          remark: "Edit Income correction",
-          transaction: { statementUploadId: current.statementUploadId }
-        },
-        select: {
-          bankTransactionId: true,
-          fieldName: true,
-          oldValue: true,
-          newValue: true
-        },
-        orderBy: { id: "desc" }
+      const proposalUpdate = await tx.reconciliationCorrectionProposal.updateMany({
+        where: { id: correctionProposal.id, status: "PENDING" },
+        data: { status: input.decision, decidedAt: now, decidedById: input.userId }
       });
-
-      const rollbackByTransaction = new Map<string, { eventCodeId?: string | null; remark?: string | null }>();
-      for (const history of correctionHistory) {
-        const rollback = rollbackByTransaction.get(history.bankTransactionId) ?? {};
-        if (history.fieldName === "event_code_id") rollback.eventCodeId = history.oldValue;
-        if (history.fieldName === "remark") rollback.remark = history.oldValue;
-        rollbackByTransaction.set(history.bankTransactionId, rollback);
-
-        await tx.bankTransactionHistory.create({
-          data: {
-            bankTransactionId: history.bankTransactionId,
-            fieldName: history.fieldName,
-            oldValue: history.newValue,
-            newValue: history.oldValue,
-            remark: "Edit Income correction rejected; previous approved value restored.",
-            changedAt: now,
-            changedById: input.userId
-          }
-        });
-      }
-
-      for (const [transactionId, rollback] of rollbackByTransaction) {
-        await tx.bankTransaction.update({
-          where: { id: transactionId },
-          data: {
-            ...(Object.prototype.hasOwnProperty.call(rollback, "eventCodeId")
-              ? { eventCodeId: rollback.eventCodeId ?? null }
-              : {}),
-            ...(Object.prototype.hasOwnProperty.call(rollback, "remark")
-              ? { remark: rollback.remark ?? null }
-              : {}),
-            status: "FINALIZED"
-          }
-        });
-      }
+      if (proposalUpdate.count !== 1) throw new HttpError(409, ALREADY_DECIDED_MESSAGE);
 
       await tx.bankStatementUpload.update({
         where: { id: current.statementUploadId },
-        data: { status: "FINALIZED" }
-      });
-      await tx.bankTransaction.updateMany({
-        where: { statementUploadId: current.statementUploadId },
-        data: { status: "FINALIZED" }
+        data: input.decision === "APPROVED"
+          ? { status: "FINALIZED", finalizedAt: now, finalizedById: input.userId }
+          : { status: "FINALIZED" }
       });
     } else {
       const statementStatus = input.decision === "APPROVED" ? "FINALIZED" : "RAW";
@@ -377,5 +509,5 @@ export async function decideSignApprovalAtomic(input: {
         }
       }
     });
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

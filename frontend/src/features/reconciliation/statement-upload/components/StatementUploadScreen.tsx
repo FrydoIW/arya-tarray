@@ -74,6 +74,7 @@ export function StatementUploadScreen() {
         eventCodes={workspace.workspace.eventCodes}
         search={workspace.search}
         statusFilter={workspace.statusFilter}
+        eventCodeFilter={workspace.eventCodeFilter}
         page={workspace.page}
         pageSize={workspace.pageSize}
         loading={workspace.loading}
@@ -81,6 +82,7 @@ export function StatementUploadScreen() {
         selectedStatementId={workspace.selectedStatementId}
         onSearchChange={workspace.setSearch}
         onStatusFilterChange={workspace.setStatusFilter}
+        onEventCodeFilterChange={workspace.setEventCodeFilter}
         onPageChange={workspace.setPage}
         onPageSizeChange={workspace.setPageSize}
         onReload={() => void workspace.refresh()}

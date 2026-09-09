@@ -85,7 +85,9 @@ export function BankAccountScreen() {
               bankCode: value.bankCode ?? "",
               accountNo: value.accountNo ?? "",
               accountName: value.accountName,
-              activeFlag: value.activeFlag
+              activeFlag: value.activeFlag,
+              openingBalance: value.openingBalance,
+              openingBalanceDate: value.openingBalanceDate
             });
           } else if (selected) {
             workspace.updateAccount(selected.id, value);

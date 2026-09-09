@@ -1,31 +1,29 @@
 "use client";
 
-import { useMemo } from "react";
-import { ArrowLeft, CheckCircle2, CircleMinus, RotateCw, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, CheckCircle2, Eye, Pencil, Plus, RotateCw, ShieldMinus, Sparkles, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
-import type {
-  CorrectionRowStatus,
-  CorrectionRowStatusFilter,
-  EditIncomeDetail,
-  EditIncomeTransaction
-} from "../types";
-import {
-  getCorrectionRowStatus,
-  getEventCode,
-  getEventCodeLabel
-} from "../utils/edit-income.utils";
+import type { CorrectionDirectionFilter, CorrectionRowStatus, CorrectionRowStatusFilter, EditIncomeDetail, EditIncomeMode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
+import { getCorrectionRowStatus, getEventCode, getEventCodeLabel } from "../utils/edit-income.utils";
+import { AddAdjustmentModal, ExcludeTransactionModal } from "./CorrectionModals";
 import styles from "../styles/edit-income.module.css";
 
 type Props = {
   detail: EditIncomeDetail;
   rows: EditIncomeTransaction[];
+  allRows: EditIncomeTransaction[];
   originalById: Map<string, EditIncomeTransaction>;
   search: string;
   statusFilter: CorrectionRowStatusFilter;
+  eventCodeFilter: string;
+  directionFilter: CorrectionDirectionFilter;
+  mode: EditIncomeMode;
+  correctionSummary: { modifiedTransactions: number; addedAdjustments: number; excludedTransactions: number };
   page: number;
   pageSize: number;
   loading: boolean;
@@ -33,165 +31,107 @@ type Props = {
   canEdit: boolean;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: CorrectionRowStatusFilter) => void;
+  onEventCodeFilterChange: (value: string) => void;
+  onDirectionFilterChange: (value: CorrectionDirectionFilter) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onReload: () => void;
   onBack: () => void;
+  onEditMode: () => void;
+  onInquiryMode: () => void;
   onTransactionChange: (transactionId: string, field: "eventCodeId" | "remark", value: string | null) => void;
+  onAddAdjustment: (input: ManualAdjustmentInput) => void;
+  onExclude: (transactionId: string, reason: string) => void;
+  onRestore: (transactionId: string) => void;
 };
 
 function CorrectionStatus({ status }: { status: CorrectionRowStatus }) {
-  const icon = status === "NOT_APPLICABLE" ? <CircleMinus size={12} /> : status === "MODIFIED" ? <Sparkles size={12} /> : <CheckCircle2 size={12} />;
-  const label = status === "NOT_APPLICABLE" ? "Not Applicable" : status === "MODIFIED" ? "Modified" : "Current";
+  const icon = status === "MODIFIED" ? <Sparkles size={12} /> : status === "ADDED" ? <Plus size={12} /> : status === "EXCLUDED" ? <ShieldMinus size={12} /> : <CheckCircle2 size={12} />;
+  const label = status === "MODIFIED" ? "Modified" : status === "ADDED" ? "Added" : status === "EXCLUDED" ? "Excluded" : "Current";
   return <span className={`${styles.rowStatus} ${styles[`row${status}`]}`}>{icon}{label}</span>;
+}
+
+function decimalToCents(value: string) {
+  const negative = value.startsWith("-");
+  const normalized = negative ? value.slice(1) : value;
+  const [whole = "0", fraction = ""] = normalized.split(".");
+  const cents = BigInt(whole || "0") * BigInt(100) + BigInt((fraction + "00").slice(0, 2));
+  return negative ? -cents : cents;
+}
+
+function centsToDecimal(value: bigint) {
+  const negative = value < BigInt(0);
+  const absolute = negative ? -value : value;
+  return `${negative ? "-" : ""}${absolute / BigInt(100)}.${(absolute % BigInt(100)).toString().padStart(2, "0")}`;
 }
 
 export function EditIncomeCorrectionWorkspace(props: Props) {
   const { detail } = props;
+  const [addOpen, setAddOpen] = useState(false);
+  const [excludeTarget, setExcludeTarget] = useState<EditIncomeTransaction | null>(null);
+  const proposedAmount = useMemo(() => {
+    let cents = decimalToCents(detail.statement.totalAmount);
+    for (const row of props.allRows) {
+      if (!row.correctionAction && row.sourceType === "MANUAL" && !row.reconciliationExcludedAt) cents += decimalToCents(row.originalAmount);
+      if (!row.correctionAction && row.sourceType !== "MANUAL" && row.reconciliationExcludedAt) cents -= decimalToCents(row.originalAmount);
+      if (row.correctionAction === "ADDED") cents += decimalToCents(row.originalAmount);
+      if (row.correctionAction === "EXCLUDED") cents -= decimalToCents(row.originalAmount);
+    }
+    return centsToDecimal(cents);
+  }, [detail.statement.totalAmount, props.allRows]);
+
   const columns = useMemo<DataTableColumn<EditIncomeTransaction>[]>(() => [
+    { key: "transactionDate", header: "Date", minWidth: "110px", sticky: "left", render: (row) => <span className={styles.dateCell}>{row.transactionDate ? formatDate(row.transactionDate) : "-"}</span> },
+    { key: "description", header: "Description", minWidth: "250px", render: (row) => <div className={styles.descriptionCell}><strong>{row.description || "-"}</strong><small>{[row.sourceType === "MANUAL" ? "MANUAL" : row.transactionType, row.referenceNo, row.senderName].filter(Boolean).join(" · ") || "-"}</small></div> },
+    { key: "originalAmount", header: "Amount", minWidth: "140px", align: "right", render: (row) => <span className={styles.amountCell}>{formatMoney(row.originalAmount)}</span> },
+    { key: "suggestedEventCodeId", header: "Suggested Event", minWidth: "180px", render: (row) => {
+      if (row.sourceType === "MANUAL") return <span className={styles.notApplicableText}>Manual source</span>;
+      if (!row.requiresClassification) return <span className={styles.notApplicableText}>Outgoing</span>;
+      const suggested = getEventCode(detail.eventCodes, row.suggestedEventCodeId);
+      return suggested ? <span className={styles.suggestedEvent}>{getEventCodeLabel(suggested)}</span> : <span className={styles.noMatch}>No Match</span>;
+    } },
     {
-      key: "transactionDate",
-      header: "Date",
-      minWidth: "110px",
-      sticky: "left",
-      render: (row) => <span className={styles.dateCell}>{row.transactionDate ? formatDate(row.transactionDate) : "-"}</span>
-    },
-    {
-      key: "description",
-      header: "Description",
-      minWidth: "250px",
-      render: (row) => (
-        <div className={styles.descriptionCell}>
-          <strong>{row.description || "-"}</strong>
-          <small>{[row.transactionType, row.referenceNo, row.senderName].filter(Boolean).join(" · ") || "-"}</small>
-        </div>
-      )
-    },
-    {
-      key: "originalAmount",
-      header: "Amount",
-      minWidth: "140px",
-      align: "right",
-      render: (row) => <span className={styles.amountCell}>{formatMoney(row.originalAmount)}</span>
-    },
-    {
-      key: "suffixCode",
-      header: "Suffix",
-      minWidth: "78px",
-      align: "center",
-      render: (row) => row.requiresClassification
-        ? <span className={styles.suffixChip}>{row.suffixCode ?? "-"}</span>
-        : <span className={styles.notApplicableText}>N/A</span>
-    },
-    {
-      key: "suggestedEventCodeId",
-      header: "Suggested Event",
-      minWidth: "180px",
-      render: (row) => {
-        if (!row.requiresClassification) return <span className={styles.notApplicableText}>Not applicable</span>;
-        const suggested = getEventCode(detail.eventCodes, row.suggestedEventCodeId);
-        return suggested
-          ? <span className={styles.suggestedEvent}>{getEventCodeLabel(suggested)}</span>
-          : <span className={styles.noMatch}>No Match</span>;
-      }
-    },
-    {
-      key: "eventCodeId",
-      header: "Final Event",
-      minWidth: "200px",
-      editable: (row) => props.canEdit && row.requiresClassification,
+      key: "eventCodeId", header: "Final Event", minWidth: "200px",
+      editable: (row) => props.canEdit && row.requiresClassification && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
       getValue: (row) => row.eventCodeId ?? "",
-      renderEditor: ({ row, value, onChange }) => (
-        <Select className={styles.eventSelect} value={String(value ?? "")} disabled={!props.canEdit || props.busy} onChange={(event) => onChange(event.target.value || null)} aria-label={`Final Event row ${row.rowNo}`}>
-          <option value="">Select Event...</option>
-          {detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}</option>)}
-        </Select>
-      ),
+      renderEditor: ({ row, value, onChange }) => <Select className={styles.eventSelect} value={String(value ?? "")} disabled={!props.canEdit || props.busy} onChange={(event) => onChange(event.target.value || null)} aria-label={`Final Event row ${row.rowNo || "manual"}`}><option value="">Select Event...</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}</option>)}</Select>,
       render: (row) => {
-        if (!row.requiresClassification) return <span className={styles.notApplicableText}>Not required</span>;
+        if (!row.requiresClassification) return <span className={styles.notApplicableText}>Outgoing</span>;
         const current = getEventCode(detail.eventCodes, row.eventCodeId);
         return <span className={current ? styles.finalEvent : styles.noMatch}>{current ? getEventCodeLabel(current) : "Select Event..."}</span>;
       }
     },
     {
-      key: "remark",
-      header: "Remark",
-      minWidth: "190px",
-      editable: () => props.canEdit,
+      key: "remark", header: "Remark", minWidth: "190px", editable: (row) => props.canEdit && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
       getValue: (row) => row.remark ?? "",
-      renderEditor: ({ row, value, onChange }) => (
-        <input
-          className={`${styles.remarkInput} ui-table-input`}
-          value={String(value ?? "")}
-          maxLength={1000}
-          disabled={!props.canEdit || props.busy}
-          placeholder="Correction remark..."
-          onChange={(event) => onChange(event.target.value)}
-          aria-label={`Remark row ${row.rowNo}`}
-        />
-      ),
+      renderEditor: ({ row, value, onChange }) => <input className={`${styles.remarkInput} ui-table-input`} value={String(value ?? "")} maxLength={1000} disabled={!props.canEdit || props.busy} placeholder="Correction remark..." onChange={(event) => onChange(event.target.value)} aria-label={`Remark row ${row.rowNo || "manual"}`} />,
       render: (row) => <span className={row.remark ? styles.remarkText : styles.notApplicableText}>{row.remark || "-"}</span>
     },
-    {
-      key: "status",
-      header: "Status",
-      minWidth: "130px",
-      sticky: "right",
-      render: (row) => <CorrectionStatus status={getCorrectionRowStatus(row, props.originalById.get(row.id))} />
-    }
-  ], [detail.eventCodes, props.busy, props.canEdit, props.originalById]);
+    { key: "status", header: "Status", minWidth: "112px", render: (row) => <CorrectionStatus status={getCorrectionRowStatus(row, props.originalById.get(row.id))} /> },
+    { key: "action", header: "Action", minWidth: "78px", sticky: "right", align: "center", render: (row) => {
+      if (!props.canEdit) return <span className={styles.notApplicableText}>—</span>;
+      if (row.correctionAction || row.reconciliationExcludedAt) return <IconButton label={row.correctionAction === "ADDED" ? "Remove staged adjustment" : "Undo staged exclusion"} icon={<Undo2 size={14} />} disabled={props.busy || Boolean(row.reconciliationExcludedAt)} onClick={() => props.onRestore(row.id)} />;
+      return <IconButton label="Exclude from reconciliation" icon={<ShieldMinus size={14} />} variant="danger" disabled={props.busy} onClick={() => setExcludeTarget(row)} />;
+    } }
+  ], [detail.eventCodes, props.busy, props.canEdit, props.onRestore, props.originalById]);
 
   return (
     <section className={styles.correctionPanel}>
       <div className={styles.correctionHeader}>
-        <div>
-          <div className={styles.correctionTitleRow}>
-            <Button type="button" variant="ghost" size="sm" icon={<ArrowLeft size={14} />} disabled={props.busy} onClick={props.onBack}>Back</Button>
-            <div><h2>Transaction Correction</h2><p>Suggested Event remains read-only. Only Final Event and Remark are editable before Execute.</p></div>
-          </div>
-        </div>
-        <div className={styles.correctionToolbar}>
-          <SearchInput value={props.search} disabled={props.loading} placeholder="Search description or reference" onChange={(event) => props.onSearchChange(event.target.value)} />
-          <Select value={props.statusFilter} disabled={props.loading} onChange={(event) => props.onStatusFilterChange(event.target.value as CorrectionRowStatusFilter)} aria-label="Correction status">
-            <option value="ALL">All Status</option>
-            <option value="CURRENT">Current</option>
-            <option value="MODIFIED">Modified</option>
-            <option value="NOT_APPLICABLE">Not Applicable</option>
-          </Select>
-          <Button type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button>
-        </div>
+        <div className={styles.correctionTitleRow}><Button type="button" variant="ghost" size="sm" icon={<ArrowLeft size={14} />} disabled={props.busy} onClick={props.onBack}>Back</Button><div><h2>Transaction Correction</h2><p>Open in Inquiry, then explicitly enter Edit Transactions to stage an approval proposal.</p></div></div>
+        <div className={styles.modeActions}><Button type="button" variant={props.mode === "INQUIRY" ? "secondary" : "ghost"} size="sm" icon={<Eye size={14} />} disabled={props.busy || props.mode === "INQUIRY"} onClick={props.onInquiryMode}>Inquiry</Button><Button type="button" variant={props.mode === "EDIT" ? "secondary" : "outline"} size="sm" icon={<Pencil size={14} />} disabled={!detail.statement.editable || props.busy || props.mode === "EDIT"} onClick={props.onEditMode}>Edit Transactions</Button>{props.mode === "EDIT" ? <Button type="button" size="sm" icon={<Plus size={14} />} disabled={!props.canEdit} onClick={() => setAddOpen(true)}>Add Adjustment</Button> : null}</div>
       </div>
 
-      <div className={styles.statementDetail}>
-        <div><span>Statement ID</span><strong className={styles.monospace}>{detail.statement.id}</strong></div>
-        <div><span>Bank Account</span><strong>{detail.statement.bankAccount.bankCode} - {detail.statement.bankAccount.accountNo}</strong></div>
-        <div><span>Period</span><strong>{detail.statement.periodFrom ? formatDate(detail.statement.periodFrom) : "-"} - {detail.statement.periodTo ? formatDate(detail.statement.periodTo) : "-"}</strong></div>
-        <div><span>Finalized At</span><strong>{detail.statement.finalizedAt ? formatDate(detail.statement.finalizedAt) : "-"}</strong></div>
-        <div><span>Finalized By</span><strong>{detail.statement.finalizedBy?.fullName ?? "-"}</strong></div>
-        <div><span>Status</span><strong className={styles.completeText}>{detail.statement.displayStatus === "COMPLETE" ? "Complete" : "Pending Re-approval"}</strong></div>
-      </div>
+      <div className={styles.statementDetail}><div><span>Statement Detail</span><strong>{detail.statement.bankAccount.bankCode} • {detail.statement.bankAccount.accountNo}</strong></div><div><span>Period</span><strong>{detail.statement.periodFrom ? formatDate(detail.statement.periodFrom) : "-"} – {detail.statement.periodTo ? formatDate(detail.statement.periodTo) : "-"}</strong></div><div><span>Status</span><strong className={styles.completeText}>{detail.statement.displayStatus === "COMPLETE" ? "Complete" : "Pending Re-approval"}</strong></div><div><span>Original Statement Amount</span><strong>{formatMoney(detail.statement.totalAmount)}</strong></div><div><span>Proposed Corrected Amount</span><strong>{formatMoney(proposedAmount)}</strong></div></div>
 
-      <DataTable
-        rows={props.rows}
-        columns={columns}
-        rowKey={(row) => row.id}
-        loading={props.loading}
-        disabled={!props.canEdit || props.busy}
-        minWidth="1480px"
-        onCellChange={(row, columnKey, value) => {
-          if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null);
-          if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? ""));
-        }}
-        emptyState={{ title: "No transactions", description: "Try another transaction search or status filter." }}
-        pagination={{
-          page: props.page,
-          pageSize: props.pageSize,
-          total: props.rows.length,
-          pageSizeOptions: [10, 25, 50],
-          onPageChange: props.onPageChange,
-          onPageSizeChange: props.onPageSizeChange
-        }}
-      />
+      <div className={styles.correctionSummary}><div><span>Modified Transactions</span><strong>{props.correctionSummary.modifiedTransactions}</strong></div><div><span>Added Adjustments</span><strong>{props.correctionSummary.addedAdjustments}</strong></div><div><span>Excluded Transactions</span><strong>{props.correctionSummary.excludedTransactions}</strong></div></div>
+
+      <div className={styles.correctionFilters}><SearchInput value={props.search} disabled={props.loading} placeholder="Search description or reference" onChange={(event) => props.onSearchChange(event.target.value)} /><Select value={props.statusFilter} disabled={props.loading} onChange={(event) => props.onStatusFilterChange(event.target.value as CorrectionRowStatusFilter)} aria-label="Correction status"><option value="ALL">All Status</option><option value="CURRENT">Current</option><option value="MODIFIED">Modified</option><option value="ADDED">Added</option><option value="EXCLUDED">Excluded</option></Select><Select value={props.eventCodeFilter} disabled={props.loading} onChange={(event) => props.onEventCodeFilterChange(event.target.value)} aria-label="Final Event filter"><option value="ALL">All Event Codes</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}</option>)}</Select><Select value={props.directionFilter} disabled={props.loading} onChange={(event) => props.onDirectionFilterChange(event.target.value as CorrectionDirectionFilter)} aria-label="Direction filter"><option value="ALL">All Direction</option><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></Select><Button type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button></div>
+
+      <DataTable rows={props.rows} columns={columns} rowKey={(row) => row.id} loading={props.loading} disabled={!props.canEdit || props.busy} minWidth="1520px" onCellChange={(row, columnKey, value) => { if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null); if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? "")); }} emptyState={{ title: "No transactions", description: "Try another transaction search or filter." }} pagination={{ page: props.page, pageSize: props.pageSize, total: props.rows.length, pageSizeOptions: [10, 25, 50], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }} />
+
+      <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
+      <ExcludeTransactionModal transaction={excludeTarget} disabled={props.busy} onClose={() => setExcludeTarget(null)} onSubmit={props.onExclude} />
     </section>
   );
 }

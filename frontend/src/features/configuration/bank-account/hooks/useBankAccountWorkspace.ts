@@ -9,6 +9,7 @@ import {
   buildBankAccountPayload,
   canonicalAccountNo,
   filterBankAccounts,
+  rebaseBankAccountBalance,
   summarizeBankAccounts,
   validateBankAccountWorkspace
 } from "../utils/bank-account-workspace.utils";
@@ -75,7 +76,7 @@ export function useBankAccountWorkspace() {
     setMessage("Unsaved changes cleared.");
   }
 
-  function addDraft(input: { bankCode: string; accountNo: string; accountName: string; activeFlag: boolean }) {
+  function addDraft(input: { bankCode: string; accountNo: string; accountName: string; activeFlag: boolean; openingBalance: string | null; openingBalanceDate: string | null }) {
     const bank = supportedBanks.find((item) => item.bankCode === input.bankCode);
     if (!bank) return false;
     setWorkingAccounts((current) => [...current, {
@@ -86,6 +87,17 @@ export function useBankAccountWorkspace() {
       accountName: input.accountName,
       currencyCode: bank.currencyCode,
       activeFlag: input.activeFlag,
+      openingBalance: input.openingBalance,
+      openingBalanceDate: input.openingBalanceDate,
+      openingBalanceLockedAt: null,
+      openingBalanceEditable: true,
+      balance: {
+        configured: input.openingBalance != null && input.openingBalanceDate != null,
+        finalizedIncoming: input.openingBalance == null ? null : "0.00",
+        finalizedOutgoing: input.openingBalance == null ? null : "0.00",
+        reconciledBalance: input.openingBalance,
+        pendingMovement: input.openingBalance == null ? null : "0.00"
+      },
       statementCount: 0,
       updatedBy: null,
       isDraft: true
@@ -95,7 +107,7 @@ export function useBankAccountWorkspace() {
     return true;
   }
 
-  function updateAccount(id: string, input: { bankCode?: string; accountNo?: string; accountName: string; activeFlag: boolean }) {
+  function updateAccount(id: string, input: { bankCode?: string; accountNo?: string; accountName: string; activeFlag: boolean; openingBalance: string | null; openingBalanceDate: string | null }) {
     setWorkingAccounts((current) => current.map((row) => {
       if (row.id !== id) return row;
       if (row.isDraft) {
@@ -107,10 +119,27 @@ export function useBankAccountWorkspace() {
           currencyCode: bank?.currencyCode ?? row.currencyCode,
           accountNo: canonicalAccountNo(input.accountNo ?? row.accountNo),
           accountName: input.accountName,
-          activeFlag: input.activeFlag
+          activeFlag: input.activeFlag,
+          openingBalance: input.openingBalance,
+          openingBalanceDate: input.openingBalanceDate,
+          balance: {
+            ...row.balance,
+            configured: input.openingBalance != null && input.openingBalanceDate != null,
+            finalizedIncoming: input.openingBalance == null ? null : "0.00",
+            finalizedOutgoing: input.openingBalance == null ? null : "0.00",
+            reconciledBalance: input.openingBalance,
+            pendingMovement: input.openingBalance == null ? null : "0.00"
+          }
         };
       }
-      return { ...row, accountName: input.accountName, activeFlag: input.activeFlag };
+      return {
+        ...row,
+        accountName: input.accountName,
+        activeFlag: input.activeFlag,
+        openingBalance: input.openingBalance,
+        openingBalanceDate: input.openingBalanceDate,
+        balance: rebaseBankAccountBalance(row.balance, input.openingBalance)
+      };
     }));
     setError("");
     setMessage("");

@@ -55,7 +55,11 @@ type Props = {
 };
 
 function typeOf(row: TransactionInquiryRow) {
-  return Number(row.originalAmount) >= 0 ? "Credit" : "Debit";
+  return row.originalAmount.trim().startsWith("-") ? "Outgoing" : "Incoming";
+}
+
+function eventDisplay(row: TransactionInquiryRow, event: TransactionInquiryRow["finalEvent"]) {
+  return typeOf(row) === "Outgoing" ? "Outgoing" : eventLabel(event);
 }
 
 function memberLabel(member: TransactionInquiryMember) {
@@ -74,9 +78,9 @@ export function TransactionInquiryTable(props: Props) {
       </div>
     ) : <span className={styles.unlinkedMember}>Belum Terhubung</span> },
     { key: "originalAmount", header: "Amount", minWidth: "130px", align: "right", render: (row) => <span className={`${styles.amountCell} ${Number(row.originalAmount) < 0 ? styles.debitAmount : ""}`}>{formatMoney(Math.abs(Number(row.originalAmount)))}</span> },
-    { key: "type", header: "Type", minWidth: "86px", render: (row) => <span className={`${styles.typeBadge} ${typeOf(row) === "Credit" ? styles.credit : styles.debit}`}>{typeOf(row)}</span> },
-    { key: "suggestedEvent", header: "Suggested Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventLabel(row.suggestedEvent)}</span> },
-    { key: "finalEvent", header: "Final Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventLabel(row.finalEvent)}</span> },
+    { key: "type", header: "Type", minWidth: "96px", render: (row) => <span className={`${styles.typeBadge} ${typeOf(row) === "Incoming" ? styles.credit : styles.debit}`}>{typeOf(row)}</span> },
+    { key: "suggestedEvent", header: "Suggested Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventDisplay(row, row.suggestedEvent)}</span> },
+    { key: "finalEvent", header: "Final Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventDisplay(row, row.finalEvent)}</span> },
     { key: "status", header: "Status", minWidth: "135px", render: (row) => <span className={`${styles.statusBadge} ${styles[`status${row.status}`]}`}>{getLifecycleLabel(row.status)}</span> },
     { key: "action", header: "Action", minWidth: "90px", sticky: "right", align: "center", render: (row) => <Button type="button" variant="outline" size="sm" icon={<Eye size={13} />} disabled={props.detailLoading} onClick={() => props.onView(row.id)}>View</Button> }
   ], [props.canViewMemberData, props.detailLoading, props.onView]);

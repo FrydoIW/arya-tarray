@@ -9,6 +9,7 @@ import { ApprovalDetailSummary } from "./ApprovalDetailSummary";
 import { ApprovalHistoryTimeline } from "./ApprovalHistoryTimeline";
 import { StatementDetailCard } from "./StatementDetailCard";
 import { TransactionPreview } from "./TransactionPreview";
+import { CorrectionProposalDiff } from "./CorrectionProposalDiff";
 import styles from "../styles/sign-approval.module.css";
 
 type ApprovalDetailViewProps = {
@@ -60,6 +61,7 @@ export function ApprovalDetailView({ approvalId, onBack, onDecided }: ApprovalDe
 
       <StatementDetailCard detail={state.detail} />
       <ApprovalDetailSummary summary={state.detail.summary} />
+      {state.detail.correctionProposal ? <CorrectionProposalDiff proposal={state.detail.correctionProposal} /> : null}
       <TransactionPreview
         items={state.detail.transactionPreview}
         totalTransactions={state.detail.summary.totalTransactions}

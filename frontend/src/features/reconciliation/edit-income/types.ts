@@ -1,8 +1,10 @@
 export type EditIncomeDisplayStatus = "COMPLETE" | "PENDING_REAPPROVAL";
 export type EditIncomePeriodMode = "MONTH" | "DAY";
 export type EditIncomeStatusFilter = "ALL" | EditIncomeDisplayStatus;
-export type CorrectionRowStatus = "CURRENT" | "MODIFIED" | "NOT_APPLICABLE";
+export type EditIncomeMode = "INQUIRY" | "EDIT";
+export type CorrectionRowStatus = "CURRENT" | "MODIFIED" | "ADDED" | "EXCLUDED";
 export type CorrectionRowStatusFilter = "ALL" | CorrectionRowStatus;
+export type CorrectionDirectionFilter = "ALL" | "INCOMING" | "OUTGOING";
 
 export type EditIncomeBankAccount = {
   id: string;
@@ -64,6 +66,11 @@ export type EditIncomeTransaction = {
   baseAmount: string | null;
   remark: string | null;
   requiresClassification: boolean;
+  sourceType: "BANK" | "MANUAL" | string;
+  correctionReason: string | null;
+  reconciliationExcludedAt: string | null;
+  reconciliationExclusionReason: string | null;
+  correctionAction?: "ADDED" | "EXCLUDED";
 };
 
 export type EditIncomeDetail = {
@@ -81,16 +88,38 @@ export type EditIncomeDetail = {
   }>;
 };
 
-export type EditIncomeCorrectionChange = {
-  transactionId: string;
+export type EditIncomeCorrectionRequest =
+  | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; remark: string | null }
+  | { action: "EXCLUDED"; transactionId: string; reason: string }
+  | {
+      action: "ADDED";
+      clientId: string;
+      direction: "INCOMING" | "OUTGOING";
+      transactionDate: string;
+      description: string;
+      amount: string;
+      eventCodeId: string | null;
+      remark: string | null;
+      reason: string;
+    };
+
+export type ManualAdjustmentInput = {
+  direction: "INCOMING" | "OUTGOING";
+  transactionDate: string;
+  description: string;
+  amount: string;
   eventCodeId: string | null;
   remark: string | null;
+  reason: string;
 };
 
 export type ExecuteEditIncomeResponse = {
   statementId: string;
   approvalId: string;
+  proposalId: string;
   modifiedTransactions: number;
+  addedAdjustments: number;
+  excludedTransactions: number;
   status: "CHECK";
   message: string;
 };

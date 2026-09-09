@@ -9,6 +9,7 @@ export type DashboardPeriodRange = {
 
 function transactionPeriodWhere(range: DashboardPeriodRange): Prisma.BankTransactionWhereInput {
   return {
+    reconciliationExcludedAt: null,
     transactionDate: {
       gte: range.periodStart,
       lt: range.periodEnd

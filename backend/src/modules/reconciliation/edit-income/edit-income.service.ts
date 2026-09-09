@@ -122,6 +122,10 @@ export async function getEditIncomeDetail(statementId: string) {
       eventCodeId: transaction.eventCodeId,
       baseAmount: transaction.baseAmount ? decimalToString(transaction.baseAmount) : null,
       remark: transaction.remark,
+      sourceType: transaction.sourceType,
+      correctionReason: transaction.correctionReason,
+      reconciliationExcludedAt: transaction.reconciliationExcludedAt,
+      reconciliationExclusionReason: transaction.reconciliationExclusionReason,
       requiresClassification: storedTransactionRequiresClassification(transaction)
     })),
     approvalHistory: statement.approval.history.map((item) => ({
@@ -138,11 +142,12 @@ export async function executeEditIncome(statementId: string, input: ExecuteEditI
   const result = await executeEditIncomeCorrectionAtomic({
     statementId,
     userId,
-    changes: input.changes
+    corrections: input.corrections
   });
+  const totalChanges = result.modifiedTransactions + result.addedAdjustments + result.excludedTransactions;
   return {
     ...result,
     status: "CHECK",
-    message: `${result.modifiedTransactions} transaction${result.modifiedTransactions === 1 ? "" : "s"} submitted for re-approval.`
+    message: `${totalChanges} correction${totalChanges === 1 ? "" : "s"} submitted for re-approval.`
   };
 }

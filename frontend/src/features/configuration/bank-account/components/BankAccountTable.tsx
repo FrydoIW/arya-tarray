@@ -13,6 +13,16 @@ import { formatDateTime } from "@/lib/format";
 import type { BankAccount, BankAccountStatusFilter } from "../types";
 import styles from "../styles/bank-account.module.css";
 
+function formatOpeningBalance(row: BankAccount) {
+  if (row.openingBalance == null) return "Not configured";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: row.currencyCode,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(Number(row.openingBalance));
+}
+
 type BankAccountTableProps = {
   items: BankAccount[];
   allItems: BankAccount[];
@@ -81,6 +91,18 @@ export function BankAccountTable({
       header: "Currency",
       width: "125px",
       minWidth: "115px"
+    },
+    {
+      key: "openingBalance",
+      header: "Opening Balance",
+      width: "190px",
+      minWidth: "180px",
+      render: (row) => (
+        <div className={styles.balanceCell}>
+          <strong>{formatOpeningBalance(row)}</strong>
+          <small>{row.openingBalanceDate ? `As of ${row.openingBalanceDate}` : "No baseline date"}</small>
+        </div>
+      )
     },
     {
       key: "activeFlag",
@@ -158,7 +180,7 @@ export function BankAccountTable({
         rowKey={(row) => row.id}
         loading={loading}
         disabled={disabled}
-        minWidth="1360px"
+        minWidth="1540px"
         emptyState={{
           title: "No bank accounts found",
           description: search || statusFilter !== "ALL" ? "Try changing your search or status filter." : "Add the first supported bank account."

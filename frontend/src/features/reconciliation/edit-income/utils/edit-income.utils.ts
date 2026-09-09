@@ -4,7 +4,8 @@ import type {
   CorrectionRowStatus,
   EditIncomeDetail,
   EditIncomeEventCode,
-  EditIncomeTransaction
+  EditIncomeTransaction,
+  EditIncomeCorrectionRequest
 } from "../types";
 
 export function getEventCode(eventCodes: EditIncomeEventCode[], id: string | null) {
@@ -28,7 +29,7 @@ export function transactionChanged(
   current: EditIncomeTransaction,
   original: EditIncomeTransaction | undefined
 ) {
-  if (!original) return false;
+  if (!original) return current.correctionAction === "ADDED";
   return current.eventCodeId !== original.eventCodeId
     || normalizeRemark(current.remark) !== normalizeRemark(original.remark);
 }
@@ -37,20 +38,41 @@ export function getCorrectionRowStatus(
   current: EditIncomeTransaction,
   original: EditIncomeTransaction | undefined
 ): CorrectionRowStatus {
+  if (current.correctionAction === "ADDED") return "ADDED";
+  if (current.correctionAction === "EXCLUDED") return "EXCLUDED";
+  if (current.reconciliationExcludedAt) return "EXCLUDED";
   if (transactionChanged(current, original)) return "MODIFIED";
-  if (!current.requiresClassification) return "NOT_APPLICABLE";
   return "CURRENT";
 }
 
 export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactions: EditIncomeTransaction[]) {
   const originalById = new Map(detail.transactions.map((item) => [item.id, item]));
-  return draftTransactions
-    .filter((item) => transactionChanged(item, originalById.get(item.id)))
-    .map((item) => ({
+  const corrections: EditIncomeCorrectionRequest[] = [];
+  for (const item of draftTransactions) {
+    if (item.correctionAction === "ADDED") corrections.push({
+      action: "ADDED" as const,
+      clientId: item.id,
+      direction: item.originalAmount.startsWith("-") ? "OUTGOING" as const : "INCOMING" as const,
+      transactionDate: item.transactionDate!,
+      description: item.description,
+      amount: item.originalAmount.replace(/^-/, ""),
+      eventCodeId: item.eventCodeId,
+      remark: normalizeRemark(item.remark),
+      reason: item.correctionReason!
+    });
+    else if (item.correctionAction === "EXCLUDED") corrections.push({
+      action: "EXCLUDED" as const,
+      transactionId: item.id,
+      reason: item.correctionReason!
+    });
+    else if (transactionChanged(item, originalById.get(item.id))) corrections.push({
+      action: "MODIFIED" as const,
       transactionId: item.id,
       eventCodeId: item.eventCodeId,
       remark: normalizeRemark(item.remark)
-    }));
+    });
+  }
+  return corrections;
 }
 
 export const getCurrentMonthValue = currentBusinessMonthValue;

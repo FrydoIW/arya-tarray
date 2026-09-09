@@ -39,6 +39,7 @@ export function useStatementUploadWorkspace() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<DraftRowStatusFilter>("ALL");
+  const [eventCodeFilter, setEventCodeFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const workspaceRequestRef = useRef<AbortController | null>(null);
@@ -122,19 +123,20 @@ export function useStatementUploadWorkspace() {
     return workspace.transactions.filter((transaction) => {
       const rowStatus = getDraftRowStatus(transaction);
       const matchesStatus = statusFilter === "ALL" || rowStatus === statusFilter;
+      const matchesEventCode = eventCodeFilter === "ALL" || transaction.eventCodeId === eventCodeFilter;
       const matchesSearch = !normalizedSearch || [
         transaction.description,
         transaction.referenceNo ?? "",
         transaction.senderName ?? "",
         transaction.transactionType
       ].some((value) => value.toLowerCase().includes(normalizedSearch));
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesEventCode && matchesSearch;
     });
-  }, [search, statusFilter, workspace.transactions]);
+  }, [eventCodeFilter, search, statusFilter, workspace.transactions]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter]);
+  }, [eventCodeFilter, search, statusFilter]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filteredTransactions.length / pageSize));
@@ -198,6 +200,7 @@ export function useStatementUploadWorkspace() {
       setSearchInput("");
       setSearch("");
       setStatusFilter("ALL");
+      setEventCodeFilter("ALL");
       setPage(1);
       setMessage(`${file.name} uploaded and parsed successfully. Draft data is now persisted.`);
     } catch (caught) {
@@ -241,6 +244,7 @@ export function useStatementUploadWorkspace() {
       setSearchInput("");
       setSearch("");
       setStatusFilter("ALL");
+      setEventCodeFilter("ALL");
       setPage(1);
     } catch (caught) {
       if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to open statement draft.");
@@ -259,6 +263,7 @@ export function useStatementUploadWorkspace() {
     message,
     search: searchInput,
     statusFilter,
+    eventCodeFilter,
     page,
     pageSize,
     filteredTransactions,
@@ -271,6 +276,7 @@ export function useStatementUploadWorkspace() {
     selectedStatementId: workspace.statement?.id ?? null,
     setSearch: setSearchInput,
     setStatusFilter,
+    setEventCodeFilter,
     setPage,
     setPageSize,
     refresh,

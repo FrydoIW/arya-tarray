@@ -522,6 +522,33 @@
   gap: 8px;
 }
 
+.correctionDiff { overflow: hidden; background: #fff; border: 1px solid #e4e9f0; border-radius: 11px; box-shadow: var(--shadow-xs); }
+.correctionDiffHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border-bottom: 1px solid #eef1f5; }
+.correctionDiffHeader h3 { margin: 0; color: #1d2939; font-size: var(--font-size-section); }
+.correctionDiffHeader p { margin: 4px 0 0; color: #667085; font-size: var(--font-size-helper); }
+.correctionTotals { display: flex; align-items: center; gap: 8px; color: #667085; font-size: 11px; white-space: nowrap; }
+.correctionTotals strong { color: #1d2939; }
+.correctionCounts { display: flex; gap: 8px; padding: 9px 16px; background: #fafbfc; border-bottom: 1px solid #eef1f5; }
+.correctionCounts span { padding: 4px 8px; color: #475467; background: #fff; border: 1px solid #e4e9f0; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.diffList { display: grid; gap: 8px; padding: 12px 16px 16px; }
+.diffItem { display: grid; gap: 10px; padding: 12px; background: #fff; border: 1px solid #e4e9f0; border-radius: 8px; }
+.diffItemTitle { display: flex; align-items: flex-start; gap: 10px; }
+.diffItemTitle > div { display: grid; gap: 3px; }
+.diffItemTitle strong { color: #344054; font-size: 12px; }
+.diffItemTitle small { color: #667085; font-size: 11px; }
+.diffAction { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border-radius: 999px; font-size: 10px; font-weight: 800; }
+.diffMODIFIED { color: #2261d9; background: #edf4ff; }
+.diffADDED { color: #168246; background: #eefaf2; }
+.diffEXCLUDED { color: #a83b49; background: #fff1f2; }
+.diffChanges { display: grid; gap: 6px; }
+.diffChange { display: grid; grid-template-columns: 90px minmax(0, 1fr) 16px minmax(0, 1fr); align-items: center; gap: 8px; padding: 7px 9px; background: #fafbfc; border-radius: 6px; font-size: 11px; }
+.diffChange span, .diffReason span { color: #667085; }
+.diffChange strong { color: #344054; }
+.diffFacts { display: flex; gap: 18px; flex-wrap: wrap; color: #667085; font-size: 11px; }
+.diffFacts strong { margin-left: 4px; color: #344054; }
+.diffReason { display: grid; gap: 3px; padding-top: 8px; border-top: 1px solid #eef1f5; font-size: 11px; }
+.diffReason strong { color: #344054; }
+
 @media (max-width: 1200px) {
   .metrics,
   .detailMetrics {
@@ -611,6 +638,9 @@
   .decisionActions > div > button {
     flex: 1;
   }
+
+  .correctionDiffHeader, .correctionTotals { align-items: flex-start; flex-direction: column; }
+  .diffChange { grid-template-columns: 1fr; }
 }
 
 /* Enterprise visual skin v3 */

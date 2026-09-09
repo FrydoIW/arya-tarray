@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api";
 import type {
-  EditIncomeCorrectionChange,
+  EditIncomeCorrectionRequest,
   EditIncomeDetail,
   EditIncomePeriodMode,
   EditIncomeWorkspace,
@@ -20,13 +20,13 @@ export function getEditIncomeDetail(statementId: string, signal?: AbortSignal): 
 
 export function executeEditIncomeCorrection(
   statementId: string,
-  changes: EditIncomeCorrectionChange[]
+  corrections: EditIncomeCorrectionRequest[]
 ): Promise<ExecuteEditIncomeResponse> {
   return apiFetch<ExecuteEditIncomeResponse>(
     `/reconciliation/edit-income/${encodeURIComponent(statementId)}/execute`,
     {
       method: "POST",
-      body: JSON.stringify({ changes })
+      body: JSON.stringify({ corrections })
     }
   );
 }

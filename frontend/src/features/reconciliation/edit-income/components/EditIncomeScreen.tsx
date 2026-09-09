@@ -24,7 +24,7 @@ export function EditIncomeScreen() {
         description="Correct finalized income classifications and submit changes for re-approval."
         actions={(
           <>
-            <Button type="button" variant="secondary" icon={<RotateCcw size={16} />} disabled={!workspace.detail || workspace.busy || workspace.modifiedTransactions === 0} onClick={workspace.clearChanges}>Clear</Button>
+            <Button type="button" variant="secondary" icon={<RotateCcw size={16} />} disabled={!workspace.detail || workspace.busy || (workspace.mode === "INQUIRY" && workspace.modifiedTransactions === 0)} onClick={workspace.clearChanges}>Clear</Button>
             <Button type="button" icon={<Play size={16} />} disabled={!workspace.canExecute || workspace.loading || workspace.busy} onClick={() => {
               if (workspace.canExecute) setExecuteOpen(true);
             }} title={workspace.canExecute ? "Submit correction for re-approval" : "Select a Complete statement and make at least one correction first"}>Execute</Button>
@@ -60,16 +60,21 @@ export function EditIncomeScreen() {
         onPageChange={workspace.setStatementPage}
         onPageSizeChange={workspace.setStatementPageSize}
         onReload={() => void workspace.refresh()}
-        onEdit={(statementId) => void workspace.selectStatement(statementId)}
+        onOpen={(statementId) => void workspace.selectStatement(statementId)}
       />
 
       {workspace.detail ? (
         <EditIncomeCorrectionWorkspace
           detail={workspace.detail}
           rows={workspace.filteredTransactions}
+          allRows={workspace.allTransactions}
           originalById={workspace.originalById}
           search={workspace.transactionSearch}
           statusFilter={workspace.transactionStatusFilter}
+          eventCodeFilter={workspace.transactionEventCodeFilter}
+          directionFilter={workspace.transactionDirectionFilter}
+          mode={workspace.mode}
+          correctionSummary={workspace.correctionSummary}
           page={workspace.transactionPage}
           pageSize={workspace.transactionPageSize}
           loading={workspace.detailLoading}
@@ -77,16 +82,23 @@ export function EditIncomeScreen() {
           canEdit={workspace.canEdit}
           onSearchChange={workspace.setTransactionSearch}
           onStatusFilterChange={workspace.setTransactionStatusFilter}
+          onEventCodeFilterChange={workspace.setTransactionEventCodeFilter}
+          onDirectionFilterChange={workspace.setTransactionDirectionFilter}
           onPageChange={workspace.setTransactionPage}
           onPageSizeChange={workspace.setTransactionPageSize}
           onReload={() => void workspace.refresh()}
           onBack={workspace.closeDetail}
           onTransactionChange={workspace.updateTransaction}
+          onEditMode={workspace.enterEditMode}
+          onInquiryMode={workspace.enterInquiryMode}
+          onAddAdjustment={workspace.addAdjustment}
+          onExclude={workspace.excludeTransaction}
+          onRestore={workspace.restoreTransaction}
         />
       ) : (
         <div className={styles.noteCard}>
           <strong>Post-completion correction</strong>
-          <span>Select a Complete statement and click Edit. Changes stay local until Execute, then require approval again.</span>
+          <span>Select a Complete statement and click Open. It starts in Inquiry; proposed corrections remain local until Execute and then require approval again.</span>
         </div>
       )}
       <ConfirmDialog

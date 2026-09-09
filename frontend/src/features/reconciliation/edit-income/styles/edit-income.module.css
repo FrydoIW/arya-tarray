@@ -49,7 +49,7 @@
 
 .correctionPanel { margin-top: 0; }
 .correctionTitleRow { display: flex; align-items: center; gap: 10px; }
-.statementDetail { margin: 0 16px 13px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; overflow: hidden; background: var(--line); border: 1px solid var(--line); border-radius: 9px; }
+.statementDetail { margin: 0 16px 10px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; overflow: hidden; background: var(--line); border: 1px solid var(--line); border-radius: 9px; }
 .statementDetail > div { min-width: 0; display: grid; gap: 4px; padding: 10px 11px; background: #fbfcff; }
 .statementDetail span { color: #7d899f; font-size: 11px; font-weight: 700; }
 .statementDetail strong { overflow: hidden; color: #2f3c57; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -69,7 +69,23 @@
 .remarkInput { width: 100%; min-width: 175px; }
 .rowCURRENT { color: #168246; background: #eefaf2; border-color: #d7efdf; }
 .rowMODIFIED { color: #2261d9; background: #edf4ff; border-color: #d7e4ff; }
-.rowNOT_APPLICABLE { color: #6e7b93; background: #f4f6f9; border-color: #e4e8ef; }
+.rowADDED { color: #168246; background: #eefaf2; border-color: #d7efdf; }
+.rowEXCLUDED { color: #a83b49; background: #fff1f2; border-color: #f4d7dc; }
+.modeActions, .correctionFilters { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.correctionFilters { padding: 10px 14px; border-top: 1px solid #eef1f5; }
+.correctionFilters > label:first-child { width: min(255px, 100%); }
+.correctionSummary { margin: 0 16px 10px; display: flex; gap: 8px; }
+.correctionSummary > div { min-width: 150px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 10px; color: #667085; background: #fafbfc; border: 1px solid #e7ebf0; border-radius: 7px; font-size: 11px; }
+.correctionSummary strong { color: #1d2939; font-size: 13px; }
+.modalBody { display: grid; gap: 14px; padding: 18px; }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field { display: grid; gap: 6px; color: #475467; font-size: 11px; font-weight: 700; }
+.field input, .field select, .field textarea { width: 100%; min-height: var(--control-height); padding: 8px 10px; color: #344054; background: #fff; border: 1px solid var(--line); border-radius: 7px; font: inherit; font-weight: 500; }
+.field textarea { min-height: 78px; resize: vertical; }
+.modalFooter { display: flex; justify-content: flex-end; gap: 8px; padding: 13px 18px; border-top: 1px solid #eef1f5; }
+.provenanceNote, .excludeEvidence { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; color: #667085; background: #faf8f4; border: 1px solid #ece6dc; border-radius: 8px; font-size: 11px; }
+.provenanceNote strong { color: #7d5214; }
+.excludeEvidence strong { color: #344054; }
 
 .noteCard { display: flex; align-items: center; gap: 8px; padding: 11px 14px; color: #8c6218; background: #fff9ec; border: 1px solid #f1dfb5; border-radius: 9px; font-size: 11px; }
 .noteCard strong { color: #69480e; }
@@ -81,6 +97,7 @@
   .tableHeader, .correctionHeader { align-items: flex-start; flex-direction: column; }
   .tableToolbar, .correctionToolbar { width: 100%; flex-wrap: wrap; }
   .statementDetail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .modeActions, .correctionFilters { width: 100%; }
 }
 
 
@@ -97,10 +114,12 @@
 
 @media (max-width: 760px) {
   .metrics, .flowSteps, .statementDetail { grid-template-columns: 1fr; }
-  .tableToolbar, .correctionToolbar { align-items: stretch; flex-direction: column; }
+  .tableToolbar, .correctionToolbar, .correctionFilters { align-items: stretch; flex-direction: column; }
   .periodFilter, .searchFilter, .statusFilter, .bankFilter, .reloadButton { width: 100%; min-width: 0; flex: none; }
   .tableToolbar > *, .correctionToolbar > * { width: 100%; }
   .statementDetail { margin-right: 12px; margin-left: 12px; }
+  .correctionSummary, .formGrid { grid-template-columns: 1fr; }
+  .correctionSummary { display: grid; margin-right: 12px; margin-left: 12px; }
   .noteCard { align-items: flex-start; }
 }
 

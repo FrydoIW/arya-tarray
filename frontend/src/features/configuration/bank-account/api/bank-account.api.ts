@@ -19,6 +19,17 @@ type BankAccountApiItem = {
   accountNo: string;
   accountName: string;
   currencyCode: string;
+  openingBalance: string | null;
+  openingBalanceDate: string | null;
+  openingBalanceLockedAt: string | null;
+  openingBalanceEditable: boolean;
+  balance: {
+    configured: boolean;
+    finalizedIncoming: string | null;
+    finalizedOutgoing: string | null;
+    reconciledBalance: string | null;
+    pendingMovement: string | null;
+  };
   activeFlag: boolean;
   statementCount: number;
   createdAt?: string;
@@ -53,6 +64,11 @@ function mapAccount(item: BankAccountApiItem): BankAccount {
     accountNo: item.accountNo,
     accountName: item.accountName,
     currencyCode: item.currencyCode,
+    openingBalance: item.openingBalance,
+    openingBalanceDate: item.openingBalanceDate,
+    openingBalanceLockedAt: item.openingBalanceLockedAt,
+    openingBalanceEditable: item.openingBalanceEditable,
+    balance: { ...item.balance },
     activeFlag: item.activeFlag,
     statementCount: Number(item.statementCount ?? 0),
     createdAt: item.createdAt,

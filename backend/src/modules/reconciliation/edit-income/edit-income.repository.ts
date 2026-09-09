@@ -3,7 +3,6 @@ import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
 import { storedTransactionRequiresClassification } from "../reconciliation-classification.js";
 import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../reconciliation-approval.js";
-import { LEGACY_APPROVAL_SNAPSHOT_MESSAGE } from "../../approval/sign-approval/approval-snapshot.domain.js";
 
 const bankAccountSelect = {
   id: true,
@@ -115,20 +114,33 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
 export type EditIncomeCorrectionInput = {
   statementId: string;
   userId: string;
-  changes: Array<{
-    transactionId: string;
-    eventCodeId: string | null;
-    remark: string | null;
-  }>;
+  corrections: Array<
+    | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; remark: string | null }
+    | { action: "EXCLUDED"; transactionId: string; reason: string }
+    | {
+        action: "ADDED";
+        clientId: string;
+        direction: "INCOMING" | "OUTGOING";
+        transactionDate: string;
+        description: string;
+        amount: string;
+        eventCodeId: string | null;
+        remark: string | null;
+        reason: string;
+      }
+  >;
 };
 
 export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrectionInput) {
   return prisma.$transaction(async (tx) => {
+    const existingCorrections = input.corrections.filter((item) => item.action !== "ADDED");
     const statement = await tx.bankStatementUpload.findUnique({
       where: { id: input.statementId },
       select: {
         id: true,
         status: true,
+        periodFrom: true,
+        periodTo: true,
         approval: {
           select: {
             id: true,
@@ -138,17 +150,22 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
               select: { id: true },
               take: 1
             },
-            _count: { select: { approvers: true } }
+            correctionProposals: {
+              where: { status: "PENDING" },
+              select: { id: true },
+              take: 1
+            }
           }
         },
         transactions: {
-          where: { id: { in: input.changes.map((change) => change.transactionId) } },
+          where: { id: { in: existingCorrections.map((change) => change.transactionId) } },
           select: {
             id: true,
             transactionType: true,
             originalAmount: true,
             eventCodeId: true,
-            remark: true
+            remark: true,
+            reconciliationExcludedAt: true
           }
         }
       }
@@ -161,17 +178,20 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
     if (!statement.approval || statement.approval.history.length === 0) {
       throw new HttpError(409, "This statement has no previous approved reconciliation result.");
     }
-    if (statement.approval._count.approvers === 0) {
-      throw new HttpError(409, LEGACY_APPROVAL_SNAPSHOT_MESSAGE);
-    }
     if (!["APPROVED", "REJECTED"].includes(statement.approval.status)) {
       throw new HttpError(409, "This statement already has an active approval request. Reload the Edit Income workspace.");
     }
-    if (statement.transactions.length !== input.changes.length) {
+    if (statement.approval.correctionProposals.length > 0) {
+      throw new HttpError(409, "This statement already has a pending correction proposal. Reload the Edit Income workspace.");
+    }
+    if (statement.transactions.length !== existingCorrections.length) {
       throw new HttpError(400, "One or more correction transactions do not belong to this statement.");
     }
 
-    const targetEventCodeIds = [...new Set(input.changes.map((change) => change.eventCodeId).filter(Boolean))] as string[];
+    const targetEventCodeIds = [...new Set(input.corrections
+      .filter((change): change is Extract<EditIncomeCorrectionInput["corrections"][number], { action: "MODIFIED" | "ADDED" }> => change.action !== "EXCLUDED")
+      .map((change) => change.eventCodeId)
+      .filter(Boolean))] as string[];
     const activeEventCodes = targetEventCodeIds.length
       ? await tx.eventCode.findMany({
           where: { id: { in: targetEventCodeIds }, activeFlag: true },
@@ -184,18 +204,44 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
     }
 
     const currentById = new Map(statement.transactions.map((transaction) => [transaction.id, transaction]));
-    const actualChanges: Array<{
-      transactionId: string;
-      eventCodeId: string | null;
-      remark: string | null;
-      eventChanged: boolean;
-      remarkChanged: boolean;
-      oldEventCodeId: string | null;
-      oldRemark: string | null;
-    }> = [];
+    const proposalItems: Prisma.ReconciliationCorrectionItemCreateManyProposalInput[] = [];
+    for (const requested of input.corrections) {
+      if (requested.action === "ADDED") {
+        const transactionDate = new Date(`${requested.transactionDate}T00:00:00.000Z`);
+        if ((statement.periodFrom && transactionDate < statement.periodFrom)
+          || (statement.periodTo && transactionDate > statement.periodTo)) {
+          throw new HttpError(400, "Manual adjustment date must be within the opened statement period.");
+        }
+        proposalItems.push({
+          action: "ADDED",
+          proposedEventCodeId: requested.eventCodeId,
+          proposedRemark: requested.remark?.trim() || null,
+          correctionReason: requested.reason.trim(),
+          manualTransactionDate: transactionDate,
+          manualTransactionType: requested.direction === "INCOMING" ? "CR" : "DB",
+          manualDescription: requested.description.trim(),
+          manualOriginalAmount: requested.direction === "INCOMING" ? requested.amount : `-${requested.amount}`
+        });
+        continue;
+      }
 
-    for (const requested of input.changes) {
       const current = currentById.get(requested.transactionId)!;
+      if (current.reconciliationExcludedAt) {
+        throw new HttpError(400, "An already excluded transaction cannot be corrected again.");
+      }
+      if (requested.action === "EXCLUDED") {
+        proposalItems.push({
+          action: "EXCLUDED",
+          bankTransactionId: current.id,
+          beforeEventCodeId: current.eventCodeId,
+          proposedEventCodeId: current.eventCodeId,
+          beforeRemark: current.remark?.trim() || null,
+          proposedRemark: current.remark?.trim() || null,
+          correctionReason: requested.reason.trim()
+        });
+        continue;
+      }
+
       const requiresClassification = storedTransactionRequiresClassification(current);
       if (requiresClassification && !requested.eventCodeId) {
         throw new HttpError(400, "Final Event is required for every eligible incoming transaction.");
@@ -206,22 +252,18 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
 
       const normalizedRemark = requested.remark?.trim() || null;
       const currentRemark = current.remark?.trim() || null;
-      const eventChanged = current.eventCodeId !== requested.eventCodeId;
-      const remarkChanged = currentRemark !== normalizedRemark;
-      if (!eventChanged && !remarkChanged) continue;
-
-      actualChanges.push({
-        transactionId: current.id,
-        eventCodeId: requested.eventCodeId,
-        remark: normalizedRemark,
-        eventChanged,
-        remarkChanged,
-        oldEventCodeId: current.eventCodeId,
-        oldRemark: currentRemark
+      if (current.eventCodeId === requested.eventCodeId && currentRemark === normalizedRemark) continue;
+      proposalItems.push({
+        action: "MODIFIED",
+        bankTransactionId: current.id,
+        beforeEventCodeId: current.eventCodeId,
+        proposedEventCodeId: requested.eventCodeId,
+        beforeRemark: currentRemark,
+        proposedRemark: normalizedRemark
       });
     }
 
-    if (actualChanges.length === 0) {
+    if (proposalItems.length === 0) {
       throw new HttpError(400, "No Edit Income changes are available to Execute.");
     }
 
@@ -246,49 +288,6 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       throw new HttpError(409, "This statement changed while Execute was running. Reload the Edit Income workspace.");
     }
 
-    for (const change of actualChanges) {
-      await tx.bankTransaction.update({
-        where: { id: change.transactionId },
-        data: {
-          eventCodeId: change.eventCodeId,
-          remark: change.remark,
-          status: "CHECK"
-        }
-      });
-
-      if (change.eventChanged) {
-        await tx.bankTransactionHistory.create({
-          data: {
-            bankTransactionId: change.transactionId,
-            fieldName: "event_code_id",
-            oldValue: change.oldEventCodeId,
-            newValue: change.eventCodeId,
-            remark: "Edit Income correction",
-            changedAt: now,
-            changedById: input.userId
-          }
-        });
-      }
-      if (change.remarkChanged) {
-        await tx.bankTransactionHistory.create({
-          data: {
-            bankTransactionId: change.transactionId,
-            fieldName: "remark",
-            oldValue: change.oldRemark,
-            newValue: change.remark,
-            remark: "Edit Income correction",
-            changedAt: now,
-            changedById: input.userId
-          }
-        });
-      }
-    }
-
-    await tx.bankTransaction.updateMany({
-      where: { statementUploadId: statement.id, status: "FINALIZED" },
-      data: { status: "CHECK" }
-    });
-
     const approvalUpdate = await tx.reconciliationApproval.updateMany({
       where: {
         id: statement.approval.id,
@@ -307,6 +306,22 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       throw new HttpError(409, "The approval request changed while Execute was running. Reload the Edit Income workspace.");
     }
 
+    const proposal = await tx.reconciliationCorrectionProposal.create({
+      data: {
+        approvalId: statement.approval.id,
+        statementUploadId: statement.id,
+        proposedAt: now,
+        proposedById: input.userId,
+        items: { createMany: { data: proposalItems } },
+        approvers: {
+          createMany: {
+            data: approvalConfig.approvers.map((assignment) => ({ userId: assignment.approverUserId }))
+          }
+        }
+      },
+      select: { id: true }
+    });
+
     await tx.reconciliationApprovalHistory.create({
       data: {
         approvalId: statement.approval.id,
@@ -320,7 +335,10 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
     return {
       statementId: statement.id,
       approvalId: statement.approval.id,
-      modifiedTransactions: actualChanges.length
+      proposalId: proposal.id,
+      modifiedTransactions: proposalItems.filter((item) => item.action === "MODIFIED").length,
+      addedAdjustments: proposalItems.filter((item) => item.action === "ADDED").length,
+      excludedTransactions: proposalItems.filter((item) => item.action === "EXCLUDED").length
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

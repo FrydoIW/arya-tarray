@@ -28,6 +28,7 @@ type Props = {
   eventCodes: EventCodeOption[];
   search: string;
   statusFilter: DraftRowStatusFilter;
+  eventCodeFilter: string;
   page: number;
   pageSize: number;
   loading: boolean;
@@ -35,20 +36,21 @@ type Props = {
   selectedStatementId: string | null;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: DraftRowStatusFilter) => void;
+  onEventCodeFilterChange: (value: string) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onReload: () => void;
   onFinalEventChange: (transactionId: string, eventCodeId: string | null) => void;
 };
 
-function RowStatus({ status }: { status: DraftRowStatus }) {
+function RowStatus({ status, outgoing }: { status: DraftRowStatus; outgoing: boolean }) {
   const icon = status === "NEEDS_REVIEW"
     ? <TriangleAlert size={12} />
     : status === "NOT_APPLICABLE"
       ? <CircleMinus size={12} />
       : <CheckCircle2 size={12} />;
 
-  return <span className={`${styles.rowStatus} ${styles[`row${status}`]}`}>{icon}{getDraftRowStatusLabel(status)}</span>;
+  return <span className={`${styles.rowStatus} ${styles[`row${status}`]}`}>{icon}{outgoing ? "Outgoing" : getDraftRowStatusLabel(status)}</span>;
 }
 
 export function DraftTransactionReview({
@@ -56,6 +58,7 @@ export function DraftTransactionReview({
   eventCodes,
   search,
   statusFilter,
+  eventCodeFilter,
   page,
   pageSize,
   loading,
@@ -63,6 +66,7 @@ export function DraftTransactionReview({
   selectedStatementId,
   onSearchChange,
   onStatusFilterChange,
+  onEventCodeFilterChange,
   onPageChange,
   onPageSizeChange,
   onReload,
@@ -105,14 +109,14 @@ export function DraftTransactionReview({
       align: "center",
       render: (row) => requiresEventClassification(row)
         ? <span className={styles.suffixChip}>{row.suffixCode ?? "-"}</span>
-        : <span className={styles.notApplicableText}>N/A</span>
+        : <span className={styles.notApplicableText}>{row.direction === "DB" ? "Outgoing" : "N/A"}</span>
     },
     {
       key: "suggestedEventCodeId",
       header: "Suggested Event",
       minWidth: "185px",
       render: (row) => {
-        if (!requiresEventClassification(row)) return <span className={styles.notApplicableText}>Not applicable</span>;
+        if (!requiresEventClassification(row)) return <span className={styles.notApplicableText}>{row.direction === "DB" ? "Outgoing" : "Not applicable"}</span>;
         const suggested = getEventCode(eventCodes, row.suggestedEventCodeId);
         return suggested
           ? <span className={styles.suggestedEvent}>{getEventCodeLabel(suggested)}</span>
@@ -140,9 +144,22 @@ export function DraftTransactionReview({
         </Select>
       ),
       render: (row) => {
-        if (!requiresEventClassification(row)) return <span className={styles.notApplicableText}>Not required</span>;
+        if (!requiresEventClassification(row)) return <span className={styles.notApplicableText}>{row.direction === "DB" ? "Outgoing" : "Not required"}</span>;
         const finalEvent = getEventCode(eventCodes, row.eventCodeId);
         return <span className={finalEvent ? styles.finalEvent : styles.noMatch}>{finalEvent ? getEventCodeLabel(finalEvent) : "Select Event..."}</span>;
+      }
+    },
+    {
+      key: "finalEventCode",
+      header: "Event Code",
+      minWidth: "96px",
+      align: "center",
+      render: (row) => {
+        if (row.direction === "DB") return <span className={styles.notApplicableText}>Outgoing</span>;
+        const finalEvent = getEventCode(eventCodes, row.eventCodeId);
+        return finalEvent
+          ? <span className={styles.suffixChip}>{finalEvent.code}</span>
+          : <span className={styles.notApplicableText}>-</span>;
       }
     },
     {
@@ -157,7 +174,7 @@ export function DraftTransactionReview({
       header: "Status",
       minWidth: "135px",
       sticky: "right",
-      render: (row) => <RowStatus status={getDraftRowStatus(row)} />
+      render: (row) => <RowStatus status={getDraftRowStatus(row)} outgoing={row.direction === "DB"} />
     }
   ], [disabled, eventCodes]);
 
@@ -185,7 +202,18 @@ export function DraftTransactionReview({
             <option value="MATCHED">Matched</option>
             <option value="READY">Ready</option>
             <option value="NEEDS_REVIEW">Needs Review</option>
-            <option value="NOT_APPLICABLE">Not Applicable</option>
+            <option value="NOT_APPLICABLE">Outgoing / Not Applicable</option>
+          </Select>
+          <Select
+            value={eventCodeFilter}
+            disabled={loading}
+            onChange={(event) => onEventCodeFilterChange(event.target.value)}
+            aria-label="Final Event Code"
+          >
+            <option value="ALL">All Event Codes</option>
+            {eventCodes.map((eventCode) => (
+              <option key={eventCode.id} value={eventCode.id}>{eventCode.code} — {eventCode.eventName}</option>
+            ))}
           </Select>
           <Button
             type="button"
@@ -206,7 +234,7 @@ export function DraftTransactionReview({
         rowKey={(row) => row.id}
         loading={loading}
         disabled={disabled}
-        minWidth="1260px"
+        minWidth="1356px"
         onCellChange={(row, columnKey, value) => {
           if (columnKey === "eventCodeId") onFinalEventChange(row.id, value ? String(value) : null);
         }}

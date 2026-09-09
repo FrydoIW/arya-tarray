@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { formatDate, formatDateTime } from "@/lib/format";
 import type { BankAccount, SupportedBank } from "../types";
 import { canonicalAccountNo } from "../utils/bank-account-workspace.utils";
 import styles from "../styles/bank-account.module.css";
@@ -15,8 +16,18 @@ type BankAccountModalProps = {
   supportedBanks: SupportedBank[];
   disabled?: boolean;
   onClose: () => void;
-  onSubmit: (value: { bankCode?: string; accountNo?: string; accountName: string; activeFlag: boolean }) => void;
+  onSubmit: (value: { bankCode?: string; accountNo?: string; accountName: string; activeFlag: boolean; openingBalance: string | null; openingBalanceDate: string | null }) => void;
 };
+
+function formatAccountMoney(value: string | null, currencyCode: string) {
+  if (value == null) return "Not configured";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: currencyCode,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(Number(value));
+}
 
 export function BankAccountModal({
   open,
@@ -31,8 +42,11 @@ export function BankAccountModal({
   const [accountNo, setAccountNo] = useState("");
   const [accountName, setAccountName] = useState("");
   const [activeFlag, setActiveFlag] = useState(true);
+  const [openingBalance, setOpeningBalance] = useState("");
+  const [openingBalanceDate, setOpeningBalanceDate] = useState("");
   const [localError, setLocalError] = useState("");
   const identityEditable = mode === "ADD" || Boolean(account?.isDraft);
+  const baselineEditable = identityEditable || Boolean(account?.openingBalanceEditable);
 
   useEffect(() => {
     if (!open) return;
@@ -40,6 +54,8 @@ export function BankAccountModal({
     setAccountNo(account?.accountNo ?? "");
     setAccountName(account?.accountName ?? "");
     setActiveFlag(account?.activeFlag ?? true);
+    setOpeningBalance(account?.openingBalance ?? "");
+    setOpeningBalanceDate(account?.openingBalanceDate ?? "");
     setLocalError("");
   }, [account, open, supportedBanks]);
 
@@ -61,13 +77,26 @@ export function BankAccountModal({
       setLocalError("Account Name wajib diisi.");
       return;
     }
+    const normalizedOpeningBalance = openingBalance.trim();
+    const hasOpeningBalance = normalizedOpeningBalance !== "";
+    const hasOpeningBalanceDate = openingBalanceDate !== "";
+    if (hasOpeningBalance !== hasOpeningBalanceDate) {
+      setLocalError("Opening Balance and Balance As Of must be supplied together or both omitted.");
+      return;
+    }
+    if (hasOpeningBalance && !/^-?\d{1,17}(?:\.\d{1,2})?$/.test(normalizedOpeningBalance)) {
+      setLocalError("Opening Balance must be a valid amount with at most 2 decimal places.");
+      return;
+    }
 
     setLocalError("");
     onSubmit({
       bankCode: identityEditable ? bankCode : undefined,
       accountNo: identityEditable ? canonicalAccountNo(accountNo) : undefined,
       accountName: accountName.trim(),
-      activeFlag
+      activeFlag,
+      openingBalance: hasOpeningBalance ? normalizedOpeningBalance : null,
+      openingBalanceDate: hasOpeningBalanceDate ? openingBalanceDate : null
     });
   }
 
@@ -137,6 +166,74 @@ export function BankAccountModal({
             onChange={(event) => setAccountName(event.target.value)}
           />
         </label>
+
+        <div className={styles.baselineSection}>
+          <div className={styles.baselineHeading}>
+            <div>
+              <h3>Opening Balance</h3>
+              <p>Starting account balance as of the selected date. Transactions after that date determine the reconciled balance.</p>
+            </div>
+            {!baselineEditable ? <span className={styles.lockBadge}>Locked</span> : null}
+          </div>
+          <div className={styles.formGrid}>
+            <label className={styles.field}>
+              <span>Opening Balance</span>
+              {baselineEditable ? (
+                <input
+                  value={openingBalance}
+                  disabled={disabled}
+                  inputMode="decimal"
+                  placeholder="12500000"
+                  onChange={(event) => setOpeningBalance(event.target.value)}
+                />
+              ) : (
+                <div className={styles.readOnlyField}>
+                  <strong>{formatAccountMoney(account?.openingBalance ?? null, account?.currencyCode ?? "IDR")}</strong>
+                  <small>{account?.currencyCode ?? "IDR"}</small>
+                </div>
+              )}
+            </label>
+            <label className={styles.field}>
+              <span>Balance As Of</span>
+              {baselineEditable ? (
+                <input
+                  type="date"
+                  value={openingBalanceDate}
+                  disabled={disabled}
+                  onChange={(event) => setOpeningBalanceDate(event.target.value)}
+                />
+              ) : (
+                <div className={styles.readOnlyField}>
+                  <strong>{account?.openingBalanceDate ? formatDate(account.openingBalanceDate) : "Not configured"}</strong>
+                  <small>Baseline date</small>
+                </div>
+              )}
+            </label>
+          </div>
+          {!baselineEditable ? (
+            <div className={styles.identityNote}>
+              Opening Balance is read-only because statement activity already exists for this account.
+              {account?.openingBalanceLockedAt ? ` Locked ${formatDateTime(account.openingBalanceLockedAt)}.` : " Historical activity is used as a defensive lock."}
+            </div>
+          ) : null}
+        </div>
+
+        {!account?.isDraft && account ? (
+          <div className={styles.balanceSection}>
+            <div className={styles.baselineHeading}>
+              <div><h3>Derived Balance</h3><p>FINALIZED movement after the baseline determines the official reconciled balance. Pending movement is shown separately.</p></div>
+            </div>
+            {account.balance.configured ? (
+              <div className={styles.balanceGrid}>
+                <div><span>Opening Balance</span><strong>{formatAccountMoney(account.openingBalance, account.currencyCode)}</strong></div>
+                <div><span>Finalized Incoming</span><strong>{formatAccountMoney(account.balance.finalizedIncoming, account.currencyCode)}</strong></div>
+                <div><span>Finalized Outgoing</span><strong>{formatAccountMoney(account.balance.finalizedOutgoing, account.currencyCode)}</strong></div>
+                <div className={styles.reconciledBalance}><span>Reconciled Balance</span><strong>{formatAccountMoney(account.balance.reconciledBalance, account.currencyCode)}</strong></div>
+                <div><span>Pending Movement</span><strong>{formatAccountMoney(account.balance.pendingMovement, account.currencyCode)}</strong></div>
+              </div>
+            ) : <div className={styles.unconfiguredBalance}>Opening balance not configured.</div>}
+          </div>
+        ) : null}
 
         {!identityEditable && account?.statementCount ? (
           <div className={styles.identityNote}>This account is referenced by {account.statementCount} statement batch{account.statementCount === 1 ? "" : "es"}. Identity fields stay read-only.</div>

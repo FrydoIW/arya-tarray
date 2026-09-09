@@ -15,6 +15,7 @@ function DetailItem({ label, value, wide = false }: { label: string; value: Reac
 export function TransactionDetailModal({ detail, open, canViewMemberData, onClose }: { detail: TransactionInquiryDetail | null; open: boolean; canViewMemberData: boolean; onClose: () => void }) {
   if (!detail) return null;
   const transaction = detail.transaction;
+  const outgoing = transaction.originalAmount.trim().startsWith("-");
   return (
     <Modal open={open} title="Transaction Detail" description="Read-only bank source, reconciliation classification, and audit history." onClose={onClose}>
       <div className={styles.modalBody}>
@@ -59,8 +60,8 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
         <section className={styles.detailSection}>
           <h3>Classification</h3>
           <div className={styles.classificationGrid}>
-            <div><span>Suggested Event</span><strong>{eventLabel(transaction.suggestedEvent)}</strong><small>Machine suggestion at upload</small></div>
-            <div><span>Final Event</span><strong>{eventLabel(transaction.finalEvent)}</strong><small>Current operator-approved classification</small></div>
+            <div><span>Suggested Event</span><strong>{outgoing ? "Outgoing" : eventLabel(transaction.suggestedEvent)}</strong><small>{outgoing ? "Event Code is not required for debit transactions" : "Machine suggestion at upload"}</small></div>
+            <div><span>Final Event</span><strong>{outgoing ? "Outgoing" : eventLabel(transaction.finalEvent)}</strong><small>{outgoing ? "Direction provides the business meaning" : "Current operator-approved classification"}</small></div>
           </div>
         </section>
         <section className={styles.detailSection}>

@@ -79,6 +79,16 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
   const records = await loadSignApprovalDetailRecord(approvalId, userId);
   const { approval, approvers } = ensureEligibleDetail(records);
   const statement = approval.statementUpload;
+  const correctionProposal = records.correctionProposal;
+  const correctionItems = correctionProposal?.items ?? [];
+  const currentReconciledTotalCents = decimalToCents(statement.totalCredit) + decimalToCents(statement.totalDebit)
+    + decimalToCents(records.approvedManualAdjustmentAmount ?? { toString: () => "0" })
+    - decimalToCents(records.approvedExcludedBankAmount ?? { toString: () => "0" });
+  const proposedTotalCents = correctionItems.reduce((total, item) => {
+    if (item.action === "ADDED" && item.manualOriginalAmount) return total + decimalToCents(item.manualOriginalAmount);
+    if (item.action === "EXCLUDED" && item.bankTransaction) return total - decimalToCents(item.bankTransaction.originalAmount);
+    return total;
+  }, currentReconciledTotalCents);
 
   return {
     approval: {
@@ -106,6 +116,42 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
       fullName: assignment.user.fullName,
       email: assignment.user.email
     })),
+    correctionProposal: correctionProposal ? {
+      id: correctionProposal.id,
+      status: correctionProposal.status,
+      proposedAt: correctionProposal.proposedAt,
+      proposedBy: correctionProposal.proposedBy,
+      decidedAt: correctionProposal.decidedAt,
+      decidedBy: correctionProposal.decidedBy,
+      originalStatementAmount: totalAmount(statement.totalCredit, statement.totalDebit),
+      proposedCorrectedAmount: centsToDecimal(proposedTotalCents),
+      summary: {
+        modifiedTransactions: correctionItems.filter((item) => item.action === "MODIFIED").length,
+        addedAdjustments: correctionItems.filter((item) => item.action === "ADDED").length,
+        excludedTransactions: correctionItems.filter((item) => item.action === "EXCLUDED").length
+      },
+      items: correctionItems.map((item) => ({
+        id: item.id,
+        action: item.action,
+        transaction: item.bankTransaction ? {
+          id: item.bankTransaction.id,
+          rowNo: item.bankTransaction.rowNo,
+          transactionDate: item.bankTransaction.transactionDate,
+          referenceNo: item.bankTransaction.referenceNo,
+          description: item.bankTransaction.description,
+          originalAmount: decimalToString(item.bankTransaction.originalAmount)
+        } : null,
+        beforeEvent: item.beforeEventCode,
+        proposedEvent: item.proposedEventCode,
+        beforeRemark: item.beforeRemark,
+        proposedRemark: item.proposedRemark,
+        correctionReason: item.correctionReason,
+        manualTransactionDate: item.manualTransactionDate,
+        manualTransactionType: item.manualTransactionType,
+        manualDescription: item.manualDescription,
+        manualOriginalAmount: item.manualOriginalAmount ? decimalToString(item.manualOriginalAmount) : null
+      }))
+    } : null,
     summary: {
       totalTransactions: statement._count.transactions,
       totalAmount: totalAmount(statement.totalCredit, statement.totalDebit),

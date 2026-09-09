@@ -10,11 +10,14 @@ import {
 } from "../api/edit-income.api";
 import type {
   CorrectionRowStatusFilter,
+  CorrectionDirectionFilter,
   EditIncomeDetail,
+  EditIncomeMode,
   EditIncomePeriodMode,
   EditIncomeStatusFilter,
   EditIncomeTransaction,
-  EditIncomeWorkspace
+  EditIncomeWorkspace,
+  ManualAdjustmentInput
 } from "../types";
 import {
   buildCorrectionChanges,
@@ -68,6 +71,9 @@ export function useEditIncomeWorkspace() {
 
   const [transactionSearch, setTransactionSearch] = useState("");
   const [transactionStatusFilter, setTransactionStatusFilter] = useState<CorrectionRowStatusFilter>("ALL");
+  const [transactionEventCodeFilter, setTransactionEventCodeFilter] = useState("ALL");
+  const [transactionDirectionFilter, setTransactionDirectionFilter] = useState<CorrectionDirectionFilter>("ALL");
+  const [mode, setMode] = useState<EditIncomeMode>("INQUIRY");
   const [transactionPage, setTransactionPage] = useState(1);
   const [transactionPageSize, setTransactionPageSize] = useState(25);
 
@@ -113,6 +119,9 @@ export function useEditIncomeWorkspace() {
       setDraftTransactions(next.transactions.map((item) => ({ ...item })));
       setTransactionSearch("");
       setTransactionStatusFilter("ALL");
+      setTransactionEventCodeFilter("ALL");
+      setTransactionDirectionFilter("ALL");
+      setMode("INQUIRY");
       setTransactionPage(1);
       return next;
     } catch (caught) {
@@ -187,9 +196,14 @@ export function useEditIncomeWorkspace() {
     [detail?.transactions]
   );
 
+  const correctionSummary = useMemo(() => ({
+    modifiedTransactions: draftTransactions.filter((item) => !item.correctionAction && transactionChanged(item, originalById.get(item.id))).length,
+    addedAdjustments: draftTransactions.filter((item) => item.correctionAction === "ADDED").length,
+    excludedTransactions: draftTransactions.filter((item) => item.correctionAction === "EXCLUDED").length
+  }), [draftTransactions, originalById]);
   const modifiedTransactions = useMemo(
-    () => draftTransactions.filter((item) => transactionChanged(item, originalById.get(item.id))).length,
-    [draftTransactions, originalById]
+    () => correctionSummary.modifiedTransactions + correctionSummary.addedAdjustments + correctionSummary.excludedTransactions,
+    [correctionSummary]
   );
 
   const filteredTransactions = useMemo(() => {
@@ -197,6 +211,9 @@ export function useEditIncomeWorkspace() {
     return draftTransactions.filter((transaction) => {
       const rowStatus = getCorrectionRowStatus(transaction, originalById.get(transaction.id));
       const matchesStatus = transactionStatusFilter === "ALL" || rowStatus === transactionStatusFilter;
+      const matchesEventCode = transactionEventCodeFilter === "ALL" || transaction.eventCodeId === transactionEventCodeFilter;
+      const direction = transaction.originalAmount.trim().startsWith("-") ? "OUTGOING" : "INCOMING";
+      const matchesDirection = transactionDirectionFilter === "ALL" || direction === transactionDirectionFilter;
       const matchesSearch = !search || [
         transaction.description,
         transaction.referenceNo ?? "",
@@ -204,17 +221,17 @@ export function useEditIncomeWorkspace() {
         transaction.transactionType,
         transaction.remark ?? ""
       ].some((value) => value.toLowerCase().includes(search));
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesEventCode && matchesDirection && matchesSearch;
     });
-  }, [draftTransactions, originalById, transactionSearch, transactionStatusFilter]);
+  }, [draftTransactions, originalById, transactionDirectionFilter, transactionEventCodeFilter, transactionSearch, transactionStatusFilter]);
 
-  useEffect(() => { setTransactionPage(1); }, [transactionSearch, transactionStatusFilter]);
+  useEffect(() => { setTransactionPage(1); }, [transactionSearch, transactionStatusFilter, transactionEventCodeFilter, transactionDirectionFilter]);
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filteredTransactions.length / transactionPageSize));
     if (transactionPage > maxPage) setTransactionPage(maxPage);
   }, [filteredTransactions.length, transactionPage, transactionPageSize]);
 
-  const canEdit = Boolean(detail?.statement.editable && !busy && !detailLoading);
+  const canEdit = Boolean(mode === "EDIT" && detail?.statement.editable && !busy && !detailLoading);
   const canExecute = Boolean(canEdit && modifiedTransactions > 0);
 
   function changePeriod(value: { mode: EditIncomePeriodMode; month: string; date: string }) {
@@ -231,6 +248,7 @@ export function useEditIncomeWorkspace() {
   function clearChanges() {
     if (!detail || busy) return;
     setDraftTransactions(detail.transactions.map((item) => ({ ...item })));
+    setMode("INQUIRY");
     setMessage("Unsaved Edit Income changes cleared.");
     setError("");
   }
@@ -242,6 +260,71 @@ export function useEditIncomeWorkspace() {
     setDraftTransactions((current) => current.map((transaction) =>
       transaction.id === transactionId ? { ...transaction, [field]: value } : transaction
     ));
+  }
+
+  function enterEditMode() {
+    if (!detail?.statement.editable || busy || detailLoading) return;
+    setMode("EDIT");
+    setMessage("");
+    setError("");
+  }
+
+  function enterInquiryMode() {
+    if (busy || mode === "INQUIRY") return;
+    if (modifiedTransactions > 0) {
+      setError("Unsaved corrections are still staged. Execute them or use Clear before returning to Inquiry.");
+      return;
+    }
+    setMode("INQUIRY");
+    setMessage("");
+    setError("");
+  }
+
+  function addAdjustment(input: ManualAdjustmentInput) {
+    if (!canEdit) return;
+    const amount = input.direction === "OUTGOING" ? `-${input.amount}` : input.amount;
+    setDraftTransactions((current) => [...current, {
+      id: crypto.randomUUID(),
+      rowNo: 0,
+      transactionDate: input.transactionDate,
+      transactionType: input.direction === "INCOMING" ? "CR" : "DB",
+      referenceNo: null,
+      senderName: null,
+      description: input.description.trim(),
+      originalAmount: amount,
+      suffixCode: null,
+      suggestedEventCodeId: null,
+      eventCodeId: input.eventCodeId,
+      baseAmount: input.direction === "INCOMING" ? input.amount : null,
+      remark: input.remark,
+      requiresClassification: input.direction === "INCOMING",
+      sourceType: "MANUAL",
+      correctionReason: input.reason.trim(),
+      reconciliationExcludedAt: null,
+      reconciliationExclusionReason: null,
+      correctionAction: "ADDED"
+    }]);
+    setMessage("");
+    setError("");
+  }
+
+  function excludeTransaction(transactionId: string, reason: string) {
+    if (!canEdit || !reason.trim()) return;
+    setDraftTransactions((current) => current.map((transaction) => transaction.id === transactionId
+      ? { ...transaction, correctionAction: "EXCLUDED", correctionReason: reason.trim() }
+      : transaction));
+    setMessage("");
+    setError("");
+  }
+
+  function restoreTransaction(transactionId: string) {
+    if (!canEdit) return;
+    setDraftTransactions((current) => current.flatMap((transaction) => {
+      if (transaction.id !== transactionId) return [transaction];
+      if (transaction.correctionAction === "ADDED") return [];
+      const original = originalById.get(transactionId);
+      return [original ? { ...original } : transaction];
+    }));
   }
 
   async function selectStatement(statementId: string) {
@@ -256,18 +339,21 @@ export function useEditIncomeWorkspace() {
     setDraftTransactions([]);
     setTransactionSearch("");
     setTransactionStatusFilter("ALL");
+    setTransactionEventCodeFilter("ALL");
+    setTransactionDirectionFilter("ALL");
+    setMode("INQUIRY");
     setMessage("");
     setError("");
   }
 
   async function execute() {
     if (!detail || !canExecute) return;
-    const changes = buildCorrectionChanges(detail, draftTransactions);
+    const corrections = buildCorrectionChanges(detail, draftTransactions);
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      const result = await executeEditIncomeCorrection(detail.statement.id, changes);
+      const result = await executeEditIncomeCorrection(detail.statement.id, corrections);
       invalidateWorkspaceCache(EDIT_INCOME_WORKSPACE_PREFIX);
       invalidateWorkspaceCache("monitoring/dashboard/workspace");
       invalidateWorkspaceCache("member/data/workspace");
@@ -303,11 +389,16 @@ export function useEditIncomeWorkspace() {
     filteredStatements,
     transactionSearch,
     transactionStatusFilter,
+    transactionEventCodeFilter,
+    transactionDirectionFilter,
+    mode,
     transactionPage,
     transactionPageSize,
     filteredTransactions,
+    allTransactions: draftTransactions,
     originalById,
     modifiedTransactions,
+    correctionSummary,
     canEdit,
     canExecute,
     changePeriod,
@@ -318,13 +409,20 @@ export function useEditIncomeWorkspace() {
     setStatementPageSize,
     setTransactionSearch,
     setTransactionStatusFilter,
+    setTransactionEventCodeFilter,
+    setTransactionDirectionFilter,
     setTransactionPage,
     setTransactionPageSize,
     refresh,
     selectStatement,
     closeDetail,
     clearChanges,
+    enterEditMode,
+    enterInquiryMode,
     updateTransaction,
+    addAdjustment,
+    excludeTransaction,
+    restoreTransaction,
     execute
   };
 }

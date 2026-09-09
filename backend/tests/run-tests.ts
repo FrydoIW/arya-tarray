@@ -12,3 +12,5 @@ import "./reconciliation-classification.test.js";
 import "./statement-upload-parser.test.js";
 import "./event-code-bulk.test.js";
 import "./core-flow-hardening.test.js";
+import "./bank-account-opening-balance.test.js";
+import "./edit-income-correction.test.js";
