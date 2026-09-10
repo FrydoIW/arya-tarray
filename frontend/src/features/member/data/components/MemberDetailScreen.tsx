@@ -54,7 +54,7 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
     ];
     if (!canMutate) return base;
     return [...base, { key: "actions", header: "Aksi", sticky: "right", minWidth: "230px", render: row => <div className={styles.rowActions}>
-      <Button size="sm" variant="ghost" icon={<Pencil size={14} />} onClick={() => setAction({ kind: "edit-identity", identity: row })}>Alias</Button>
+      <Button size="sm" variant="ghost" icon={<Pencil size={14} />} onClick={() => setAction({ kind: "edit-identity", identity: row })}>Edit Identitas</Button>
       <Button size="sm" variant="ghost" icon={<Link2 size={14} />} onClick={() => setAction({ kind: "move", identity: row })}>Pindah</Button>
       <Button size="sm" variant="ghost" icon={<Unlink size={14} />} onClick={() => setAction({ kind: "detach", identity: row })}>Lepas</Button>
     </div> }];
@@ -65,7 +65,7 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
   return <div className="page-stack">
     <PageHeader breadcrumb={["Donatur", "Data Donatur", member.memberCode]} title={member.memberName}
       description={`${member.memberCode} · ${member.registrationSource === "STATEMENT" ? "Berasal dari statement" : "Registrasi manual"}`}
-      actions={<><Link className={styles.backLink} href="/member/data"><ArrowLeft size={15} /> Kembali</Link><Button variant="outline" icon={<RefreshCw size={15} />} onClick={state.refresh}>Muat ulang</Button></>} />
+      actions={<><Link className="ui-button ui-button-outline ui-button-md" href="/member/data"><span className="ui-button-icon" aria-hidden="true"><ArrowLeft size={15} /></span><span>Kembali</span></Link><Button variant="outline" icon={<RefreshCw size={15} />} onClick={state.refresh}>Muat ulang</Button></>} />
     {state.message ? <div className="ui-alert ui-alert-success" role="status">{state.message}</div> : null}
     {state.error && !action ? <div className="ui-alert ui-alert-error" role="alert">{state.error}</div> : null}
     {!canMutate ? <div className="ui-alert" role="status">Mode read-only. Akses Registrasi Donatur diperlukan untuk mengubah profil atau kepemilikan identitas.</div> : null}

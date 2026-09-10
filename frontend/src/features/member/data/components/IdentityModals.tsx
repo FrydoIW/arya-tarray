@@ -6,7 +6,7 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { formatDate } from "@/lib/format";
 import { isAbortError } from "@/lib/api";
 import * as api from "../api/member-data.api";
-import type { Identity, IdentityOption, MemberOption } from "../types";
+import type { Identity, IdentityMetadataInput, IdentityOption, MemberOption } from "../types";
 import styles from "../styles/member-data.module.css";
 
 function useOptionLoader<T>(request: (signal: AbortSignal) => Promise<T[]>) {
@@ -84,16 +84,37 @@ export function MoveIdentityModal({ memberId, identity, busy, error, onClose, on
   </Modal>;
 }
 
-export function EditIdentityModal({ identity, busy, error, onClose, onSubmit }: { identity: Identity; busy: boolean; error: string; onClose: () => void; onSubmit: (input: { initialName: string | null; remark: string | null }) => Promise<boolean> }) {
-  const [initialName, setInitialName] = useState(identity.initialName ?? ""); const [remark, setRemark] = useState(identity.remark ?? "");
-  async function submit(event: FormEvent) { event.preventDefault(); if (await onSubmit({ initialName: initialName.trim() || null, remark: remark.trim() || null })) onClose(); }
-  return <Modal open title="Edit alias identitas" description="Nama rekening mentah dan kunci identitas dilindungi sebagai bukti sumber." onClose={onClose}>
+export function EditIdentityModal({ identity, busy, error, onClose, onSubmit }: { identity: Identity; busy: boolean; error: string; onClose: () => void; onSubmit: (input: IdentityMetadataInput) => Promise<boolean> }) {
+  const [initialName, setInitialName] = useState(identity.initialName ?? "");
+  const [bankName, setBankName] = useState(identity.bankName ?? "");
+  const [accountNumber, setAccountNumber] = useState(identity.accountNumber ?? "");
+  const [accountType, setAccountType] = useState(identity.accountType ?? "");
+  const [remark, setRemark] = useState(identity.remark ?? "");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const input: IdentityMetadataInput = {
+      initialName: initialName.trim() || null,
+      bankName: bankName.trim() || null,
+      accountNumber: accountNumber.trim() || null,
+      accountType: accountType.trim() || null,
+      remark: remark.trim() || null
+    };
+    if (await onSubmit(input)) onClose();
+  }
+  return <Modal open title="Edit identitas rekening" description="Lengkapi metadata yang diketahui. Nama rekening mentah tetap read-only sebagai bukti sumber." onClose={onClose}>
     <form className={styles.modalBody} onSubmit={submit}>
-      <div className={styles.evidence}><span>Nama rekening mentah</span><strong>{identity.accountName}</strong></div>
-      <label className={styles.field}><span>Initial / alias</span><input value={initialName} maxLength={100} disabled={busy} onChange={e => setInitialName(e.target.value)} /></label>
-      <label className={styles.field}><span>Catatan</span><textarea value={remark} maxLength={500} rows={4} disabled={busy} onChange={e => setRemark(e.target.value)} /></label>
+      <div className={styles.evidence}>
+        <span>Nama rekening mentah</span>
+        <strong>{identity.accountName}</strong>
+        <small>Sumber: {identity.sourceType}</small>
+      </div>
+      <label className={styles.field}><span>Initial / alias</span><input value={initialName} maxLength={100} disabled={busy} onChange={e => setInitialName(e.target.value)} placeholder="Contoh: YOHANES" /></label>
+      <label className={styles.field}><span>Bank</span><input value={bankName} maxLength={100} disabled={busy} onChange={e => setBankName(e.target.value)} placeholder="Contoh: Bank Mandiri" /></label>
+      <label className={styles.field}><span>No. Rekening</span><input value={accountNumber} maxLength={100} disabled={busy} onChange={e => setAccountNumber(e.target.value)} placeholder="Isi jika diketahui" autoComplete="off" /></label>
+      <label className={styles.field}><span>Tipe Rekening</span><input value={accountType} maxLength={100} disabled={busy} onChange={e => setAccountType(e.target.value)} placeholder="Contoh: Tabungan" /></label>
+      <label className={styles.field}><span>Catatan</span><textarea value={remark} maxLength={500} rows={3} disabled={busy} onChange={e => setRemark(e.target.value)} placeholder="Catatan tambahan identitas (opsional)" /></label>
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
-      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy}>{busy ? "Menyimpan…" : "Simpan metadata"}</Button></div>
+      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy}>{busy ? "Menyimpan…" : "Simpan identitas"}</Button></div>
     </form>
   </Modal>;
 }

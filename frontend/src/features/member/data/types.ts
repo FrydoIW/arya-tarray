@@ -25,6 +25,10 @@ export type Identity = {
   verificationStatus: string; firstSeenAt: string; lastSeenAt: string; verifiedAt: string | null;
   remark: string | null; transactionCount: number;
 };
+export type IdentityMetadataInput = {
+  initialName?: string | null; bankName?: string | null; accountNumber?: string | null;
+  accountType?: string | null; remark?: string | null;
+};
 export type MemberDetail = Omit<MemberRow, "identityCount" | "lifetimeDonation" | "lifetimeTransactions"> & {
   address: string | null; remark: string | null; createdAt: string; updatedAt: string;
   registeredBy: Actor | null; createdBy: Actor | null; updatedBy: Actor | null; identities: Identity[];

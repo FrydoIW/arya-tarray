@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import * as api from "../api/member-data.api";
-import type { MemberDetail, MemberProfileInput } from "../types";
+import type { IdentityMetadataInput, MemberDetail, MemberProfileInput } from "../types";
 
 export function useMemberDetail(memberId: string) {
   const [detail, setDetail] = useState<MemberDetail | null>(null);
@@ -36,5 +36,5 @@ export function useMemberDetail(memberId: string) {
     attach: (identityId: string) => perform(() => api.attachIdentity(memberId, identityId), "Identitas ditambahkan."),
     move: (identityId: string, destinationMemberId: string, reason: string) => perform(() => api.moveIdentity(memberId, identityId, destinationMemberId, reason), "Identitas dipindahkan."),
     detach: (identityId: string, reason: string) => perform(() => api.detachIdentity(memberId, identityId, reason), "Identitas dilepas ke Registrasi Donatur."),
-    updateIdentity: (identityId: string, input: { initialName?: string | null; remark?: string | null }) => perform(() => api.updateIdentity(memberId, identityId, input), "Metadata identitas diperbarui.") };
+    updateIdentity: (identityId: string, input: IdentityMetadataInput) => perform(() => api.updateIdentity(memberId, identityId, input), "Metadata identitas diperbarui.") };
 }

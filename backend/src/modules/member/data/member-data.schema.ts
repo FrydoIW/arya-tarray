@@ -36,6 +36,9 @@ export const memberLifecycleSchema = z.object({ activeFlag: z.boolean() }).stric
 
 export const identityMetadataSchema = z.object({
   initialName: optionalMemberText(100).optional(),
+  bankName: optionalMemberText(100).optional(),
+  accountNumber: optionalMemberText(100).optional(),
+  accountType: optionalMemberText(100).optional(),
   remark: optionalMemberText(500).optional()
 }).strict().refine(value => Object.keys(value).length > 0, "At least one identity field is required");
 

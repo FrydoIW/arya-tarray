@@ -31,7 +31,7 @@ export function MemberDataScreen() {
   const [lifecycleError, setLifecycleError] = useState("");
 
   const columns = useMemo<DataTableColumn<MemberRow>[]>(() => [
-    { key: "memberCode", header: "Kode", minWidth: "170px", render: row => <strong className={styles.code} title={row.memberCode}>{row.memberCode}</strong> },
+    { key: "memberCode", header: "Kode", minWidth: "150px", render: row => <strong className={styles.code} title={row.memberCode}>{row.memberCode}</strong> },
     { key: "memberName", header: "Nama Donatur", minWidth: "190px", render: row => <div className={styles.name}><strong>{row.memberName}</strong><small>{row.email || row.phone || "Kontak belum dicatat"}</small></div> },
     { key: "initialName", header: "Initial", minWidth: "110px" },
     { key: "age", header: "Usia", align: "center", render: row => row.age === null ? "—" : `${row.age} th` },
@@ -41,12 +41,12 @@ export function MemberDataScreen() {
     { key: "lifetimeDonation", header: "Lifetime Donation", align: "right", minWidth: "150px", render: row => <div className={`${styles.name} ${styles.amountCell}`}><strong>{formatMoney(row.lifetimeDonation)}</strong><small>{row.lifetimeTransactions} transaksi</small></div> },
     { key: "activeFlag", header: "Status", render: row => <StatusBadge active={row.activeFlag} activeLabel="Aktif" inactiveLabel="Nonaktif" /> },
     { key: "registeredAt", header: "Terdaftar", minWidth: "120px", render: row => formatDate(row.registeredAt) },
-    { key: "action", header: "Aksi", sticky: "right", minWidth: canMutate ? "112px" : "44px", render: row => <div className={styles.compactActions}>
-      <Link className={styles.iconAction} href={`/member/data/${row.memberId}`} aria-label={`Buka detail ${row.memberName}`} title="Buka detail"><Eye size={16} aria-hidden="true" /></Link>
+    { key: "action", header: "Aksi", minWidth: canMutate ? "220px" : "104px", render: row => <div className={styles.compactActions}>
+      <Link className={styles.actionLink} href={`/member/data/${row.memberId}`} aria-label={`Buka detail ${row.memberName}`} title="Buka detail"><Eye size={15} aria-hidden="true" /><span>Lihat</span></Link>
       {canMutate ? <>
-        <Link className={styles.iconAction} href={`/member/data/${row.memberId}?editProfile=1`} aria-label={`Edit profil ${row.memberName}`} title="Edit profil"><Pencil size={15} aria-hidden="true" /></Link>
+        <Link className={styles.actionLink} href={`/member/data/${row.memberId}?editProfile=1`} aria-label={`Edit profil ${row.memberName}`} title="Edit profil"><Pencil size={14} aria-hidden="true" /><span>Edit</span></Link>
         <details className={styles.lifecycleMenu}>
-          <summary aria-label={`Aksi lifecycle ${row.memberName}`} title="Aksi lifecycle"><MoreHorizontal size={17} aria-hidden="true" /></summary>
+          <summary aria-label={`Aksi lain ${row.memberName}`} title="Aksi lain"><MoreHorizontal size={16} aria-hidden="true" /><span>Lainnya</span></summary>
           <div role="menu" className={styles.lifecycleMenuItems}>
             <button type="button" role="menuitem" onClick={() => { setLifecycleError(""); setLifecycleAction({ member: row, nextActiveFlag: !row.activeFlag }); }}>
               {row.activeFlag ? "Nonaktifkan Donatur" : "Aktifkan Donatur"}
@@ -96,7 +96,7 @@ export function MemberDataScreen() {
       <Button variant="outline" icon={<RefreshCw size={15} />} onClick={state.reload} disabled={state.loading}>Muat ulang</Button>
     </div>}>
       <DataTable rows={state.workspace.rows} columns={columns} rowKey={row => row.memberId} loading={state.loading}
-        loadingText="Memuat data donatur…" emptyState={{ title: "Belum ada donatur", description: "Sesuaikan filter atau registrasikan donatur terlebih dahulu." }} minWidth="1280px"
+        loadingText="Memuat data donatur…" emptyState={{ title: "Belum ada donatur", description: "Sesuaikan filter atau registrasikan donatur terlebih dahulu." }} minWidth="1580px"
         pagination={{ mode: "server", page: state.workspace.pagination.page, pageSize: state.workspace.pagination.pageSize,
           total: state.workspace.pagination.total, onPageChange: page => state.updateQuery({ page }), onPageSizeChange: pageSize => state.updateQuery({ pageSize }) }} />
     </CollapsibleSection>

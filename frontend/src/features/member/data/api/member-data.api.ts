@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import type { DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace } from "../types";
+import type { DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityMetadataInput, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace } from "../types";
 
 const base = "/member/data";
 export function getWorkspace(query: MemberDataQuery, signal?: AbortSignal) {
@@ -37,7 +37,7 @@ function identityAction(memberId: string, identityId: string, action: string, pa
 export function attachIdentity(memberId: string, identityId: string) { return identityAction(memberId, identityId, "attach"); }
 export function moveIdentity(memberId: string, identityId: string, destinationMemberId: string, reason: string) { return identityAction(memberId, identityId, "move", { destinationMemberId, reason }); }
 export function detachIdentity(memberId: string, identityId: string, reason: string) { return identityAction(memberId, identityId, "detach", { reason }); }
-export function updateIdentity(memberId: string, identityId: string, input: { initialName?: string | null; remark?: string | null }) {
+export function updateIdentity(memberId: string, identityId: string, input: IdentityMetadataInput) {
   return apiFetch<{ message: string }>(`${base}/${encodeURIComponent(memberId)}/identities/${encodeURIComponent(identityId)}`,
     { method: "PATCH", body: JSON.stringify(input) });
 }
