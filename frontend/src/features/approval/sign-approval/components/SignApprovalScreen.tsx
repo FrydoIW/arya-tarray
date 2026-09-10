@@ -6,7 +6,6 @@ import { useSignApprovalWorkspace } from "../hooks/useSignApprovalWorkspace";
 import { ApprovalDetailView } from "./ApprovalDetailView";
 import { ApprovalQueueTable } from "./ApprovalQueueTable";
 import { ApprovalTabs } from "./ApprovalTabs";
-import { SignApprovalFlow } from "./SignApprovalFlow";
 import { SignApprovalSummary } from "./SignApprovalSummary";
 import styles from "../styles/sign-approval.module.css";
 
@@ -55,7 +54,6 @@ export function SignApprovalScreen() {
             </div>
           ) : null}
           <SignApprovalSummary summary={queue.workspace.summary} />
-          <SignApprovalFlow />
           <ApprovalQueueTable
             items={queue.filteredApprovals}
             search={queue.search}

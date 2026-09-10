@@ -7,7 +7,6 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useEditIncomeWorkspace } from "../hooks/useEditIncomeWorkspace";
 import { EditIncomeCorrectionWorkspace } from "./EditIncomeCorrectionWorkspace";
-import { EditIncomeFlow } from "./EditIncomeFlow";
 import { EditIncomeStatementTable } from "./EditIncomeStatementTable";
 import { EditIncomeSummary } from "./EditIncomeSummary";
 import styles from "../styles/edit-income.module.css";
@@ -36,7 +35,6 @@ export function EditIncomeScreen() {
       {workspace.error ? <div className="ui-alert ui-alert-error">{workspace.error}</div> : null}
 
       <EditIncomeSummary summary={workspace.workspace.summary} modifiedTransactions={workspace.modifiedTransactions} periodMode={workspace.period.mode} month={workspace.period.month} date={workspace.period.date} />
-      <EditIncomeFlow />
       <EditIncomeStatementTable
         rows={workspace.filteredStatements}
         bankAccounts={workspace.workspace.bankAccounts}

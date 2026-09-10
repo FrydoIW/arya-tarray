@@ -8,7 +8,6 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import type { ApprovalConfiguration } from "../types";
 import { useApprovalWorkspace } from "../hooks/useApprovalWorkspace";
 import { ApprovalConfigModal } from "./ApprovalConfigModal";
-import { ApprovalFlow } from "./ApprovalFlow";
 import { ApprovalSummary } from "./ApprovalSummary";
 import { ApprovalTable } from "./ApprovalTable";
 import styles from "../styles/approval.module.css";
@@ -78,7 +77,6 @@ export function ApprovalScreen() {
         approvalTarget={workspace.approvalTarget}
       />
 
-      <ApprovalFlow />
 
       <ApprovalTable
         items={workspace.configurations}

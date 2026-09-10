@@ -9,7 +9,6 @@ import type { UserItem } from "../types";
 import { useUsers } from "../hooks/useUsers";
 import { AddUserModal } from "./AddUserModal";
 import { ResetPasswordModal } from "./ResetPasswordModal";
-import { UserAccessFlow } from "./UserAccessFlow";
 import { UserSummary } from "./UserSummary";
 import { UserTable } from "./UserTable";
 import styles from "../styles/user.module.css";
@@ -76,7 +75,6 @@ export function UserScreen() {
         onAdd={() => setAddOpen(true)}
       />
 
-      <UserAccessFlow />
 
       <AddUserModal
         open={addOpen}

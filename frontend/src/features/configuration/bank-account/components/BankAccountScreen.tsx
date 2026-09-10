@@ -7,7 +7,6 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { BankAccount } from "../types";
 import { useBankAccountWorkspace } from "../hooks/useBankAccountWorkspace";
-import { BankAccountFlow } from "./BankAccountFlow";
 import { BankAccountModal } from "./BankAccountModal";
 import { BankAccountSummary } from "./BankAccountSummary";
 import { BankAccountTable } from "./BankAccountTable";
@@ -56,7 +55,6 @@ export function BankAccountScreen() {
       {workspace.error ? <div className="ui-alert ui-alert-error">{workspace.error}</div> : null}
 
       <BankAccountSummary {...workspace.summary} />
-      <BankAccountFlow />
       <BankAccountTable
         items={workspace.accounts}
         allItems={workspace.allAccounts}

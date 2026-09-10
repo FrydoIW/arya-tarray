@@ -10,7 +10,6 @@ import { DraftReviewSummary } from "./DraftReviewSummary";
 import { DraftTransactionReview } from "./DraftTransactionReview";
 import { DraftStatements } from "./DraftStatements";
 import { DraftWorkspace } from "./DraftWorkspace";
-import { StatementUploadFlow } from "./StatementUploadFlow";
 import { StatementUploadSummary } from "./StatementUploadSummary";
 import styles from "../styles/statement-upload.module.css";
 
@@ -54,7 +53,6 @@ export function StatementUploadScreen() {
       {workspace.error ? <div className="ui-alert ui-alert-error">{workspace.error}</div> : null}
 
       <StatementUploadSummary summary={workspace.workspace.summary} />
-      <StatementUploadFlow />
       <DraftStatements
         rows={workspace.workspace.drafts}
         selectedStatementId={workspace.selectedStatementId}
