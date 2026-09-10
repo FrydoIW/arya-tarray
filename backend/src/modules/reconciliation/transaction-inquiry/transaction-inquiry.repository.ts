@@ -4,7 +4,8 @@ import { prisma } from "../../../lib/prisma.js";
 const eventCodeSelect = {
   id: true,
   code: true,
-  eventName: true
+  eventName: true,
+  activeFlag: true
 } as const;
 
 const bankAccountSelect = {
@@ -29,6 +30,11 @@ const transactionListSelect = {
   baseAmount: true,
   status: true,
   remark: true,
+  sourceType: true,
+  correctionReason: true,
+  manualAddedAt: true,
+  reconciliationExcludedAt: true,
+  reconciliationExclusionReason: true,
   suggestedEventCode: { select: eventCodeSelect },
   eventCode: { select: eventCodeSelect },
   memberIdentity: {
@@ -66,7 +72,11 @@ export type TransactionInquiryFilter = {
 export function buildTransactionInquiryWhere(filter: TransactionInquiryFilter): Prisma.BankTransactionWhereInput {
   const search = filter.search.trim();
   const conditions: Prisma.BankTransactionWhereInput[] = [
-    { transactionDate: { gte: filter.periodStart, lt: filter.periodEnd } }
+    { transactionDate: { gte: filter.periodStart, lt: filter.periodEnd } },
+    // Transaction Inquiry represents the current official reconciliation view.
+    // Excluded rows remain in the database/audit trail but no longer contribute
+    // to normal inquiry totals or generated reports after approval.
+    { reconciliationExcludedAt: null }
   ];
   if (filter.status !== "ALL") conditions.push({ status: filter.status });
   if (filter.bankAccountId) conditions.push({ statementUpload: { is: { bankAccountId: filter.bankAccountId } } });
@@ -99,9 +109,27 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
   pageSize: number;
 }) {
   const where = buildTransactionInquiryWhere(input.filter);
-  const skip = (input.page - 1) * input.pageSize;
+  const total = await prisma.bankTransaction.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / input.pageSize));
+  const page = Math.min(input.page, totalPages);
+  const skip = (page - 1) * input.pageSize;
 
-  const [transactions, total, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions] = await Promise.all([
+  const historicalEventWhere: Prisma.EventCodeWhereInput = {
+    OR: [
+      { activeFlag: true },
+      ...(input.filter.finalEventId ? [{ id: input.filter.finalEventId }] : []),
+      {
+        transactions: {
+          some: {
+            transactionDate: { gte: input.filter.periodStart, lt: input.filter.periodEnd },
+            reconciliationExcludedAt: null
+          }
+        }
+      }
+    ]
+  };
+
+  const [transactions, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions] = await Promise.all([
     prisma.bankTransaction.findMany({
       where,
       select: transactionListSelect,
@@ -109,7 +137,6 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
       skip,
       take: input.pageSize
     }),
-    prisma.bankTransaction.count({ where }),
     prisma.bankTransaction.aggregate({
       where: { AND: [where, { originalAmount: { gt: 0 } }] },
       _sum: { originalAmount: true },
@@ -126,15 +153,16 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
       orderBy: [{ bankCode: "asc" }, { accountNo: "asc" }]
     }),
     prisma.eventCode.findMany({
-      where: { activeFlag: true },
+      where: historicalEventWhere,
       select: eventCodeSelect,
-      orderBy: [{ code: "asc" }, { eventName: "asc" }]
+      orderBy: [{ activeFlag: "desc" }, { code: "asc" }, { eventName: "asc" }]
     })
   ]);
 
   return {
     transactions,
     total,
+    page,
     totalCredit: totalCredit._sum.originalAmount,
     totalDebit: totalDebit._sum.originalAmount,
     incomingTransactions: totalCredit._count._all,
@@ -151,6 +179,8 @@ export async function loadTransactionInquiryDetailRecord(transactionId: string) 
     include: {
       suggestedEventCode: { select: eventCodeSelect },
       eventCode: { select: eventCodeSelect },
+      manualAddedBy: { select: { id: true, fullName: true } },
+      reconciliationExcludedBy: { select: { id: true, fullName: true } },
       memberIdentity: {
         select: {
           id: true,
@@ -201,7 +231,10 @@ export async function loadTransactionInquiryReportRecords(input: {
     input.filter.bankAccountId
       ? prisma.bankAccount.findMany({ where: { id: input.filter.bankAccountId }, select: bankAccountSelect })
       : prisma.bankAccount.findMany({
-          where: { statements: { some: { transactions: { some: { transactionDate: { gte: input.filter.periodStart, lt: input.filter.periodEnd } } } } } },
+          where: { statements: { some: { transactions: { some: {
+            transactionDate: { gte: input.filter.periodStart, lt: input.filter.periodEnd },
+            reconciliationExcludedAt: null
+          } } } } },
           select: bankAccountSelect,
           orderBy: [{ bankCode: "asc" }, { accountNo: "asc" }]
         })

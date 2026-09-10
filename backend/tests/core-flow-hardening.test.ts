@@ -47,7 +47,8 @@ test("approval persistence uses immutable snapshot rows and retains conditional 
   assert.match(statementRepository, /reconciliationApprovalApprover\.createMany/);
   assert.match(statementRepository, /buildApprovalApproverSnapshot\(approvalId, approvalConfig\.approvers\)/);
   assert.doesNotMatch(signRepository, /approvalConfig/);
-  assert.match(signRepository, /approvers: \{ some: \{ userId \} \}/);
+  assert.match(signRepository, /effectiveQueueApprovers/);
+  assert.match(signRepository, /correctionProposals\[0\]\?\.approvers \?\? item\.approvers/);
   assert.equal(signRepository.match(/requireApprovalSnapshotMembership\(/g)?.length, 2);
   assert.match(signRepository, /updateMany\([\s\S]*?status: "PENDING"/);
   assert.doesNotMatch(signRepository, /approvalLevel|sequence|levelId/);

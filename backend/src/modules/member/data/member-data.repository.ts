@@ -2,13 +2,16 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 import { HttpError } from "../../../lib/http.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
+import { recordMemberIdentityHistory } from "../member-identity/member-identity-history.js";
 import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInput } from "./member-data.schema.js";
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
 import { canonicalMemberDonationWhere, officialDonationTransactionWhere } from "../member-donation.rules.js";
 
-export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string };
+export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string; search?: string };
 
 const actorSelect = { id: true, fullName: true } as const;
+const eventSelect = { id: true, code: true, eventName: true, category: true, activeFlag: true } as const;
+const memberOptionSelect = { id: true, memberCode: true, memberName: true } as const;
 const memberListSelect = {
   id: true, memberCode: true, memberName: true, initialName: true, birthDate: true,
   phone: true, email: true, city: true, registrationSource: true, activeFlag: true,
@@ -28,19 +31,18 @@ export async function workspaceRecords(query: MemberDataWorkspaceQuery) {
     ] } : {})
   };
   return prisma.$transaction(async tx => {
-    const [total, active, inactive, manual, statement, cities, eventOptions] = await Promise.all([
+    const [total, active, inactive, manual, statement, cities] = await Promise.all([
       tx.member.count({ where }), tx.member.count({ where: { activeFlag: true } }),
       tx.member.count({ where: { activeFlag: false } }), tx.member.count({ where: { registrationSource: "MANUAL" } }),
       tx.member.count({ where: { registrationSource: "STATEMENT" } }),
-      tx.member.findMany({ where: { city: { not: null } }, distinct: ["city"], select: { city: true }, orderBy: { city: "asc" } }),
-      tx.eventCode.findMany({ where: { activeFlag: true }, select: { id: true, code: true, eventName: true, category: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] })
+      tx.member.findMany({ where: { city: { not: null } }, distinct: ["city"], select: { city: true }, orderBy: { city: "asc" } })
     ]);
     const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
     const rows = await tx.member.findMany({
       where, skip: (page - 1) * query.pageSize, take: query.pageSize,
       orderBy: [{ registeredAt: "desc" }, { id: "asc" }], select: memberListSelect
     });
-    return { rows, total, page, summary: { total: active + inactive, active, inactive, manual, statement }, cities: cities.flatMap(row => row.city ? [row.city] : []), eventOptions };
+    return { rows, total, page, summary: { total: active + inactive, active, inactive, manual, statement }, cities: cities.flatMap(row => row.city ? [row.city] : []) };
   });
 }
 
@@ -48,50 +50,60 @@ const officialDonationWhere = (identityIds: string[]): Prisma.BankTransactionWhe
   AND: [officialDonationTransactionWhere(), { memberIdentityId: { in: identityIds } }]
 });
 
-export async function loadWorkspaceDonationAnalytics(memberIds: string[], filter: MemberDonationFilter) {
-  if (!memberIds.length) return { identities: [], lifetime: [], period: [] };
+export async function loadWorkspaceDonationAnalytics(memberIds: string[]) {
+  if (!memberIds.length) return { identities: [], lifetime: [] };
   const identities = await prisma.memberIdentity.findMany({
     where: { memberId: { in: memberIds }, verificationStatus: "VERIFIED" }, select: { id: true, memberId: true }
   });
   const identityIds = identities.map(identity => identity.id);
-  if (!identityIds.length) return { identities, lifetime: [], period: [] };
+  if (!identityIds.length) return { identities, lifetime: [] };
   const base = officialDonationWhere(identityIds);
-  const [lifetime, period] = await Promise.all([
-    prisma.bankTransaction.groupBy({ by: ["memberIdentityId"], where: base, _sum: { originalAmount: true }, _count: { _all: true } }),
-    prisma.bankTransaction.groupBy({ by: ["memberIdentityId"], where: { AND: [base, {
-      transactionDate: { gte: filter.periodStart, lt: filter.periodEnd }, ...(filter.eventCodeId ? { eventCodeId: filter.eventCodeId } : {})
-    }] }, _sum: { originalAmount: true }, _count: { _all: true } })
-  ]);
-  return { identities, lifetime, period };
+  const lifetime = await prisma.bankTransaction.groupBy({ by: ["memberIdentityId"], where: base, _sum: { originalAmount: true }, _count: { _all: true } });
+  return { identities, lifetime };
 }
 
-export async function loadMemberDonationRecords(memberId: string, filter: MemberDonationFilter, page: number, pageSize: number) {
+export async function loadMemberDonationRecords(memberId: string, filter: MemberDonationFilter, requestedPage: number, pageSize: number) {
   const relation = canonicalMemberDonationWhere(memberId);
   const periodWhere: Prisma.BankTransactionWhereInput = { AND: [relation, {
     transactionDate: { gte: filter.periodStart, lt: filter.periodEnd }, ...(filter.eventCodeId ? { eventCodeId: filter.eventCodeId } : {})
   }] };
-  const [member, lifetime, period, total, rows, eventGroups, eventOptions] = await Promise.all([
-    prisma.member.findUnique({ where: { id: memberId }, select: { id: true, memberCode: true, memberName: true } }),
-    prisma.bankTransaction.aggregate({ where: relation, _sum: { originalAmount: true }, _count: { _all: true } }),
-    prisma.bankTransaction.aggregate({ where: periodWhere, _sum: { originalAmount: true }, _count: { _all: true } }),
-    prisma.bankTransaction.count({ where: periodWhere }),
-    prisma.bankTransaction.findMany({
-      where: periodWhere, skip: (page - 1) * pageSize, take: pageSize,
+  const rowWhere: Prisma.BankTransactionWhereInput = filter.search ? {
+    AND: [periodWhere, { OR: [
+      { description: { contains: filter.search } },
+      { referenceNo: { contains: filter.search } }
+    ] }]
+  } : periodWhere;
+
+  return prisma.$transaction(async tx => {
+    const [member, lifetime, period, total, eventGroups, eventOptions] = await Promise.all([
+      tx.member.findUnique({ where: { id: memberId }, select: { id: true, memberCode: true, memberName: true } }),
+      tx.bankTransaction.aggregate({ where: relation, _sum: { originalAmount: true }, _count: { _all: true } }),
+      tx.bankTransaction.aggregate({ where: periodWhere, _sum: { originalAmount: true }, _count: { _all: true } }),
+      tx.bankTransaction.count({ where: rowWhere }),
+      tx.bankTransaction.groupBy({ by: ["eventCodeId"], where: periodWhere,
+        _sum: { originalAmount: true }, _count: { _all: true }, orderBy: { _sum: { originalAmount: "desc" } } }),
+      tx.eventCode.findMany({
+        where: { OR: [{ activeFlag: true }, { transactions: { some: relation } }] },
+        select: eventSelect, orderBy: [{ code: "asc" }, { eventName: "asc" }]
+      })
+    ]);
+    const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
+    const rows = await tx.bankTransaction.findMany({
+      where: rowWhere, skip: (page - 1) * pageSize, take: pageSize,
       orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-      select: { id: true, transactionDate: true, referenceNo: true, description: true, originalAmount: true,
+      select: {
+        id: true, transactionDate: true, referenceNo: true, description: true, originalAmount: true,
+        sourceType: true, correctionReason: true, manualAddedAt: true,
+        manualAddedBy: { select: actorSelect },
         memberIdentity: { select: { id: true, accountName: true, initialName: true, sourceType: true } },
-        eventCode: { select: { id: true, code: true, eventName: true, category: true } },
-        statementUpload: { select: { id: true, fileName: true } } }
-    }),
-    prisma.bankTransaction.groupBy({ by: ["eventCodeId"], where: periodWhere,
-      _sum: { originalAmount: true }, _count: { _all: true }, orderBy: { _sum: { originalAmount: "desc" } } }),
-    prisma.eventCode.findMany({ where: { activeFlag: true }, select: { id: true, code: true, eventName: true, category: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] })
-  ]);
-  const eventIds = eventGroups.flatMap(group => group.eventCodeId ? [group.eventCodeId] : []);
-  const events = eventIds.length ? await prisma.eventCode.findMany({
-    where: { id: { in: eventIds } }, select: { id: true, code: true, eventName: true, category: true }
-  }) : [];
-  return { member, lifetime, period, total, rows, eventGroups, events, eventOptions };
+        eventCode: { select: eventSelect },
+        statementUpload: { select: { id: true, fileName: true } }
+      }
+    });
+    const eventIds = eventGroups.flatMap(group => group.eventCodeId ? [group.eventCodeId] : []);
+    const events = eventIds.length ? await tx.eventCode.findMany({ where: { id: { in: eventIds } }, select: eventSelect }) : [];
+    return { member, lifetime, period, total, page, rows, eventGroups, events, eventOptions };
+  });
 }
 
 export function findMemberDetail(memberId: string) {
@@ -107,6 +119,26 @@ export function findMemberDetail(memberId: string) {
       _count: { select: { transactions: true } }
     } }
   } });
+}
+
+export async function loadIdentityHistory(memberId: string, requestedPage: number, pageSize: number) {
+  const member = await prisma.member.findUnique({ where: { id: memberId }, select: { id: true } });
+  if (!member) return { member: null, rows: [], total: 0, page: 1 };
+  const where: Prisma.MemberIdentityHistoryWhereInput = { OR: [{ fromMemberId: memberId }, { toMemberId: memberId }] };
+  return prisma.$transaction(async tx => {
+    const total = await tx.memberIdentityHistory.count({ where });
+    const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
+    const rows = await tx.memberIdentityHistory.findMany({
+      where, skip: (page - 1) * pageSize, take: pageSize,
+      orderBy: [{ actionAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true, action: true, statusBefore: true, statusAfter: true, reason: true, actionAt: true,
+        memberIdentity: { select: { id: true, accountName: true, sourceType: true, bankName: true, accountNumber: true } },
+        fromMember: { select: memberOptionSelect }, toMember: { select: memberOptionSelect }, actionBy: { select: actorSelect }
+      }
+    });
+    return { member, rows, total, page };
+  });
 }
 
 export function findIdentityOptions(search: string) {
@@ -142,6 +174,15 @@ export async function updateMember(memberId: string, input: MemberProfileInput, 
   }, select: memberListSelect });
 }
 
+export function updateMemberLifecycle(memberId: string, activeFlag: boolean, userId: string) {
+  return memberTransaction(async tx => {
+    const member = await tx.member.findUnique({ where: { id: memberId }, select: { id: true, activeFlag: true } });
+    if (!member) throw new HttpError(404, "Donatur tidak ditemukan.");
+    if (member.activeFlag === activeFlag) throw new HttpError(409, activeFlag ? "Donatur sudah aktif." : "Donatur sudah nonaktif.");
+    return tx.member.update({ where: { id: memberId }, data: { activeFlag, updatedById: userId }, select: memberListSelect });
+  });
+}
+
 async function requireActiveMember(tx: Prisma.TransactionClient, memberId: string) {
   const member = await tx.member.findUnique({ where: { id: memberId }, select: { id: true, activeFlag: true } });
   if (!member) throw new HttpError(404, "Donatur tidak ditemukan.");
@@ -159,37 +200,52 @@ export function attachIdentity(memberId: string, identityId: string, userId: str
     await requireActiveMember(tx, memberId);
     const identity = await identityState(tx, identityId);
     if (identity.memberId || identity.verificationStatus !== "UNVERIFIED") throw new HttpError(409, "Identitas sudah diproses. Muat ulang data donatur.");
+    const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId: null, verificationStatus: "UNVERIFIED" },
-      data: verifiedIdentityData(memberId, userId, new Date())
+      data: verifiedIdentityData(memberId, userId, now)
     });
     if (result.count !== 1) throw new HttpError(409, "Identitas berubah saat diproses. Muat ulang data donatur.");
+    await recordMemberIdentityHistory(tx, {
+      memberIdentityId: identityId, action: "ATTACH", before: identity,
+      after: { memberId, verificationStatus: "VERIFIED" }, actionById: userId, actionAt: now
+    });
   });
 }
 
-export function moveIdentity(sourceMemberId: string, identityId: string, destinationMemberId: string, userId: string) {
+export function moveIdentity(sourceMemberId: string, identityId: string, destinationMemberId: string, reason: string, userId: string) {
   if (sourceMemberId === destinationMemberId) throw new HttpError(400, "Donatur tujuan harus berbeda.");
   return memberTransaction(async tx => {
     await requireActiveMember(tx, destinationMemberId);
     const identity = await identityState(tx, identityId);
     if (identity.memberId !== sourceMemberId || identity.verificationStatus !== "VERIFIED") throw new HttpError(409, "Identitas bukan lagi milik donatur ini. Muat ulang data.");
+    const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId: sourceMemberId, verificationStatus: "VERIFIED" },
-      data: verifiedIdentityData(destinationMemberId, userId, new Date())
+      data: verifiedIdentityData(destinationMemberId, userId, now)
     });
     if (result.count !== 1) throw new HttpError(409, "Identitas berubah saat dipindahkan. Muat ulang data.");
+    await recordMemberIdentityHistory(tx, {
+      memberIdentityId: identityId, action: "MOVE", before: identity,
+      after: { memberId: destinationMemberId, verificationStatus: "VERIFIED" }, reason, actionById: userId, actionAt: now
+    });
   });
 }
 
-export function detachIdentity(memberId: string, identityId: string, userId: string) {
+export function detachIdentity(memberId: string, identityId: string, reason: string, userId: string) {
   return memberTransaction(async tx => {
     const identity = await identityState(tx, identityId);
     if (identity.memberId !== memberId || identity.verificationStatus !== "VERIFIED") throw new HttpError(409, "Identitas bukan lagi milik donatur ini. Muat ulang data.");
+    const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId, verificationStatus: "VERIFIED" },
       data: detachedIdentityData(userId)
     });
     if (result.count !== 1) throw new HttpError(409, "Identitas berubah saat dilepas. Muat ulang data.");
+    await recordMemberIdentityHistory(tx, {
+      memberIdentityId: identityId, action: "DETACH", before: identity,
+      after: { memberId: null, verificationStatus: "UNVERIFIED" }, reason, actionById: userId, actionAt: now
+    });
   });
 }
 

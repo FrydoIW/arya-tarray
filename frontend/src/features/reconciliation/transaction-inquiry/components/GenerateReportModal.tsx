@@ -41,7 +41,7 @@ export function GenerateReportModal(props: {
           <div><span>Period</span><strong>{formatPeriodLabel(props.period.mode, props.period.month, props.period.date)}</strong></div>
           <div><span>Bank Account</span><strong>{selectedBank ? `${selectedBank.bankCode} - ${selectedBank.accountNo}` : "All Bank Accounts"}</strong></div>
           <div><span>Status</span><strong>{props.status === "ALL" ? "All Status" : getLifecycleLabel(props.status)}</strong></div>
-          <div><span>Final Event</span><strong>{selectedEvent ? `${selectedEvent.code} - ${selectedEvent.eventName}` : "All Final Events"}</strong></div>
+          <div><span>Final Event</span><strong>{selectedEvent ? `${selectedEvent.code} - ${selectedEvent.eventName}${selectedEvent.activeFlag ? "" : " (Inactive)"}` : "All Final Events"}</strong></div>
           <div><span>Member</span><strong>{props.member ? `${props.member.memberCode} - ${props.member.memberName}${props.member.activeFlag ? "" : " · Inactive"}` : "All Members"}</strong></div>
           <div><span>Member Link</span><strong>{props.memberLinkStatus === "LINKED" ? "Linked" : props.memberLinkStatus === "UNLINKED" ? "Unlinked" : "All"}</strong></div>
           <div><span>Search</span><strong>{props.search || "No search filter"}</strong></div>

@@ -32,6 +32,6 @@ export function getLifecycleLabel(status: string) {
   return status;
 }
 
-export function eventLabel(event: { code: string; eventName: string } | null) {
-  return event ? `${event.code} - ${event.eventName}` : "Not Applicable";
+export function eventLabel(event: { code: string; eventName: string; activeFlag?: boolean } | null) {
+  return event ? `${event.code} - ${event.eventName}${event.activeFlag === false ? " (Inactive)" : ""}` : "Not Applicable";
 }

@@ -27,11 +27,17 @@ export function useMemberRegistration() {
     const controller = new AbortController();
     const key = registrationKey(query);
     const read = readWorkspace(key, signal => api.getWorkspace(query, signal));
-    if (read.cached) setWorkspace(read.cached);
+    if (read.cached) {
+      setWorkspace(read.cached);
+      setQuery(current => current.page === read.cached!.pagination.page ? current : { ...current, page: read.cached!.pagination.page });
+    }
     setLoading(!read.cached); setError("");
     controller.signal.addEventListener("abort", read.release, { once: true });
     (read.promise ?? Promise.resolve(read.cached!)).then(data => {
-      if (!controller.signal.aborted) setWorkspace(data);
+      if (!controller.signal.aborted) {
+        setWorkspace(data);
+        setQuery(current => current.page === data.pagination.page ? current : { ...current, page: data.pagination.page });
+      }
     }).catch(caught => {
       if (!controller.signal.aborted && !isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Gagal memuat registrasi.");
     }).finally(() => { read.release(); if (!controller.signal.aborted) setLoading(false); });
@@ -57,6 +63,6 @@ export function useMemberRegistration() {
     changePageSize: (pageSize: number) => setQuery(current => ({ ...current, pageSize, page: 1 })),
     register: (input: MemberInput, identityId?: string) => perform(() => api.registerMember(input, identityId), "Donatur berhasil diregistrasi."),
     link: (identityId: string, memberId: string) => perform(() => api.linkMember(identityId, memberId), "Identitas berhasil dihubungkan."),
-    ignore: (identityId: string, remark: string | null) => perform(() => api.ignoreIdentity(identityId, remark), "Identitas diabaikan.")
+    ignore: (identityId: string, reason: string) => perform(() => api.ignoreIdentity(identityId, reason), "Identitas diabaikan.")
   };
 }

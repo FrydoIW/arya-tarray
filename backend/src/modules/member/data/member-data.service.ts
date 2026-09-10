@@ -5,7 +5,7 @@ import { decimalStringToCents } from "../../reconciliation/reconciliation-classi
 import { deriveAge } from "./member-data.domain.js";
 import { aggregateCategories, centsToDecimal } from "./member-donation.domain.js";
 import * as repository from "./member-data.repository.js";
-import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput } from "./member-data.schema.js";
+import type { IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput } from "./member-data.schema.js";
 
 const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 function listMember(row: Awaited<ReturnType<typeof repository.workspaceRecords>>["rows"][number]) {
@@ -15,22 +15,19 @@ function listMember(row: Awaited<ReturnType<typeof repository.workspaceRecords>>
 
 export async function getWorkspace(query: MemberDataWorkspaceQuery) {
   const result = await repository.workspaceRecords(query);
-  const period = donationPeriod(query);
-  const analytics = await repository.loadWorkspaceDonationAnalytics(result.rows.map(row => row.id), {
-    periodStart: period.start, periodEnd: period.end, eventCodeId: query.eventCodeId
-  });
+  const analytics = await repository.loadWorkspaceDonationAnalytics(result.rows.map(row => row.id));
   const identityMembers = new Map(analytics.identities.map(identity => [identity.id, identity.memberId!]));
   const lifetime = donationTotalsByMember(analytics.lifetime, identityMembers);
-  const selectedPeriod = donationTotalsByMember(analytics.period, identityMembers);
-  return { summary: result.summary, filters: { cities: result.cities, periodMode: period.mode, month: period.month, date: period.date,
-      eventCodeId: query.eventCodeId ?? null }, eventOptions: result.eventOptions,
+  return {
+    summary: result.summary,
+    filters: { cities: result.cities },
     rows: result.rows.map(row => ({ ...listMember(row), lifetimeDonation: lifetime.get(row.id)?.amount ?? "0.00",
-      lifetimeTransactions: lifetime.get(row.id)?.transactionCount ?? 0, periodDonation: selectedPeriod.get(row.id)?.amount ?? "0.00",
-      periodTransactions: selectedPeriod.get(row.id)?.transactionCount ?? 0 })),
-    pagination: { page: result.page, pageSize: query.pageSize, total: result.total, totalPages: Math.max(1, Math.ceil(result.total / query.pageSize)) } };
+      lifetimeTransactions: lifetime.get(row.id)?.transactionCount ?? 0 })),
+    pagination: { page: result.page, pageSize: query.pageSize, total: result.total, totalPages: Math.max(1, Math.ceil(result.total / query.pageSize)) }
+  };
 }
 
-function donationPeriod(query: Pick<MemberDataWorkspaceQuery, "periodMode" | "month" | "date"> | Pick<MemberDonationQuery, "periodMode" | "month" | "date">) {
+function donationPeriod(query: Pick<MemberDonationQuery, "periodMode" | "month" | "date">) {
   const month = query.month ?? currentBusinessMonthValue();
   const date = query.date ?? (query.periodMode === "DAY" ? currentBusinessDayValue() : `${month}-01`);
   return resolvePeriod(query.periodMode, month, date);
@@ -58,6 +55,32 @@ export async function getDetail(memberId: string) {
     identities: identities.map(({ id: identityId, _count, ...identity }) => ({ ...identity, memberIdentityId: identityId, transactionCount: _count.transactions })) };
 }
 
+export async function getIdentityHistory(memberId: string, query: IdentityHistoryQuery) {
+  const result = await repository.loadIdentityHistory(memberId, query.page, query.pageSize);
+  if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
+  return {
+    rows: result.rows.map(row => ({
+      historyId: row.id,
+      action: row.action,
+      statusBefore: row.statusBefore,
+      statusAfter: row.statusAfter,
+      reason: row.reason,
+      actionAt: row.actionAt,
+      actionBy: row.actionBy,
+      identity: {
+        memberIdentityId: row.memberIdentity.id,
+        accountName: row.memberIdentity.accountName,
+        sourceType: row.memberIdentity.sourceType,
+        bankName: row.memberIdentity.bankName,
+        accountNumber: row.memberIdentity.accountNumber
+      },
+      fromMember: row.fromMember ? { memberId: row.fromMember.id, memberCode: row.fromMember.memberCode, memberName: row.fromMember.memberName } : null,
+      toMember: row.toMember ? { memberId: row.toMember.id, memberCode: row.toMember.memberCode, memberName: row.toMember.memberName } : null
+    })),
+    pagination: { page: result.page, pageSize: query.pageSize, total: result.total, totalPages: Math.max(1, Math.ceil(result.total / query.pageSize)) }
+  };
+}
+
 export async function getIdentityOptions(search: string) {
   return (await repository.findIdentityOptions(search)).map(({ id, _count, ...row }) => ({ ...row, memberIdentityId: id, transactionCount: _count.transactions }));
 }
@@ -71,16 +94,20 @@ export async function updateProfile(memberId: string, input: MemberProfileInput,
   return listMember(row);
 }
 
+export async function updateLifecycle(memberId: string, activeFlag: boolean, userId: string) {
+  return listMember(await repository.updateMemberLifecycle(memberId, activeFlag, userId));
+}
+
 export async function attach(memberId: string, identityId: string, userId: string) {
   await repository.attachIdentity(memberId, identityId, userId);
   return { message: "Identitas berhasil ditambahkan." };
 }
-export async function move(memberId: string, identityId: string, destinationMemberId: string, userId: string) {
-  await repository.moveIdentity(memberId, identityId, destinationMemberId, userId);
+export async function move(memberId: string, identityId: string, destinationMemberId: string, reason: string, userId: string) {
+  await repository.moveIdentity(memberId, identityId, destinationMemberId, reason, userId);
   return { message: "Identitas berhasil dipindahkan." };
 }
-export async function detach(memberId: string, identityId: string, userId: string) {
-  await repository.detachIdentity(memberId, identityId, userId);
+export async function detach(memberId: string, identityId: string, reason: string, userId: string) {
+  await repository.detachIdentity(memberId, identityId, reason, userId);
   return { message: "Identitas dilepas dan kembali ke Registrasi Donatur." };
 }
 export async function updateIdentity(memberId: string, identityId: string, input: IdentityMetadataInput, userId: string) {
@@ -91,7 +118,7 @@ export async function updateIdentity(memberId: string, identityId: string, input
 export async function getDonations(memberId: string, query: MemberDonationQuery) {
   const period = donationPeriod(query);
   const result = await repository.loadMemberDonationRecords(memberId, {
-    periodStart: period.start, periodEnd: period.end, eventCodeId: query.eventCodeId
+    periodStart: period.start, periodEnd: period.end, eventCodeId: query.eventCodeId, search: query.search
   }, query.page, query.pageSize);
   if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
   const events = new Map(result.events.map(event => [event.id, event]));
@@ -102,19 +129,26 @@ export async function getDonations(memberId: string, query: MemberDonationQuery)
   });
   return {
     member: { memberId: result.member.id, memberCode: result.member.memberCode, memberName: result.member.memberName },
-    filters: { periodMode: period.mode, month: period.month, date: period.date, eventCodeId: query.eventCodeId ?? null },
+    filters: { periodMode: period.mode, month: period.month, date: period.date, eventCodeId: query.eventCodeId ?? null, search: query.search },
     summary: { lifetimeAmount: result.lifetime._sum.originalAmount?.toString() ?? "0.00", lifetimeTransactionCount: result.lifetime._count._all,
       periodAmount: result.period._sum.originalAmount?.toString() ?? "0.00", periodTransactionCount: result.period._count._all },
-    rows: result.rows.map(row => ({ transactionId: row.id, transactionDate: row.transactionDate,
+    rows: result.rows.map(row => ({
+      transactionId: row.id,
+      transactionDate: row.transactionDate,
+      sourceType: row.sourceType,
+      correctionReason: row.correctionReason,
+      manualAddedAt: row.manualAddedAt,
+      manualAddedBy: row.manualAddedBy,
       identity: row.memberIdentity ? { memberIdentityId: row.memberIdentity.id, accountName: row.memberIdentity.accountName,
         initialName: row.memberIdentity.initialName, sourceType: row.memberIdentity.sourceType } : null,
       referenceNo: row.referenceNo, description: row.description, amount: row.originalAmount.toString(),
       finalEvent: row.eventCode ? { eventCodeId: row.eventCode.id, eventCode: row.eventCode.code, eventName: row.eventCode.eventName,
         category: row.eventCode.category?.trim() || "Uncategorized" } : null,
-      statement: { statementId: row.statementUpload.id, fileName: row.statementUpload.fileName } })),
+      statement: { statementId: row.statementUpload.id, fileName: row.statementUpload.fileName }
+    })),
     eventBreakdown,
     categoryBreakdown: aggregateCategories(eventBreakdown.map(row => ({ category: row.category, transactionCount: row.transactionCount, amount: row.amount }))),
     eventOptions: result.eventOptions,
-    pagination: { page: query.page, pageSize: query.pageSize, totalRows: result.total, totalPages: Math.max(1, Math.ceil(result.total / query.pageSize)) }
+    pagination: { page: result.page, pageSize: query.pageSize, totalRows: result.total, totalPages: Math.max(1, Math.ceil(result.total / query.pageSize)) }
   };
 }

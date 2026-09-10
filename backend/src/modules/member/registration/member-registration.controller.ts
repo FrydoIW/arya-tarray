@@ -14,5 +14,5 @@ export async function link(req: Request, res: Response) {
 }
 export async function ignore(req: Request, res: Response) {
   const { identityId } = schema.identityParamsSchema.parse(req.params);
-  res.json(await service.ignore(identityId, schema.ignoreSchema.parse(req.body ?? {}).remark, req.auth!.userId));
+  res.json(await service.ignore(identityId, schema.ignoreSchema.parse(req.body ?? {}).reason, req.auth!.userId));
 }

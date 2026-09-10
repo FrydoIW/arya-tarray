@@ -6,7 +6,7 @@ export type MemberOption = {
 export type Candidate = {
   memberIdentityId: string; accountName: string; initialName: string | null;
   bankName: string | null; accountNumber: string | null; accountType: string | null;
-  verificationStatus: IdentityStatus; firstSeenAt: string; lastSeenAt: string;
+  verificationStatus: IdentityStatus; firstSeenAt: string; lastSeenAt: string; remark: string | null;
   transactionCount: number; observedAmount: string; member: MemberOption | null;
 };
 export type Workspace = {

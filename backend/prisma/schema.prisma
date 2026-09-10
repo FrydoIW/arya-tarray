@@ -30,6 +30,8 @@ model Member {
   createdBy User? @relation("MemberCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_created_by")
   updatedBy User? @relation("MemberUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_updated_by")
   identities MemberIdentity[]
+  identityHistoryFrom MemberIdentityHistory[] @relation("MemberIdentityHistoryFromMember")
+  identityHistoryTo   MemberIdentityHistory[] @relation("MemberIdentityHistoryToMember")
   @@index([memberName], map: "idx_member_name")
   @@index([initialName], map: "idx_member_initial_name")
   @@index([city], map: "idx_member_city")
@@ -68,6 +70,7 @@ model MemberIdentity {
   createdBy User? @relation("MemberIdentityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_created_by")
   updatedBy User? @relation("MemberIdentityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_updated_by")
   transactions BankTransaction[]
+  ownershipHistory MemberIdentityHistory[]
   @@index([memberId], map: "idx_member_identity_member")
   @@index([verificationStatus], map: "idx_member_identity_status")
   @@index([normalizedName], map: "idx_member_identity_normalized_name")
@@ -79,6 +82,30 @@ model MemberIdentity {
   @@index([createdById], map: "fk_member_identity_created_by")
   @@index([updatedById], map: "fk_member_identity_updated_by")
   @@map("arya_member_identity")
+}
+
+model MemberIdentityHistory {
+  id               String   @id @default(uuid()) @map("member_identity_history_id") @db.Char(36)
+  memberIdentityId String   @map("member_identity_id") @db.Char(36)
+  action           String   @db.VarChar(20)
+  fromMemberId     String?  @map("from_member_id") @db.Char(36)
+  toMemberId       String?  @map("to_member_id") @db.Char(36)
+  statusBefore     String   @map("status_before") @db.VarChar(20)
+  statusAfter      String   @map("status_after") @db.VarChar(20)
+  reason           String?  @db.VarChar(1000)
+  actionAt         DateTime @default(now()) @map("action_at") @db.DateTime(3)
+  actionById       String   @map("action_by") @db.Char(36)
+
+  memberIdentity MemberIdentity @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_history_identity")
+  fromMember     Member?        @relation("MemberIdentityHistoryFromMember", fields: [fromMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_history_from_member")
+  toMember       Member?        @relation("MemberIdentityHistoryToMember", fields: [toMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_history_to_member")
+  actionBy       User           @relation("MemberIdentityHistoryActionBy", fields: [actionById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_history_action_by")
+
+  @@index([memberIdentityId, actionAt], map: "idx_member_identity_history_identity_action_at")
+  @@index([fromMemberId, actionAt], map: "idx_member_identity_history_from_member")
+  @@index([toMemberId, actionAt], map: "idx_member_identity_history_to_member")
+  @@index([actionById], map: "idx_member_identity_history_action_by")
+  @@map("arya_member_identity_history")
 }
 
 model Role {
@@ -107,6 +134,7 @@ model User {
   verifiedMemberIdentities MemberIdentity[] @relation("MemberIdentityVerifiedBy")
   createdMemberIdentities MemberIdentity[] @relation("MemberIdentityCreatedBy")
   updatedMemberIdentities MemberIdentity[] @relation("MemberIdentityUpdatedBy")
+  memberIdentityHistoryActions MemberIdentityHistory[] @relation("MemberIdentityHistoryActionBy")
   id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
   fullName     String   @map("full_name") @db.VarChar(150)
   email        String   @db.VarChar(150)

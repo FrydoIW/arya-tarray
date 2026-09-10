@@ -30,6 +30,7 @@ export type TransactionInquiryEvent = {
   id: string;
   code: string;
   eventName: string;
+  activeFlag: boolean;
 };
 
 export type TransactionInquiryRow = {
@@ -46,6 +47,9 @@ export type TransactionInquiryRow = {
   status: "RAW" | "CHECK" | "FINALIZED";
   displayStatus: string;
   remark: string | null;
+  sourceType: string;
+  correctionReason: string | null;
+  manualAddedAt: string | null;
   suggestedEvent: TransactionInquiryEvent | null;
   finalEvent: TransactionInquiryEvent | null;
   memberIdentity: TransactionInquiryMemberIdentity | null;
@@ -111,6 +115,13 @@ export type TransactionInquiryDetail = {
     status: string;
     displayStatus: string;
     remark: string | null;
+    sourceType: string;
+    correctionReason: string | null;
+    manualAddedAt: string | null;
+    manualAddedBy: { id: string; fullName: string } | null;
+    reconciliationExcludedAt: string | null;
+    reconciliationExcludedBy: { id: string; fullName: string } | null;
+    reconciliationExclusionReason: string | null;
     suggestedEvent: TransactionInquiryEvent | null;
     finalEvent: TransactionInquiryEvent | null;
     memberIdentity: TransactionInquiryMemberIdentity | null;

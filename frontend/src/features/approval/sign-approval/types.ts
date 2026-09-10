@@ -88,6 +88,7 @@ export type ApprovalCorrectionItem = {
     referenceNo: string | null;
     description: string | null;
     originalAmount: string;
+    sourceType: string;
   } | null;
   beforeEvent: ApprovalEventCode | null;
   proposedEvent: ApprovalEventCode | null;
@@ -130,6 +131,7 @@ export type SignApprovalDetail = {
     decidedAt: string | null;
     decidedBy: ApprovalPerson | null;
     originalStatementAmount: string;
+    currentOfficialAmount: string;
     proposedCorrectedAmount: string;
     summary: { modifiedTransactions: number; addedAdjustments: number; excludedTransactions: number };
     items: ApprovalCorrectionItem[];

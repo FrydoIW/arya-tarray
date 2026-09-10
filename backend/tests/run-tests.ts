@@ -3,6 +3,7 @@ import "./business-time.test.js";
 import "./period.test.js";
 import "./member-identity.test.js";
 import "./member-data.test.js";
+import "./member-donatur-hardening.test.js";
 import "./member-donation.test.js";
 import "./member-operational.test.js";
 import "./transaction-inquiry-member.test.js";
@@ -14,3 +15,5 @@ import "./event-code-bulk.test.js";
 import "./core-flow-hardening.test.js";
 import "./bank-account-opening-balance.test.js";
 import "./edit-income-correction.test.js";
+
+import "./v5-final-hardening.test.js";

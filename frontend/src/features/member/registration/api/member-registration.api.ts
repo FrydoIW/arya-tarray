@@ -16,6 +16,6 @@ export function registerMember(input: MemberInput, identityId?: string) {
 export function linkMember(identityId: string, memberId: string) {
   return post<MemberOption>("/" + encodeURIComponent(identityId) + "/link", { memberId });
 }
-export function ignoreIdentity(identityId: string, remark: string | null) {
-  return post<{ message: string }>("/" + encodeURIComponent(identityId) + "/ignore", { remark });
+export function ignoreIdentity(identityId: string, reason: string) {
+  return post<{ message: string }>("/" + encodeURIComponent(identityId) + "/ignore", { reason });
 }

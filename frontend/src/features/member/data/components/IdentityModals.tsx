@@ -63,12 +63,12 @@ export function AddIdentityModal({ memberId, busy, error, onClose, onSubmit }: {
   </Modal>;
 }
 
-export function MoveIdentityModal({ memberId, identity, busy, error, onClose, onSubmit }: { memberId: string; identity: Identity; busy: boolean; error: string; onClose: () => void; onSubmit: (destinationMemberId: string) => Promise<boolean> }) {
-  const [search, setSearch] = useState(""); const [selected, setSelected] = useState(""); const [confirmed, setConfirmed] = useState(false);
+export function MoveIdentityModal({ memberId, identity, busy, error, onClose, onSubmit }: { memberId: string; identity: Identity; busy: boolean; error: string; onClose: () => void; onSubmit: (destinationMemberId: string, reason: string) => Promise<boolean> }) {
+  const [search, setSearch] = useState(""); const [selected, setSelected] = useState(""); const [confirmed, setConfirmed] = useState(false); const [reason, setReason] = useState("");
   const request = useCallback((signal: AbortSignal) => api.getMemberOptions(search.trim(), memberId, signal), [search, memberId]);
   const { options, loading, loadError, retry } = useOptionLoader<MemberOption>(request);
   const selectedIsCurrent = options.some(option => option.memberId === selected);
-  async function submit(event: FormEvent) { event.preventDefault(); if (selectedIsCurrent && confirmed && await onSubmit(selected)) onClose(); }
+  async function submit(event: FormEvent) { event.preventDefault(); if (selectedIsCurrent && confirmed && reason.trim().length >= 3 && await onSubmit(selected, reason.trim())) onClose(); }
   return <Modal open title="Pindahkan identitas" description={`Identitas “${identity.accountName}” tetap menyimpan seluruh tautan transaksi.`} onClose={onClose}>
     <form className={styles.modalBody} onSubmit={submit}>
       <SearchInput value={search} onChange={e => { setSearch(e.target.value); setSelected(""); setConfirmed(false); }} placeholder="Cari donatur tujuan aktif…" />
@@ -76,9 +76,10 @@ export function MoveIdentityModal({ memberId, identity, busy, error, onClose, on
         <OptionState loading={loading} count={options.length} noun="donatur aktif" loadError={loadError} onRetry={retry} />
         {options.map(option => <label key={option.memberId} className={styles.option}><input type="radio" name="member" value={option.memberId} checked={selected === option.memberId} onChange={() => { setSelected(option.memberId); setConfirmed(false); }} /><span><strong>{option.memberName}</strong><small>{option.memberCode}{option.city ? ` · ${option.city}` : ""}</small></span></label>)}
       </div>
+      <label className={styles.field}><span>Alasan pemindahan <b aria-hidden="true">*</b></span><textarea value={reason} maxLength={1000} rows={3} disabled={busy} onChange={e => setReason(e.target.value)} placeholder="Contoh: identitas terhubung ke donatur yang salah" /></label>
       <label className={styles.confirm}><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>Saya memahami identitas akan berpindah ke donatur yang dipilih.</span></label>
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
-      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy || !selectedIsCurrent || !confirmed}>{busy ? "Memindahkan…" : "Pindahkan"}</Button></div>
+      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button type="submit" disabled={busy || !selectedIsCurrent || !confirmed || reason.trim().length < 3}>{busy ? "Memindahkan…" : "Pindahkan"}</Button></div>
     </form>
   </Modal>;
 }
@@ -97,15 +98,16 @@ export function EditIdentityModal({ identity, busy, error, onClose, onSubmit }: 
   </Modal>;
 }
 
-export function DetachIdentityModal({ identity, busy, error, onClose, onSubmit }: { identity: Identity; busy: boolean; error: string; onClose: () => void; onSubmit: () => Promise<boolean> }) {
-  const [confirmed, setConfirmed] = useState(false);
-  async function submit(event: FormEvent) { event.preventDefault(); if (confirmed && await onSubmit()) onClose(); }
+export function DetachIdentityModal({ identity, busy, error, onClose, onSubmit }: { identity: Identity; busy: boolean; error: string; onClose: () => void; onSubmit: (reason: string) => Promise<boolean> }) {
+  const [confirmed, setConfirmed] = useState(false); const [reason, setReason] = useState("");
+  async function submit(event: FormEvent) { event.preventDefault(); if (confirmed && reason.trim().length >= 3 && await onSubmit(reason.trim())) onClose(); }
   return <Modal open title="Lepaskan identitas" description="Identitas akan kembali ke Registrasi Donatur sebagai belum terverifikasi." onClose={onClose}>
     <form className={styles.modalBody} onSubmit={submit}>
       <div className={styles.evidence}><span>Nama rekening mentah</span><strong>{identity.accountName}</strong><small>{identity.transactionCount} transaksi tetap terhubung ke identitas ini.</small></div>
+      <label className={styles.field}><span>Alasan pelepasan <b aria-hidden="true">*</b></span><textarea value={reason} maxLength={1000} rows={3} disabled={busy} onChange={e => setReason(e.target.value)} placeholder="Contoh: identitas bukan milik donatur ini" /></label>
       <label className={styles.confirm}><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>Saya memahami hubungan ke profil donatur ini akan dilepas.</span></label>
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
-      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button variant="danger" type="submit" disabled={busy || !confirmed}>{busy ? "Melepaskan…" : "Lepaskan identitas"}</Button></div>
+      <div className={styles.footer}><Button variant="secondary" onClick={onClose} disabled={busy}>Batal</Button><Button variant="danger" type="submit" disabled={busy || !confirmed || reason.trim().length < 3}>{busy ? "Melepaskan…" : "Lepaskan identitas"}</Button></div>
     </form>
   </Modal>;
 }

@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import type { BankDirection } from "../reconciliation-classification.js";
 
 export type ParsedStatementTransaction = {
@@ -212,25 +213,88 @@ function isMergedChildCell(cell: ExcelJS.Cell) {
   return cell.master.address !== cell.address;
 }
 
+function looksLikeBcaTransactionType(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim().toUpperCase();
+  return [
+    /^TRSF E-BANKING(?: (?:CR|DB))?$/,
+    /^BYR VIA E-BANKING$/,
+    /^BI-FAST(?: (?:CR|DB))?$/,
+    /^SETORAN TUNAI$/,
+    /^TARIKAN TUNAI$/
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function inferDirectionFromTransactionType(value: string): BankDirection | null {
+  const normalized = value.replace(/\s+/g, " ").trim().toUpperCase();
+  const explicit = normalized.match(/\b(CR|DB)\b/)?.[1] as BankDirection | undefined;
+  if (explicit === "CR" || explicit === "DB") return explicit;
+  if (normalized.startsWith("BYR ") || normalized.startsWith("TARIKAN ") || normalized.startsWith("DEBIT ")) return "DB";
+  if (normalized.startsWith("SETORAN ") || normalized.startsWith("KREDIT ")) return "CR";
+  return null;
+}
+
+function parseReferenceFallback(
+  line: string,
+  transactionType: string,
+  period: { from: Date; to: Date }
+) {
+  const match = line.match(/^(\d{2})(\d{2})\/[A-Z0-9/-]+\s+([-+]?\d[\d,]*(?:\.\d{1,2})?)/i);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const candidateYears = [...new Set([period.from.getUTCFullYear(), period.to.getUTCFullYear()])];
+  let date: Date | null = null;
+  for (const year of candidateYears) {
+    const candidate = validDate(year, month, day);
+    if (candidate && candidate >= period.from && candidate <= period.to) {
+      date = candidate;
+      break;
+    }
+  }
+  date ??= validDate(period.from.getUTCFullYear(), month, day);
+  const direction = inferDirectionFromTransactionType(transactionType);
+  if (!date || !direction) return null;
+
+  const amount = parseAmount(`${match[3]} ${direction}`, transactionType);
+  return amount ? { date, amount } : null;
+}
+
 function parseTransactionStart(
-  row: ExcelJS.Row,
+  sheet: ExcelJS.Worksheet,
+  rowNo: number,
   columns: { dateCol: number; descriptionCol: number; amountCol: number },
   period: { from: Date; to: Date }
 ) {
+  const row = sheet.getRow(rowNo);
   const dateCell = row.getCell(columns.dateCol);
   const amountCell = row.getCell(columns.amountCol);
-
-  // ExcelJS resolves merged child cells to their master values. BCA statements
-  // merge Date/Amount across continuation rows, so a continuation row can look
-  // like a complete transaction unless we explicitly reject merged children.
-  if (isMergedChildCell(dateCell) || isMergedChildCell(amountCell)) return null;
-
   const transactionType = cellText(row.getCell(columns.descriptionCol));
-  const date = parseDateCell(dateCell, period.from, period.to);
-  const amount = parseAmount(cellText(amountCell), transactionType);
+  if (!transactionType) return null;
 
-  if (!date || !transactionType || !amount) return null;
-  return { transactionType, date, amount };
+  // Normal BCA layout: Date/Amount are merged across the continuation lines.
+  // Only the merge master is a real transaction start.
+  if (!isMergedChildCell(dateCell) && !isMergedChildCell(amountCell)) {
+    const date = parseDateCell(dateCell, period.from, period.to);
+    const amount = parseAmount(cellText(amountCell), transactionType);
+    if (date && amount) return { transactionType, date, amount };
+  }
+
+  // Some exported/generated XLSX files contain malformed merge ranges that
+  // overlap the next real transaction row. ExcelJS then exposes that row as a
+  // merged child and its Date/Amount become unavailable, which previously made
+  // several transactions collapse into the previous description. Recover only
+  // when the row itself is a conservative, known BCA transaction header and the
+  // immediately following lines carry a matching DDMM/reference + amount.
+  if (!looksLikeBcaTransactionType(transactionType)) return null;
+  for (let offset = 1; offset <= 2 && rowNo + offset <= sheet.actualRowCount; offset += 1) {
+    const referenceLine = cellText(sheet.getRow(rowNo + offset).getCell(columns.descriptionCol));
+    if (!referenceLine) continue;
+    const fallback = parseReferenceFallback(referenceLine, transactionType, period);
+    if (fallback) return { transactionType, date: fallback.date, amount: fallback.amount };
+  }
+
+  return null;
 }
 
 function parseStatementSheet(sheet: ExcelJS.Worksheet): ParsedStatementSheet | null {
@@ -248,8 +312,7 @@ function parseStatementSheet(sheet: ExcelJS.Worksheet): ParsedStatementSheet | n
   let rowNo = columns.headerRow + 1;
 
   while (rowNo <= sheet.actualRowCount) {
-    const row = sheet.getRow(rowNo);
-    const start = parseTransactionStart(row, columns, period);
+    const start = parseTransactionStart(sheet, rowNo, columns, period);
 
     if (!start) {
       rowNo += 1;
@@ -262,7 +325,7 @@ function parseStatementSheet(sheet: ExcelJS.Worksheet): ParsedStatementSheet | n
     let cursor = rowNo + 1;
     while (cursor <= sheet.actualRowCount) {
       const nextRow = sheet.getRow(cursor);
-      if (parseTransactionStart(nextRow, columns, period)) break;
+      if (parseTransactionStart(sheet, cursor, columns, period)) break;
 
       const continuation = cellText(nextRow.getCell(columns.descriptionCol));
       if (continuation) continuationLines.push(continuation);
@@ -301,6 +364,37 @@ export function normalizeAccountNumber(value: string) {
   return value.replace(/\D/g, "");
 }
 
+const SPREADSHEETML_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+async function loadWorkbookWithNamespaceCompatibility(workbook: ExcelJS.Workbook, buffer: Buffer) {
+  const archive = await JSZip.loadAsync(buffer);
+  let normalized = false;
+
+  for (const entry of Object.values(archive.files)) {
+    if (entry.dir || !entry.name.startsWith("xl/") || !entry.name.endsWith(".xml")) continue;
+
+    const xml = await entry.async("string");
+    if (!xml.includes(`xmlns:x="${SPREADSHEETML_NAMESPACE}"`)) continue;
+
+    // Some valid BCA workbooks prefix SpreadsheetML elements with `x:`. ExcelJS
+    // expects the default namespace, so normalize only that namespace before its
+    // retry; cell content, relationships, and merge declarations remain intact.
+    archive.file(
+      entry.name,
+      xml
+        .replace(`xmlns:x="${SPREADSHEETML_NAMESPACE}"`, `xmlns="${SPREADSHEETML_NAMESPACE}"`)
+        .replace(/(<\/?)(x:)/g, "$1")
+    );
+    normalized = true;
+  }
+
+  if (!normalized) return false;
+
+  const repaired = await archive.generateAsync({ type: "nodebuffer" });
+  await workbook.xlsx.load(new Uint8Array(repaired).buffer);
+  return true;
+}
+
 export async function parseBcaStatementWorkbook(buffer: Buffer): Promise<ParsedStatementWorkbook> {
   const workbook = new ExcelJS.Workbook();
   try {
@@ -309,7 +403,13 @@ export async function parseBcaStatementWorkbook(buffer: Buffer): Promise<ParsedS
     // keeps the uploaded workbook bytes intact and satisfies both libraries.
     await workbook.xlsx.load(new Uint8Array(buffer).buffer);
   } catch {
-    throw new Error("The uploaded file is not a readable XLSX workbook.");
+    try {
+      if (!await loadWorkbookWithNamespaceCompatibility(workbook, buffer)) {
+        throw new Error("No namespace normalization was applicable.");
+      }
+    } catch {
+      throw new Error("The uploaded file is not a readable XLSX workbook.");
+    }
   }
 
   const validSheets = workbook.worksheets

@@ -30,6 +30,6 @@ export function MemberRegistrationScreen() {
     {action?.kind === "manual" ? <RegisterManualMemberModal busy={state.busy} error={state.error} onClose={close} onSubmit={input => state.register(input)} /> : null}
     {action?.kind === "register" ? <RegisterNewMemberModal candidate={action.row} busy={state.busy} error={state.error} onClose={close} onSubmit={input => state.register(input, action.row.memberIdentityId)} /> : null}
     {action?.kind === "link" ? <LinkExistingMemberModal candidate={action.row} busy={state.busy} error={state.error} onClose={close} onSubmit={id => state.link(action.row.memberIdentityId, id)} /> : null}
-    {action?.kind === "ignore" ? <IgnoreIdentityModal candidate={action.row} busy={state.busy} error={state.error} onClose={close} onSubmit={remark => state.ignore(action.row.memberIdentityId, remark)} /> : null}
+    {action?.kind === "ignore" ? <IgnoreIdentityModal candidate={action.row} busy={state.busy} error={state.error} onClose={close} onSubmit={reason => state.ignore(action.row.memberIdentityId, reason)} /> : null}
   </div>;
 }

@@ -53,7 +53,13 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
             <DetailItem label="Original Amount" value={formatMoney(transaction.originalAmount)} />
             <DetailItem label="Suffix" value={transaction.suffixCode} />
             <DetailItem label="Base Amount" value={transaction.baseAmount ? formatMoney(transaction.baseAmount) : "-"} />
+            <DetailItem label="Source" value={transaction.sourceType === "MANUAL" ? "Manual Adjustment" : "Bank Statement"} />
             <DetailItem label="Remark" value={transaction.remark} />
+            {transaction.sourceType === "MANUAL" ? <DetailItem label="Correction Reason" value={transaction.correctionReason} /> : null}
+            {transaction.sourceType === "MANUAL" ? <DetailItem label="Added By / At" value={`${transaction.manualAddedBy?.fullName ?? "-"} · ${transaction.manualAddedAt ? formatDateTime(transaction.manualAddedAt) : "-"}`} /> : null}
+            {transaction.reconciliationExcludedAt ? <DetailItem label="Reconciliation State" value="Excluded" /> : null}
+            {transaction.reconciliationExcludedAt ? <DetailItem label="Excluded By / At" value={`${transaction.reconciliationExcludedBy?.fullName ?? "-"} · ${formatDateTime(transaction.reconciliationExcludedAt)}`} /> : null}
+            {transaction.reconciliationExcludedAt ? <DetailItem label="Exclusion Reason" value={transaction.reconciliationExclusionReason} wide /> : null}
             <DetailItem label="Description" value={transaction.description} wide />
           </div>
         </section>

@@ -88,3 +88,19 @@ test("raw provenance, correction diff, inquiry gate, staged filters and statemen
   assert.match(workspace, /Exclude from reconciliation/);
   assert.match(workspace, /Source MANUAL|Manual source/);
 });
+
+
+test("Edit Income protects staged corrections from navigation/reload and uses gross movement impact", () => {
+  const hook = readFileSync(new URL("../../frontend/src/features/reconciliation/edit-income/hooks/useEditIncomeWorkspace.ts", import.meta.url), "utf8");
+  const workspace = readFileSync(new URL("../../frontend/src/features/reconciliation/edit-income/components/EditIncomeCorrectionWorkspace.tsx", import.meta.url), "utf8");
+  const approvalService = readFileSync(new URL("../src/modules/approval/sign-approval/sign-approval.service.ts", import.meta.url), "utf8");
+  assert.match(hook, /Unsaved corrections are still staged[\s\S]*before Reload/);
+  assert.match(hook, /before opening another statement/);
+  assert.match(hook, /before leaving this statement/);
+  assert.match(hook, /loadDetail\(detail\.statement\.id, \{ resetView: false \}\)/);
+  assert.match(workspace, /absoluteCents/);
+  assert.match(workspace, /row\.correctionAction === "EXCLUDED" && row\.sourceType !== "MANUAL"/);
+  assert.match(approvalService, /sumAbsoluteAmounts/);
+  assert.match(approvalService, /absoluteCents\(item\.manualOriginalAmount\)/);
+  assert.match(approvalService, /currentOfficialAmount: centsToDecimal\(currentReconciledTotalCents\)/);
+});

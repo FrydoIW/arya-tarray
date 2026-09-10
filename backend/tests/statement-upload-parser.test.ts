@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import ExcelJS from "exceljs";
+import { readFile } from "node:fs/promises";
 import { parseBcaStatementWorkbook } from "../src/modules/reconciliation/statement-upload/statement-upload.parser.js";
 
 async function buildMergedCellFixture() {
@@ -54,4 +55,23 @@ test("BCA parser ignores merged continuation rows as transaction starts", async 
   assert.equal(second.sourceRowNo, 9);
   assert.equal(second.direction, "DB");
   assert.equal(second.amountCents, -5_000_000n);
+});
+
+
+test("BCA parser recovers real transaction boundaries from malformed overlapping merge ranges", async () => {
+  const fixture = await readFile(new URL("./fixtures/malformed-merge-statement.xlsx", import.meta.url));
+  const parsed = await parseBcaStatementWorkbook(fixture);
+
+  assert.equal(parsed.transactions.length, 40);
+  const tony = parsed.transactions.find((item) => item.sourceRowNo === 137);
+  const vivian = parsed.transactions.find((item) => item.sourceRowNo === 141);
+  const wendy = parsed.transactions.find((item) => item.sourceRowNo === 145);
+
+  assert.equal(tony?.amountCents, 145_000_300n);
+  assert.equal(tony?.senderName, "TONY HALIM");
+  assert.equal(tony?.description, "0505/FTSCY/WS95031 1450003.00\nDana Rupang Guru Rinpoche\nTONY HALIM");
+  assert.equal(vivian?.amountCents, 70_000_400n);
+  assert.equal(vivian?.senderName, "VIVIAN LEE");
+  assert.equal(wendy?.amountCents, 105_000_500n);
+  assert.equal(wendy?.senderName, "WENDY TAN");
 });

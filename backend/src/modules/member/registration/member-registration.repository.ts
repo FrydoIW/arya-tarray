@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../../../lib/prisma.js";
 import { HttpError } from "../../../lib/http.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
+import { recordMemberIdentityHistory } from "../member-identity/member-identity-history.js";
 import type { MemberInput, WorkspaceQuery } from "./member-registration.schema.js";
 
 const memberSelect = { id: true, memberCode: true, memberName: true, initialName: true, city: true, activeFlag: true } as const;
@@ -25,7 +26,7 @@ export async function workspaceRecords(query: WorkspaceQuery) {
       where, skip: (page - 1) * query.pageSize, take: query.pageSize,
       orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
       select: { id: true, accountName: true, initialName: true, bankName: true, accountNumber: true,
-        accountType: true, verificationStatus: true, firstSeenAt: true, lastSeenAt: true, member: { select: memberSelect } }
+        accountType: true, verificationStatus: true, firstSeenAt: true, lastSeenAt: true, remark: true, member: { select: memberSelect } }
     });
     const aggregates = rows.length ? await tx.bankTransaction.groupBy({
       by: ["memberIdentityId"], where: { memberIdentityId: { in: rows.map(row => row.id) } },
@@ -62,12 +63,19 @@ export function registerMember(input: MemberInput, userId: string, identityId?: 
     if (identityId) await requireCandidate(tx, identityId);
     const member = await createMember(tx, input, userId, identityId ? "STATEMENT" : "MANUAL");
     if (identityId) {
+      const now = new Date();
       const result = await tx.memberIdentity.updateMany({
         where: { id: identityId, memberId: null, verificationStatus: "UNVERIFIED" },
         data: { memberId: member.id, verificationStatus: "VERIFIED", initialName: input.initialName,
-          verifiedAt: new Date(), verifiedById: userId, updatedById: userId }
+          verifiedAt: now, verifiedById: userId, updatedById: userId }
       });
       if (result.count !== 1) throw new HttpError(409, "Identitas sudah diproses. Reload daftar registrasi.");
+      await recordMemberIdentityHistory(tx, {
+        memberIdentityId: identityId, action: "REGISTER",
+        before: { memberId: null, verificationStatus: "UNVERIFIED" },
+        after: { memberId: member.id, verificationStatus: "VERIFIED" },
+        actionById: userId, actionAt: now
+      });
     }
     return member;
   });
@@ -77,22 +85,36 @@ export function linkMember(identityId: string, memberId: string, userId: string)
     await requireCandidate(tx, identityId);
     const member = await tx.member.findFirst({ where: { id: memberId, activeFlag: true }, select: memberSelect });
     if (!member) throw new HttpError(400, "Donatur aktif tidak ditemukan.");
+    const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId: null, verificationStatus: "UNVERIFIED" },
-      data: { memberId, verificationStatus: "VERIFIED", verifiedAt: new Date(), verifiedById: userId, updatedById: userId }
+      data: { memberId, verificationStatus: "VERIFIED", verifiedAt: now, verifiedById: userId, updatedById: userId }
     });
     if (result.count !== 1) throw new HttpError(409, "Identitas sudah diproses. Reload daftar registrasi.");
+    await recordMemberIdentityHistory(tx, {
+      memberIdentityId: identityId, action: "LINK",
+      before: { memberId: null, verificationStatus: "UNVERIFIED" },
+      after: { memberId, verificationStatus: "VERIFIED" },
+      actionById: userId, actionAt: now
+    });
     return member;
   });
 }
-export function ignoreIdentity(identityId: string, remark: string | null, userId: string) {
+export function ignoreIdentity(identityId: string, reason: string, userId: string) {
   return memberTransaction(async tx => {
     await requireCandidate(tx, identityId);
+    const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId: null, verificationStatus: "UNVERIFIED" },
-      data: { verificationStatus: "IGNORED", remark, verifiedAt: new Date(), verifiedById: userId, updatedById: userId }
+      data: { verificationStatus: "IGNORED", remark: reason, verifiedAt: now, verifiedById: userId, updatedById: userId }
     });
     if (result.count !== 1) throw new HttpError(409, "Identitas sudah diproses. Reload daftar registrasi.");
+    await recordMemberIdentityHistory(tx, {
+      memberIdentityId: identityId, action: "IGNORE",
+      before: { memberId: null, verificationStatus: "UNVERIFIED" },
+      after: { memberId: null, verificationStatus: "IGNORED" },
+      reason, actionById: userId, actionAt: now
+    });
     return { message: "Identitas diabaikan." };
   });
 }

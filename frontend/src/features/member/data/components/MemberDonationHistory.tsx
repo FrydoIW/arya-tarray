@@ -5,18 +5,24 @@ import { DataTable } from "@/components/ui/DataTable";
 import type { DataTableColumn } from "@/components/ui/DataTable/types";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { currentBusinessDayValue, currentBusinessMonthValue } from "@/lib/business-time";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { useMemberDonations } from "../hooks/useMemberDonations";
 import type { DonationRow } from "../types";
 import styles from "../styles/member-data.module.css";
 
 const columns: DataTableColumn<DonationRow>[] = [
   { key: "transactionDate", header: "Tanggal", minWidth: "110px", render: row => formatDate(row.transactionDate) },
-  { key: "identity", header: "Sumber / Identitas", minWidth: "190px", render: row => <div className={styles.name}><strong>{row.identity?.accountName ?? "—"}</strong><small>{row.identity?.initialName || row.identity?.sourceType || "—"}</small></div> },
-  { key: "referenceNo", header: "Referensi", minWidth: "140px" },
-  { key: "description", header: "Deskripsi", minWidth: "220px" },
+  { key: "identity", header: "Sumber / Identitas", minWidth: "220px", render: row => <div className={styles.name}>
+    <strong>{row.sourceType === "MANUAL" ? "Manual Adjustment" : row.identity?.accountName ?? "Bank Statement"}</strong>
+    <small>{row.sourceType}{row.sourceType === "MANUAL" && row.manualAddedBy ? ` · ${row.manualAddedBy.fullName}` : row.identity?.initialName ? ` · ${row.identity.initialName}` : ""}</small>
+    {row.sourceType === "MANUAL" && row.correctionReason ? <small>Reason: {row.correctionReason}</small> : null}
+  </div> },
+  { key: "referenceNo", header: "Referensi", minWidth: "140px", render: row => row.referenceNo || "—" },
+  { key: "description", header: "Deskripsi", minWidth: "220px", render: row => row.description || "—" },
+  { key: "statement", header: "Statement", minWidth: "220px", render: row => <div className={styles.name}><strong>{row.statement.fileName}</strong><small title={row.statement.statementId}>ID {row.statement.statementId.slice(0, 8)}…{row.manualAddedAt ? ` · Added ${formatDateTime(row.manualAddedAt)}` : ""}</small></div> },
   { key: "finalEvent", header: "Final Event", minWidth: "170px", render: row => row.finalEvent ? <div className={styles.name}><strong>{row.finalEvent.eventCode}</strong><small>{row.finalEvent.eventName}</small></div> : "—" },
   { key: "category", header: "Kategori", minWidth: "120px", render: row => row.finalEvent?.category ?? "Uncategorized" },
   { key: "amount", header: "Jumlah", align: "right", minWidth: "145px", render: row => <strong className={styles.money}>{formatMoney(row.amount)}</strong> }
@@ -26,13 +32,14 @@ export function MemberDonationHistory({ memberId }: { memberId: string }) {
   const state = useMemberDonations(memberId); const summary = state.workspace.summary;
   return <section className={styles.donationStack}>
     <div className={styles.donationToolbar}>
-      <div><h2>Riwayat Donasi</h2><p>Hanya transaksi masuk yang sudah FINALIZED dan memiliki Final Event aktual.</p></div>
+      <div><h2>Riwayat Donasi</h2><p>Hanya transaksi masuk FINALIZED, Final Event aktual, identitas VERIFIED, dan tidak di-Exclude.</p></div>
       <div className={styles.periodControls}>
+        <SearchInput value={state.search} onChange={event => state.setSearch(event.target.value)} placeholder="Cari deskripsi / referensi…" />
         <PeriodPicker value={{ mode: state.query.periodMode, month: state.query.month, date: state.query.date }} disabled={state.loading}
           maxMonth={currentBusinessMonthValue()} maxDate={currentBusinessDayValue()} ariaLabel="Periode donasi"
           onChange={period => state.updateQuery({ periodMode: period.mode, month: period.month, date: period.date })} />
         <Select aria-label="Filter Final Event" value={state.query.eventCodeId} disabled={state.loading} onChange={e => state.updateQuery({ eventCodeId: e.target.value })}>
-          <option value="">Semua Final Event</option>{state.workspace.eventOptions.map(event => <option key={event.id} value={event.id}>{event.code} — {event.eventName}</option>)}
+          <option value="">Semua Final Event</option>{state.workspace.eventOptions.map(event => <option key={event.id} value={event.id}>{event.code} — {event.eventName}{event.activeFlag ? "" : " (Inactive)"}</option>)}
         </Select>
         <Button variant="outline" icon={<RefreshCw size={15} />} disabled={state.loading} onClick={state.reload}>Muat ulang</Button>
       </div>
@@ -41,12 +48,12 @@ export function MemberDonationHistory({ memberId }: { memberId: string }) {
     <div className={styles.donationSummary}>
       <MetricCard label="Lifetime Donation" value={formatMoney(summary.lifetimeAmount)} detail="Seluruh periode, semua event" icon={<HandCoins size={18} />} tone="maroon" />
       <MetricCard label="Lifetime Transactions" value={summary.lifetimeTransactionCount} detail="Transaksi donasi final" icon={<History size={18} />} tone="gold" />
-      <MetricCard label="Period Donation" value={formatMoney(summary.periodAmount)} detail="Mengikuti filter periode/event" icon={<CalendarCheck size={18} />} tone="green" />
-      <MetricCard label="Period Transactions" value={summary.periodTransactionCount} detail="Tidak terbatas halaman aktif" icon={<ReceiptText size={18} />} tone="blue" />
+      <MetricCard label="Period Donation" value={formatMoney(summary.periodAmount)} detail="Mengikuti periode + event; bukan text search" icon={<CalendarCheck size={18} />} tone="green" />
+      <MetricCard label="Period Transactions" value={summary.periodTransactionCount} detail="Mengikuti periode + event; bukan text search" icon={<ReceiptText size={18} />} tone="blue" />
     </div>
     <div className={styles.detailPanel}>
-      <DataTable rows={state.workspace.rows} columns={columns} rowKey={row => row.transactionId} loading={state.loading} minWidth="1150px"
-        loadingText="Memuat riwayat donasi…" emptyState={{ title: "Tidak ada donasi pada konteks ini", description: "Coba periode atau Final Event lain. Lifetime totals tetap tidak berubah oleh filter." }}
+      <DataTable rows={state.workspace.rows} columns={columns} rowKey={row => row.transactionId} loading={state.loading} minWidth="1450px"
+        loadingText="Memuat riwayat donasi…" emptyState={{ title: "Tidak ada donasi pada konteks ini", description: "Coba periode, Final Event, atau pencarian lain. Search hanya menyaring tabel; KPI periode tetap mengikuti periode + event." }}
         pagination={{ mode: "server", page: state.workspace.pagination.page, pageSize: state.workspace.pagination.pageSize,
           total: state.workspace.pagination.totalRows, onPageChange: page => state.updateQuery({ page }), onPageSizeChange: pageSize => state.updateQuery({ pageSize }) }} />
     </div>

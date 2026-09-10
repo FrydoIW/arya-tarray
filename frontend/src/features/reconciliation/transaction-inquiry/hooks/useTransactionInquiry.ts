@@ -101,13 +101,19 @@ export function useTransactionInquiry() {
     workspaceRequestRef.current = controller;
     const key = workspaceCacheKey(INQUIRY_WORKSPACE_PREFIX, query);
     const read = readWorkspace(key, signal => getTransactionInquiryWorkspace(query, signal), { force });
-    if (read.cached) setWorkspace(read.cached);
+    if (read.cached) {
+      setWorkspace(read.cached);
+      setPage((current) => current === read.cached!.pagination.page ? current : read.cached!.pagination.page);
+    }
     controller.signal.addEventListener("abort", read.release, { once: true });
     setLoading(!read.cached || force);
     setError("");
     try {
       const next = read.promise ? await read.promise : read.cached!;
-      if (!controller.signal.aborted) setWorkspace(next);
+      if (!controller.signal.aborted) {
+        setWorkspace(next);
+        setPage((current) => current === next.pagination.page ? current : next.pagination.page);
+      }
     } catch (caught) {
       if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Transaction Inquiry.");
     } finally {

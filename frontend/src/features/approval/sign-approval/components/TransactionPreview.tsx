@@ -51,7 +51,7 @@ export function TransactionPreview({ items, totalTransactions }: TransactionPrev
       header: "Status",
       width: "120px",
       render: (row) => (
-        <span className={`${styles.transactionStatus} ${row.status === "CHECK" ? styles.checked : styles.needsReview}`}>
+        <span className={`${styles.transactionStatus} ${row.status === "CHECK" || row.status === "FINALIZED" ? styles.checked : styles.needsReview}`}>
           <i aria-hidden="true" />
           {row.status}
         </span>

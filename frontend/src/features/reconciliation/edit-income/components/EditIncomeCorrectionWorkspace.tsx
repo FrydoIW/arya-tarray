@@ -70,12 +70,28 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [excludeTarget, setExcludeTarget] = useState<EditIncomeTransaction | null>(null);
   const proposedAmount = useMemo(() => {
+    const absoluteCents = (value: string) => {
+      const cents = decimalToCents(value);
+      return cents < BigInt(0) ? -cents : cents;
+    };
+
+    // Statement total is gross bank activity (credit + absolute debit). Keep
+    // manual/exclusion impact on that same basis instead of using signed net
+    // movement, otherwise outgoing adjustments invert the displayed impact.
     let cents = decimalToCents(detail.statement.totalAmount);
     for (const row of props.allRows) {
-      if (!row.correctionAction && row.sourceType === "MANUAL" && !row.reconciliationExcludedAt) cents += decimalToCents(row.originalAmount);
-      if (!row.correctionAction && row.sourceType !== "MANUAL" && row.reconciliationExcludedAt) cents -= decimalToCents(row.originalAmount);
-      if (row.correctionAction === "ADDED") cents += decimalToCents(row.originalAmount);
-      if (row.correctionAction === "EXCLUDED") cents -= decimalToCents(row.originalAmount);
+      if (!row.correctionAction && row.sourceType === "MANUAL" && !row.reconciliationExcludedAt) {
+        cents += absoluteCents(row.originalAmount);
+      }
+      if (!row.correctionAction && row.sourceType !== "MANUAL" && row.reconciliationExcludedAt) {
+        cents -= absoluteCents(row.originalAmount);
+      }
+      if (row.correctionAction === "ADDED") {
+        cents += absoluteCents(row.originalAmount);
+      }
+      if (row.correctionAction === "EXCLUDED" && row.sourceType !== "MANUAL") {
+        cents -= absoluteCents(row.originalAmount);
+      }
     }
     return centsToDecimal(cents);
   }, [detail.statement.totalAmount, props.allRows]);
@@ -94,7 +110,10 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       key: "eventCodeId", header: "Final Event", minWidth: "200px",
       editable: (row) => props.canEdit && row.requiresClassification && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
       getValue: (row) => row.eventCodeId ?? "",
-      renderEditor: ({ row, value, onChange }) => <Select className={styles.eventSelect} value={String(value ?? "")} disabled={!props.canEdit || props.busy} onChange={(event) => onChange(event.target.value || null)} aria-label={`Final Event row ${row.rowNo || "manual"}`}><option value="">Select Event...</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}</option>)}</Select>,
+      renderEditor: ({ row, value, onChange }) => {
+        const originalEventCodeId = props.originalById.get(row.id)?.eventCodeId ?? null;
+        return <Select className={styles.eventSelect} value={String(value ?? "")} disabled={!props.canEdit || props.busy} onChange={(event) => onChange(event.target.value || null)} aria-label={`Final Event row ${row.rowNo || "manual"}`}><option value="">Select Event...</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id} disabled={!eventCode.activeFlag && eventCode.id !== originalEventCodeId}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</Select>;
+      },
       render: (row) => {
         if (!row.requiresClassification) return <span className={styles.notApplicableText}>Outgoing</span>;
         const current = getEventCode(detail.eventCodes, row.eventCodeId);
@@ -126,11 +145,11 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
 
       <div className={styles.correctionSummary}><div><span>Modified Transactions</span><strong>{props.correctionSummary.modifiedTransactions}</strong></div><div><span>Added Adjustments</span><strong>{props.correctionSummary.addedAdjustments}</strong></div><div><span>Excluded Transactions</span><strong>{props.correctionSummary.excludedTransactions}</strong></div></div>
 
-      <div className={styles.correctionFilters}><SearchInput value={props.search} disabled={props.loading} placeholder="Search description or reference" onChange={(event) => props.onSearchChange(event.target.value)} /><Select value={props.statusFilter} disabled={props.loading} onChange={(event) => props.onStatusFilterChange(event.target.value as CorrectionRowStatusFilter)} aria-label="Correction status"><option value="ALL">All Status</option><option value="CURRENT">Current</option><option value="MODIFIED">Modified</option><option value="ADDED">Added</option><option value="EXCLUDED">Excluded</option></Select><Select value={props.eventCodeFilter} disabled={props.loading} onChange={(event) => props.onEventCodeFilterChange(event.target.value)} aria-label="Final Event filter"><option value="ALL">All Event Codes</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}</option>)}</Select><Select value={props.directionFilter} disabled={props.loading} onChange={(event) => props.onDirectionFilterChange(event.target.value as CorrectionDirectionFilter)} aria-label="Direction filter"><option value="ALL">All Direction</option><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></Select><Button type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button></div>
+      <div className={styles.correctionFilters}><SearchInput value={props.search} disabled={props.loading} placeholder="Search description or reference" onChange={(event) => props.onSearchChange(event.target.value)} /><Select value={props.statusFilter} disabled={props.loading} onChange={(event) => props.onStatusFilterChange(event.target.value as CorrectionRowStatusFilter)} aria-label="Correction status"><option value="ALL">All Status</option><option value="CURRENT">Current</option><option value="MODIFIED">Modified</option><option value="ADDED">Added</option><option value="EXCLUDED">Excluded</option></Select><Select value={props.eventCodeFilter} disabled={props.loading} onChange={(event) => props.onEventCodeFilterChange(event.target.value)} aria-label="Final Event filter"><option value="ALL">All Event Codes</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</Select><Select value={props.directionFilter} disabled={props.loading} onChange={(event) => props.onDirectionFilterChange(event.target.value as CorrectionDirectionFilter)} aria-label="Direction filter"><option value="ALL">All Direction</option><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></Select><Button type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button></div>
 
       <DataTable rows={props.rows} columns={columns} rowKey={(row) => row.id} loading={props.loading} disabled={!props.canEdit || props.busy} minWidth="1520px" onCellChange={(row, columnKey, value) => { if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null); if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? "")); }} emptyState={{ title: "No transactions", description: "Try another transaction search or filter." }} pagination={{ page: props.page, pageSize: props.pageSize, total: props.rows.length, pageSizeOptions: [10, 25, 50], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }} />
 
-      <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
+      <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes.filter((eventCode) => eventCode.activeFlag)} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
       <ExcludeTransactionModal transaction={excludeTarget} disabled={props.busy} onClose={() => setExcludeTarget(null)} onSubmit={props.onExclude} />
     </section>
   );

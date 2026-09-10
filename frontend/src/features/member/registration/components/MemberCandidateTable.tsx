@@ -22,6 +22,7 @@ export function MemberCandidateTable(props: Props) {
     { key: "transactionCount", header: "Transactions", align: "right" },
     { key: "observedAmount", header: "Observed Amount", minWidth: "135px", align: "right", render: row => formatMoney(row.observedAmount) },
     { key: "verificationStatus", header: "Status", minWidth: "145px", render: row => <span className={styles[row.verificationStatus]}>{statusLabels[row.verificationStatus]}</span> },
+    { key: "remark", header: "Alasan / Catatan", minWidth: "220px", render: row => row.remark || "—" },
     { key: "actions", header: "Action", minWidth: "250px", render: row => row.verificationStatus === "UNVERIFIED" ? <div className={styles.actions}>
       <Button size="sm" disabled={props.busy} onClick={() => props.onAction("register", row)}>Registrasi</Button>
       <Button size="sm" variant="outline" disabled={props.busy} onClick={() => props.onAction("link", row)}>Link</Button>
@@ -35,7 +36,7 @@ export function MemberCandidateTable(props: Props) {
       </Select>
       <Button variant="secondary" disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button>
     </div>}>
-    <DataTable rows={props.workspace.rows} columns={columns} rowKey={row => row.memberIdentityId} loading={props.loading} minWidth="1250px"
+    <DataTable rows={props.workspace.rows} columns={columns} rowKey={row => row.memberIdentityId} loading={props.loading} minWidth="1450px"
       emptyState={{ title: "Tidak ada identitas donatur", description: "Ubah pencarian/status atau registrasi donatur secara manual." }}
       pagination={{ mode: "server", page: props.workspace.pagination.page, pageSize: props.query.pageSize, total: props.workspace.pagination.total, onPageChange: props.onPage, onPageSizeChange: props.onPageSize, pageSizeOptions: [10, 25, 50, 100] }} />
   </CollapsibleSection>;

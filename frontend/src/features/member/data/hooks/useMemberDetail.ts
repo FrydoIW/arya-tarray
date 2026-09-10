@@ -34,7 +34,7 @@ export function useMemberDetail(memberId: string) {
   return { detail, loading, busy, error, message, clearError: () => setError(""), refresh,
     updateProfile: (input: MemberProfileInput) => perform(() => api.updateProfile(memberId, input), "Profil donatur diperbarui."),
     attach: (identityId: string) => perform(() => api.attachIdentity(memberId, identityId), "Identitas ditambahkan."),
-    move: (identityId: string, destinationMemberId: string) => perform(() => api.moveIdentity(memberId, identityId, destinationMemberId), "Identitas dipindahkan."),
-    detach: (identityId: string) => perform(() => api.detachIdentity(memberId, identityId), "Identitas dilepas ke Registrasi Donatur."),
+    move: (identityId: string, destinationMemberId: string, reason: string) => perform(() => api.moveIdentity(memberId, identityId, destinationMemberId, reason), "Identitas dipindahkan."),
+    detach: (identityId: string, reason: string) => perform(() => api.detachIdentity(memberId, identityId, reason), "Identitas dilepas ke Registrasi Donatur."),
     updateIdentity: (identityId: string, input: { initialName?: string | null; remark?: string | null }) => perform(() => api.updateIdentity(memberId, identityId, input), "Metadata identitas diperbarui.") };
 }

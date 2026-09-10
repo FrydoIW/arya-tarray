@@ -60,7 +60,7 @@ export function ApprovalDetailView({ approvalId, onBack, onDecided }: ApprovalDe
 
 
       <StatementDetailCard detail={state.detail} />
-      <ApprovalDetailSummary summary={state.detail.summary} />
+      {!state.detail.correctionProposal ? <ApprovalDetailSummary summary={state.detail.summary} /> : null}
       {state.detail.correctionProposal ? <CorrectionProposalDiff proposal={state.detail.correctionProposal} /> : null}
       <TransactionPreview
         items={state.detail.transactionPreview}

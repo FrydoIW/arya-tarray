@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deriveAge, detachedIdentityData, mayAttachIdentity, mayDetachIdentity, mayMoveIdentity, verifiedIdentityData } from "../src/modules/member/data/member-data.domain.js";
-import { identityMetadataSchema, memberProfileSchema, memberDataWorkspaceQuerySchema } from "../src/modules/member/data/member-data.schema.js";
+import { identityMetadataSchema, memberDataWorkspaceQuerySchema, memberLifecycleSchema, memberProfileSchema } from "../src/modules/member/data/member-data.schema.js";
 
 test("member workspace defaults and pagination inputs remain server-side", () => {
-  assert.deepEqual(memberDataWorkspaceQuerySchema.parse({}), { search: "", status: "ACTIVE", city: "", registrationSource: "ALL", periodMode: "MONTH", page: 1, pageSize: 25 });
+  assert.deepEqual(memberDataWorkspaceQuerySchema.parse({}), { search: "", status: "ACTIVE", city: "", registrationSource: "ALL", page: 1, pageSize: 25 });
   assert.equal(memberDataWorkspaceQuerySchema.safeParse({ page: 0 }).success, false);
   assert.equal(memberDataWorkspaceQuerySchema.safeParse({ pageSize: 101 }).success, false);
 });
@@ -42,9 +42,9 @@ test("identity transition representation preserves raw evidence fields", () => {
   assert.equal(identityMetadataSchema.safeParse({ initialName: "Alias", normalizedName: "CHANGED" }).success, false);
 });
 
-test("member deactivation input cannot carry relation or immutable-field writes", () => {
-  const result = memberProfileSchema.parse({ activeFlag: false });
-  assert.deepEqual(result, { activeFlag: false });
-  assert.equal(memberProfileSchema.safeParse({ activeFlag: false, identities: [] }).success, false);
+test("member lifecycle is explicit and profile updates cannot carry lifecycle or immutable-field writes", () => {
+  assert.deepEqual(memberLifecycleSchema.parse({ activeFlag: false }), { activeFlag: false });
+  assert.equal(memberLifecycleSchema.safeParse({ activeFlag: false, identities: [] }).success, false);
+  assert.equal(memberProfileSchema.safeParse({ activeFlag: false }).success, false);
   assert.equal(memberProfileSchema.safeParse({ registrationSource: "MANUAL" }).success, false);
 });

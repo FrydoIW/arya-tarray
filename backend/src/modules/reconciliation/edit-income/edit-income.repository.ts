@@ -102,9 +102,15 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
       }
     }),
     prisma.eventCode.findMany({
-      where: { activeFlag: true },
+      where: {
+        OR: [
+          { activeFlag: true },
+          { transactions: { some: { statementUploadId: statementId } } },
+          { suggestedTransactions: { some: { statementUploadId: statementId } } }
+        ]
+      },
       select: eventCodeSelect,
-      orderBy: [{ code: "asc" }, { eventName: "asc" }]
+      orderBy: [{ activeFlag: "desc" }, { code: "asc" }, { eventName: "asc" }]
     })
   ]);
 
@@ -188,10 +194,13 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       throw new HttpError(400, "One or more correction transactions do not belong to this statement.");
     }
 
-    const targetEventCodeIds = [...new Set(input.corrections
-      .filter((change): change is Extract<EditIncomeCorrectionInput["corrections"][number], { action: "MODIFIED" | "ADDED" }> => change.action !== "EXCLUDED")
-      .map((change) => change.eventCodeId)
-      .filter(Boolean))] as string[];
+    const currentById = new Map(statement.transactions.map((transaction) => [transaction.id, transaction]));
+    const targetEventCodeIds = [...new Set(input.corrections.flatMap((change) => {
+      if (change.action === "ADDED") return change.eventCodeId ? [change.eventCodeId] : [];
+      if (change.action !== "MODIFIED" || !change.eventCodeId) return [];
+      const current = currentById.get(change.transactionId);
+      return current && current.eventCodeId !== change.eventCodeId ? [change.eventCodeId] : [];
+    }))];
     const activeEventCodes = targetEventCodeIds.length
       ? await tx.eventCode.findMany({
           where: { id: { in: targetEventCodeIds }, activeFlag: true },
@@ -200,10 +209,9 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       : [];
     const activeEventCodeIds = new Set(activeEventCodes.map((item) => item.id));
     if (activeEventCodeIds.size !== targetEventCodeIds.length) {
-      throw new HttpError(400, "One or more selected Final Events are inactive or no longer available.");
+      throw new HttpError(400, "One or more newly selected Final Events are inactive or no longer available.");
     }
 
-    const currentById = new Map(statement.transactions.map((transaction) => [transaction.id, transaction]));
     const proposalItems: Prisma.ReconciliationCorrectionItemCreateManyProposalInput[] = [];
     for (const requested of input.corrections) {
       if (requested.action === "ADDED") {

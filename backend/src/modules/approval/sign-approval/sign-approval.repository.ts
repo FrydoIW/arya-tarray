@@ -52,44 +52,88 @@ const queueItemInclude = {
       id: true,
       fullName: true
     }
+  },
+  approvers: {
+    select: { userId: true }
+  },
+  correctionProposals: {
+    select: {
+      id: true,
+      status: true,
+      approvers: { select: { userId: true } }
+    },
+    orderBy: [{ proposedAt: "desc" }, { createdAt: "desc" }],
+    take: 1
   }
-} as const;
+} satisfies Prisma.ReconciliationApprovalInclude;
+
+function effectiveQueueApprovers(item: {
+  approvers: Array<{ userId: string }>;
+  correctionProposals: Array<{ approvers: Array<{ userId: string }> }>;
+}) {
+  return item.correctionProposals[0]?.approvers ?? item.approvers;
+}
 
 export async function loadSignApprovalWorkspace(userId: string) {
   const { start: today, end: tomorrow } = businessDayUtcRange();
-  const approvalScope: Prisma.ReconciliationApprovalWhereInput = {
+
+  // A reconciliation approval row is reused for re-approval cycles. Use the OR
+  // only as a DB-side candidate reduction, then evaluate the latest correction
+  // snapshot in memory. This prevents an old snapshot from granting visibility
+  // to the current pending cycle without scanning the entire approval table.
+  const candidateScope: Prisma.ReconciliationApprovalWhereInput = {
     OR: [
       { approvers: { some: { userId } } },
       { correctionProposals: { some: { approvers: { some: { userId } } } } }
     ]
   };
 
-  const [approvals, pendingApproval, approvedToday, rejectedToday, totalDecided, legacyPendingApproval] = await Promise.all([
+  const [candidateApprovals, pendingSnapshotRows] = await Promise.all([
     prisma.reconciliationApproval.findMany({
-      where: approvalScope,
+      where: candidateScope,
       include: queueItemInclude,
       orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }]
     }),
-    prisma.reconciliationApproval.count({ where: { ...approvalScope, status: "PENDING" } }),
+    prisma.reconciliationApproval.findMany({
+      where: { status: "PENDING" },
+      select: {
+        approvers: { select: { userId: true } },
+        correctionProposals: {
+          select: { approvers: { select: { userId: true } } },
+          orderBy: [{ proposedAt: "desc" }, { createdAt: "desc" }],
+          take: 1
+        }
+      }
+    })
+  ]);
+
+  const approvals = candidateApprovals.filter((item) =>
+    effectiveQueueApprovers(item).some((assignment) => assignment.userId === userId)
+  );
+  const approvalIds = approvals.map((item) => item.id);
+  const pendingApproval = approvals.filter((item) => item.status === "PENDING").length;
+  const legacyPendingApproval = pendingSnapshotRows.filter((item) =>
+    effectiveQueueApprovers(item).length === 0
+  ).length;
+
+  const historyScope = approvalIds.length > 0 ? { approvalId: { in: approvalIds } } : { approvalId: { in: [] as string[] } };
+  const [approvedToday, rejectedToday, totalDecided] = await Promise.all([
     prisma.reconciliationApprovalHistory.count({
       where: {
+        ...historyScope,
         action: "APPROVED",
-        actionAt: { gte: today, lt: tomorrow },
-        approval: { is: approvalScope }
+        actionAt: { gte: today, lt: tomorrow }
       }
     }),
     prisma.reconciliationApprovalHistory.count({
       where: {
+        ...historyScope,
         action: "REJECTED",
-        actionAt: { gte: today, lt: tomorrow },
-        approval: { is: approvalScope }
+        actionAt: { gte: today, lt: tomorrow }
       }
     }),
     prisma.reconciliationApprovalHistory.count({
-      where: { action: { in: [...DECIDED_STATUSES] }, approval: { is: approvalScope } }
-    }),
-    prisma.reconciliationApproval.count({
-      where: { status: "PENDING", approvers: { none: {} } }
+      where: { ...historyScope, action: { in: [...DECIDED_STATUSES] } }
     })
   ]);
 
@@ -197,7 +241,8 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                   transactionDate: true,
                   referenceNo: true,
                   description: true,
-                  originalAmount: true
+                  originalAmount: true,
+                  sourceType: true
                 }
               },
               beforeEventCode: { select: { id: true, code: true, eventName: true } },
@@ -238,23 +283,23 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
         status: { not: "CHECK" }
       }
     }),
-    prisma.bankTransaction.aggregate({
+    prisma.bankTransaction.findMany({
       where: {
         statementUploadId: approval.statementUploadId,
         status: "FINALIZED",
         sourceType: "MANUAL",
         reconciliationExcludedAt: null
       },
-      _sum: { originalAmount: true }
+      select: { originalAmount: true }
     }),
-    prisma.bankTransaction.aggregate({
+    prisma.bankTransaction.findMany({
       where: {
         statementUploadId: approval.statementUploadId,
         status: "FINALIZED",
         sourceType: "BANK",
         reconciliationExcludedAt: { not: null }
       },
-      _sum: { originalAmount: true }
+      select: { originalAmount: true }
     })
   ]);
 
@@ -265,8 +310,8 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
     approvers: effectiveApprovers,
     checkedTransactions,
     needsReviewTransactions,
-    approvedManualAdjustmentAmount: approvedManualAdjustments._sum.originalAmount,
-    approvedExcludedBankAmount: approvedExcludedBankTransactions._sum.originalAmount
+    approvedManualAdjustments,
+    approvedExcludedBankTransactions
   };
 }
 

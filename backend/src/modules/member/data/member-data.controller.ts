@@ -4,6 +4,10 @@ import * as service from "./member-data.service.js";
 
 export async function workspace(req: Request, res: Response) { res.json(await service.getWorkspace(schema.memberDataWorkspaceQuerySchema.parse(req.query))); }
 export async function detail(req: Request, res: Response) { res.json(await service.getDetail(schema.memberDataParamsSchema.parse(req.params).memberId)); }
+export async function identityHistory(req: Request, res: Response) {
+  const { memberId } = schema.memberDataParamsSchema.parse(req.params);
+  res.json(await service.getIdentityHistory(memberId, schema.identityHistoryQuerySchema.parse(req.query)));
+}
 export async function options(req: Request, res: Response) { res.json(await service.getIdentityOptions(schema.identityOptionQuerySchema.parse(req.query).search)); }
 export async function memberOptions(req: Request, res: Response) {
   const query = schema.memberOptionQuerySchema.parse(req.query);
@@ -13,17 +17,22 @@ export async function update(req: Request, res: Response) {
   const { memberId } = schema.memberDataParamsSchema.parse(req.params);
   res.json(await service.updateProfile(memberId, schema.memberProfileSchema.parse(req.body), req.auth!.userId));
 }
+export async function lifecycle(req: Request, res: Response) {
+  const { memberId } = schema.memberDataParamsSchema.parse(req.params);
+  res.json(await service.updateLifecycle(memberId, schema.memberLifecycleSchema.parse(req.body).activeFlag, req.auth!.userId));
+}
 export async function attach(req: Request, res: Response) {
   const { memberId, identityId } = schema.identityParamsSchema.parse(req.params);
   res.json(await service.attach(memberId, identityId, req.auth!.userId));
 }
 export async function move(req: Request, res: Response) {
   const { memberId, identityId } = schema.identityParamsSchema.parse(req.params);
-  res.json(await service.move(memberId, identityId, schema.moveIdentitySchema.parse(req.body).destinationMemberId, req.auth!.userId));
+  const input = schema.moveIdentitySchema.parse(req.body);
+  res.json(await service.move(memberId, identityId, input.destinationMemberId, input.reason, req.auth!.userId));
 }
 export async function detach(req: Request, res: Response) {
   const { memberId, identityId } = schema.identityParamsSchema.parse(req.params);
-  res.json(await service.detach(memberId, identityId, req.auth!.userId));
+  res.json(await service.detach(memberId, identityId, schema.detachIdentitySchema.parse(req.body).reason, req.auth!.userId));
 }
 export async function identityMetadata(req: Request, res: Response) {
   const { memberId, identityId } = schema.identityParamsSchema.parse(req.params);

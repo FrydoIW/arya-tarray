@@ -110,6 +110,9 @@ function mapTransaction(item: Awaited<ReturnType<typeof loadTransactionInquiryWo
     status: item.status,
     displayStatus: statusLabel(item.status),
     remark: item.remark,
+    sourceType: item.sourceType,
+    correctionReason: item.correctionReason,
+    manualAddedAt: item.manualAddedAt,
     suggestedEvent: item.suggestedEventCode,
     finalEvent: item.eventCode,
     memberIdentity: item.memberIdentity ? {
@@ -155,7 +158,7 @@ export async function getTransactionInquiryWorkspace(input: TransactionInquiryWo
     eventOptions: records.eventOptions,
     transactions: records.transactions.map(mapTransaction),
     pagination: {
-      page: input.page,
+      page: records.page,
       pageSize: input.pageSize,
       total: records.total,
       totalPages: Math.max(1, Math.ceil(records.total / input.pageSize))
@@ -199,6 +202,13 @@ export async function getTransactionInquiryDetail(transactionId: string) {
       status: transaction.status,
       displayStatus: statusLabel(transaction.status),
       remark: transaction.remark,
+      sourceType: transaction.sourceType,
+      correctionReason: transaction.correctionReason,
+      manualAddedAt: transaction.manualAddedAt,
+      manualAddedBy: transaction.manualAddedBy,
+      reconciliationExcludedAt: transaction.reconciliationExcludedAt,
+      reconciliationExcludedBy: transaction.reconciliationExcludedBy,
+      reconciliationExclusionReason: transaction.reconciliationExclusionReason,
       suggestedEvent: transaction.suggestedEventCode,
       finalEvent: transaction.eventCode,
       memberIdentity: transaction.memberIdentity ? {
@@ -318,7 +328,7 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
       const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
       return {
         date: formatDate(transaction.transactionDate),
-        description: transaction.description ?? transaction.senderName ?? "-",
+        description: `${transaction.sourceType === "MANUAL" ? "[MANUAL] " : ""}${transaction.description ?? transaction.senderName ?? "-"}`,
         referenceNo: transaction.referenceNo ?? "-",
         type: decimalToCents(transaction.originalAmount) >= 0n ? "Incoming" : "Outgoing",
         amount: formatIdr(absDecimal(transaction.originalAmount)),

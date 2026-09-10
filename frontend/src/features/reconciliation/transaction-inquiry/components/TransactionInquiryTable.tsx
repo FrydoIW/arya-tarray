@@ -70,7 +70,7 @@ export function TransactionInquiryTable(props: Props) {
   const columns = useMemo<DataTableColumn<TransactionInquiryRow>[]>(() => [
     { key: "transactionDate", header: "Date", minWidth: "110px", sticky: "left", render: (row) => <span className={styles.primaryCell}>{formatDate(row.transactionDate)}</span> },
     { key: "bankAccount", header: "Bank Account", minWidth: "180px", render: (row) => <span className={styles.primaryCell}>{row.bankAccount.bankCode} - {row.bankAccount.accountNo}</span> },
-    { key: "description", header: "Description", minWidth: "245px", render: (row) => <div className={styles.descriptionCell}><strong>{row.description || row.senderName || "-"}</strong><small>{row.referenceNo || row.senderName || ""}</small></div> },
+    { key: "description", header: "Description", minWidth: "245px", render: (row) => <div className={styles.descriptionCell}><strong>{row.description || row.senderName || "-"}</strong><small>{[row.sourceType === "MANUAL" ? "MANUAL" : null, row.referenceNo || row.senderName || null].filter(Boolean).join(" · ")}</small></div> },
     { key: "member", header: "Member", minWidth: "175px", render: (row) => row.member ? (
       <div className={styles.memberCell}>
         {props.canViewMemberData ? <Link href={`/member/data/${row.member.memberId}`}>{row.member.memberCode}</Link> : <strong>{row.member.memberCode}</strong>}
@@ -108,7 +108,7 @@ export function TransactionInquiryTable(props: Props) {
           </Select>
           <Select className={styles.eventFilter} value={props.finalEventId} disabled={props.loading} onChange={(event) => props.onFinalEventChange(event.target.value)} aria-label="Final Event">
             <option value="ALL">All Events</option>
-            {props.eventOptions.map((event) => <option key={event.id} value={event.id}>{event.code} - {event.eventName}</option>)}
+            {props.eventOptions.map((event) => <option key={event.id} value={event.id}>{event.code} - {event.eventName}{event.activeFlag ? "" : " (Inactive)"}</option>)}
           </Select>
           <div className={styles.memberFilterGroup}>
             <SearchInput value={props.memberSearch} placeholder="Find Member" aria-label="Search Member options" aria-busy={props.memberOptionsLoading} onFocus={props.onMemberOptionsRequest} onChange={(event) => { props.onMemberOptionsRequest(); props.onMemberSearchChange(event.target.value); }} />

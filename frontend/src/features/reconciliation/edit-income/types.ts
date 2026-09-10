@@ -49,6 +49,7 @@ export type EditIncomeEventCode = {
   id: string;
   code: string;
   eventName: string;
+  activeFlag: boolean;
 };
 
 export type EditIncomeTransaction = {

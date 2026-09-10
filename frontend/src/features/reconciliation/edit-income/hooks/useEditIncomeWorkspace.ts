@@ -106,7 +106,8 @@ export function useEditIncomeWorkspace() {
     }
   }, []);
 
-  const loadDetail = useCallback(async (statementId: string) => {
+  const loadDetail = useCallback(async (statementId: string, options: { resetView?: boolean } = {}) => {
+    const resetView = options.resetView ?? true;
     detailRequestRef.current?.abort();
     const controller = new AbortController();
     detailRequestRef.current = controller;
@@ -117,12 +118,14 @@ export function useEditIncomeWorkspace() {
       if (controller.signal.aborted) return null;
       setDetail(next);
       setDraftTransactions(next.transactions.map((item) => ({ ...item })));
-      setTransactionSearch("");
-      setTransactionStatusFilter("ALL");
-      setTransactionEventCodeFilter("ALL");
-      setTransactionDirectionFilter("ALL");
-      setMode("INQUIRY");
-      setTransactionPage(1);
+      if (resetView) {
+        setTransactionSearch("");
+        setTransactionStatusFilter("ALL");
+        setTransactionEventCodeFilter("ALL");
+        setTransactionDirectionFilter("ALL");
+        setMode("INQUIRY");
+        setTransactionPage(1);
+      }
       return next;
     } catch (caught) {
       if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Edit Income detail.");
@@ -134,20 +137,6 @@ export function useEditIncomeWorkspace() {
       }
     }
   }, []);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      await loadWorkspace({ mode: periodMode, month, date }, true);
-      if (detail?.statement.id) await loadDetail(detail.statement.id);
-    } catch (caught) {
-      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to reload Edit Income workspace.");
-    } finally {
-      setLoading(false);
-    }
-  }, [date, detail?.statement.id, loadDetail, loadWorkspace, month, periodMode]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -205,6 +194,24 @@ export function useEditIncomeWorkspace() {
     () => correctionSummary.modifiedTransactions + correctionSummary.addedAdjustments + correctionSummary.excludedTransactions,
     [correctionSummary]
   );
+
+  const refresh = useCallback(async () => {
+    if (detail && modifiedTransactions > 0) {
+      setError("Unsaved corrections are still staged. Execute them or use Clear before Reload.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await loadWorkspace({ mode: periodMode, month, date }, true);
+      if (detail?.statement.id) await loadDetail(detail.statement.id, { resetView: false });
+    } catch (caught) {
+      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to reload Edit Income workspace.");
+    } finally {
+      setLoading(false);
+    }
+  }, [date, detail, loadDetail, loadWorkspace, modifiedTransactions, month, periodMode]);
 
   const filteredTransactions = useMemo(() => {
     const search = transactionSearch.trim().toLowerCase();
@@ -328,13 +335,21 @@ export function useEditIncomeWorkspace() {
   }
 
   async function selectStatement(statementId: string) {
-    if (busy) return;
+    if (busy || detail?.statement.id === statementId) return;
+    if (detail && modifiedTransactions > 0) {
+      setError("Unsaved corrections are still staged. Execute them or use Clear before opening another statement.");
+      return;
+    }
     setMessage("");
     await loadDetail(statementId);
   }
 
   function closeDetail() {
     if (busy) return;
+    if (modifiedTransactions > 0) {
+      setError("Unsaved corrections are still staged. Execute them or use Clear before leaving this statement.");
+      return;
+    }
     setDetail(null);
     setDraftTransactions([]);
     setTransactionSearch("");

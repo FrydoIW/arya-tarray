@@ -31,6 +31,15 @@ function centsToDecimal(value: bigint) {
   return `${negative ? "-" : ""}${whole.toString()}.${cents}`;
 }
 
+function absoluteCents(value: { toString(): string }) {
+  const cents = decimalToCents(value);
+  return cents < 0n ? -cents : cents;
+}
+
+function sumAbsoluteAmounts(rows: Array<{ originalAmount: { toString(): string } }>) {
+  return rows.reduce((total, row) => total + absoluteCents(row.originalAmount), 0n);
+}
+
 function totalAmount(totalCredit: { toString(): string }, totalDebit: { toString(): string }) {
   return centsToDecimal(decimalToCents(totalCredit) + decimalToCents(totalDebit));
 }
@@ -81,12 +90,14 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
   const statement = approval.statementUpload;
   const correctionProposal = records.correctionProposal;
   const correctionItems = correctionProposal?.items ?? [];
+  // Statement total is gross bank activity (credit + absolute debit). Manual
+  // and exclusion impact must therefore also use absolute movement amounts.
   const currentReconciledTotalCents = decimalToCents(statement.totalCredit) + decimalToCents(statement.totalDebit)
-    + decimalToCents(records.approvedManualAdjustmentAmount ?? { toString: () => "0" })
-    - decimalToCents(records.approvedExcludedBankAmount ?? { toString: () => "0" });
+    + sumAbsoluteAmounts(records.approvedManualAdjustments ?? [])
+    - sumAbsoluteAmounts(records.approvedExcludedBankTransactions ?? []);
   const proposedTotalCents = correctionItems.reduce((total, item) => {
-    if (item.action === "ADDED" && item.manualOriginalAmount) return total + decimalToCents(item.manualOriginalAmount);
-    if (item.action === "EXCLUDED" && item.bankTransaction) return total - decimalToCents(item.bankTransaction.originalAmount);
+    if (item.action === "ADDED" && item.manualOriginalAmount) return total + absoluteCents(item.manualOriginalAmount);
+    if (item.action === "EXCLUDED" && item.bankTransaction) return total - absoluteCents(item.bankTransaction.originalAmount);
     return total;
   }, currentReconciledTotalCents);
 
@@ -124,6 +135,7 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
       decidedAt: correctionProposal.decidedAt,
       decidedBy: correctionProposal.decidedBy,
       originalStatementAmount: totalAmount(statement.totalCredit, statement.totalDebit),
+      currentOfficialAmount: centsToDecimal(currentReconciledTotalCents),
       proposedCorrectedAmount: centsToDecimal(proposedTotalCents),
       summary: {
         modifiedTransactions: correctionItems.filter((item) => item.action === "MODIFIED").length,
@@ -139,7 +151,8 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
           transactionDate: item.bankTransaction.transactionDate,
           referenceNo: item.bankTransaction.referenceNo,
           description: item.bankTransaction.description,
-          originalAmount: decimalToString(item.bankTransaction.originalAmount)
+          originalAmount: decimalToString(item.bankTransaction.originalAmount),
+          sourceType: item.bankTransaction.sourceType
         } : null,
         beforeEvent: item.beforeEventCode,
         proposedEvent: item.proposedEventCode,

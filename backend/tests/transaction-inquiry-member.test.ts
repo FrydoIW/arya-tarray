@@ -36,6 +36,7 @@ test("Member filter composes server-side with period, status, bank, Final Event,
   }));
   assert.deepEqual(where, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
+    { reconciliationExcludedAt: null },
     { status: "FINALIZED" },
     { statementUpload: { is: { bankAccountId: "bank-a" } } },
     { eventCodeId: "event-a" },
@@ -57,10 +58,12 @@ test("Member filtering preserves both Month and Day server-side ranges", () => {
   const dayWhere = buildTransactionInquiryWhere(filter({ periodStart: dayStart, periodEnd: dayEnd, memberId: "member-a" }));
   assert.deepEqual(monthWhere, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
+    { reconciliationExcludedAt: null },
     { memberIdentity: { is: { memberId: "member-a" } } }
   ] });
   assert.deepEqual(dayWhere, { AND: [
     { transactionDate: { gte: dayStart, lt: dayEnd } },
+    { reconciliationExcludedAt: null },
     { memberIdentity: { is: { memberId: "member-a" } } }
   ] });
 });
@@ -70,10 +73,12 @@ test("LINKED and UNLINKED filters use canonical relations rather than sender-nam
   const unlinked = buildTransactionInquiryWhere(filter({ memberLinkStatus: "UNLINKED" }));
   assert.deepEqual(linked, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
+    { reconciliationExcludedAt: null },
     { memberIdentity: { is: { member: { isNot: null } } } }
   ] });
   assert.deepEqual(unlinked, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
+    { reconciliationExcludedAt: null },
     { OR: [{ memberIdentityId: null }, { memberIdentity: { is: { memberId: null } } }] }
   ] });
 });
@@ -106,4 +111,10 @@ test("PDF criteria and detail rows carry the selected Member filters and canonic
 test("Transaction Inquiry Member integration remains valid with zero rows", () => {
   assert.equal(transactionInquiryWorkspaceQuerySchema.parse({ periodMode: "MONTH", month: "2026-09" }).memberLinkStatus, "ALL");
   assert.deepEqual(resolveCanonicalTransactionMember(undefined), null);
+});
+
+
+test("Transaction Inquiry official view excludes approved reconciliation exclusions", () => {
+  const where = buildTransactionInquiryWhere(filter());
+  assert.deepEqual((where.AND as Array<Record<string, unknown>>)[1], { reconciliationExcludedAt: null });
 });

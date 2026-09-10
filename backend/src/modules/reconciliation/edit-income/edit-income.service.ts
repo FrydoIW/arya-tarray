@@ -107,7 +107,7 @@ export async function getEditIncomeDetail(statementId: string) {
       approvalStatus: statement.approval.status,
       editable: statement.status === "FINALIZED"
     },
-    eventCodes: records.eventCodes.map((item) => ({ id: item.id, code: item.code, eventName: item.eventName })),
+    eventCodes: records.eventCodes.map((item) => ({ id: item.id, code: item.code, eventName: item.eventName, activeFlag: item.activeFlag })),
     transactions: statement.transactions.map((transaction) => ({
       id: transaction.id,
       rowNo: transaction.rowNo ?? 0,
