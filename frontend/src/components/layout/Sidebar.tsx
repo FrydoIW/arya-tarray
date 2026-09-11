@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, ShieldCheck, X } from "lucide-react";
 import { navigation } from "@/config/navigation";
-import aryaLogo from "@/assets/brand/arya-logo.png";
+import aryaLogo from "@/assets/brand/arya-logo-sidebar.svg";
 
 interface SidebarProps {
   pathname: string;
@@ -16,20 +16,13 @@ interface SidebarProps {
 
 export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: SidebarProps) {
   const allowed = new Set(allowedMenuCodes);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ MONITORING: true });
 
   return (
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
       <div className="brand-row">
         <div className="brand-mark" aria-hidden="true">
-          <Image
-            src={aryaLogo}
-            alt=""
-            width={72}
-            height={48}
-            className="brand-mark-image"
-            priority
-          />
+          <Image src={aryaLogo} alt="" width={72} height={48} className="brand-mark-image" unoptimized priority />
         </div>
 
         <div className="brand-copy">
@@ -45,7 +38,7 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
       <div className="sidebar-rule" />
 
       <nav className="nav-list" aria-label="Primary navigation">
-        <span className="nav-section-label">Workspace</span>
+        <span className="nav-section-label">Your workspace</span>
 
         {navigation.map((group) => {
           const GroupIcon = group.icon;
@@ -83,6 +76,7 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
                       key={child.menuCode}
                       href={child.href ?? "#"}
                       aria-disabled={!child.enabled}
+                      aria-current={active ? "page" : undefined}
                       tabIndex={child.enabled ? 0 : -1}
                       onClick={(event) => {
                         if (!child.enabled) {

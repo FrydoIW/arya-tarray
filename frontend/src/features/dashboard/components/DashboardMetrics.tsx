@@ -8,6 +8,13 @@ export function DashboardMetrics({ data, loading, comparisonLabel }: { data: Das
   return (
     <section className="dashboard-metrics">
       <MetricCard
+        label="Total Incoming"
+        value={loading && !data ? "—" : formatMoney(data?.metrics.totalIncoming.value ?? 0)}
+        detail={changeDetail(data?.metrics.totalIncoming.changePercent, comparisonLabel)}
+        icon={<ArrowDownToLine size={20} />}
+        tone="blue"
+      />
+      <MetricCard
         label="Total Statements"
         value={loading && !data ? "—" : (data?.metrics.totalStatements.value ?? 0).toLocaleString("id-ID")}
         detail={changeDetail(data?.metrics.totalStatements.changePercent, comparisonLabel)}
@@ -20,13 +27,6 @@ export function DashboardMetrics({ data, loading, comparisonLabel }: { data: Das
         detail={changeDetail(data?.metrics.totalTransactions.changePercent, comparisonLabel)}
         icon={<ListChecks size={20} />}
         tone="green"
-      />
-      <MetricCard
-        label="Total Incoming"
-        value={loading && !data ? "—" : formatMoney(data?.metrics.totalIncoming.value ?? 0)}
-        detail={changeDetail(data?.metrics.totalIncoming.changePercent, comparisonLabel)}
-        icon={<ArrowDownToLine size={20} />}
-        tone="violet"
       />
       <MetricCard
         label="Total Outgoing"

@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Menu } from "lucide-react";
+import { ChevronRight, LayoutGrid, LogOut, Menu } from "lucide-react";
 import type { User } from "@/features/auth/types";
 import { getNavigationTitle } from "@/config/navigation";
 
@@ -36,10 +36,16 @@ export function Topbar({ pathname, user, menuOpen, onMenuOpen, onLogout }: Topba
           >
             <Menu size={19} aria-hidden="true" />
           </button>
-          <div className="topbar-page-title">{getNavigationTitle(pathname)}</div>
+          <div className="topbar-breadcrumb">
+            <LayoutGrid size={16} aria-hidden="true" />
+            <span>Workspace</span>
+            <ChevronRight size={13} aria-hidden="true" />
+            <div className="topbar-page-title">{getNavigationTitle(pathname)}</div>
+          </div>
         </div>
 
         <div className="topbar-actions">
+          <span className="topbar-workspace-label">Yayasan Arya Tarray Nusantara</span>
           <div className="user-chip">
             <div className="user-avatar" aria-hidden="true">{initials(user.fullName)}</div>
             <div className="user-copy">

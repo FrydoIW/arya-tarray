@@ -1,6 +1,8 @@
 "use client";
 
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
+import Link from "next/link";
+import { ArrowUpRight, ChartNoAxesCombined, FileUp } from "lucide-react";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
 import { formatDateTime } from "@/lib/format";
 import { DashboardMetrics } from "./DashboardMetrics";
@@ -23,19 +25,27 @@ export function DashboardScreen() {
   const canViewInquiry = user.menuCodes.includes("RECON_TRANSACTION_INQUIRY");
   const canViewMemberData = user.menuCodes.includes("MEMBER_DATA");
   const canViewMemberRegistration = user.menuCodes.includes("MEMBER_REGISTRATION");
+  const canUploadStatement = user.menuCodes.includes("RECON_STATEMENT_UPLOAD");
 
   return (
     <div className="page-stack dashboard-page" aria-busy={loading}>
       <section className="dashboard-welcome">
         <div>
-          <h1>Welcome back, {data?.viewer.fullName ?? user.fullName} <span aria-hidden="true">👋</span></h1>
-          <p>Here&apos;s what&apos;s happening with your reconciliation operations.</p>
+          <span className="dashboard-eyebrow"><span /> OPERATIONS OVERVIEW</span>
+          <h1>Every detail. <span>In view.</span></h1>
+          <p>Welcome back, {data?.viewer.fullName ?? user.fullName}. Here&apos;s your reconciliation overview.</p>
         </div>
-        <PeriodPicker value={period} maxMonth={currentMonthValue()} maxDate={currentDayValue()} onChange={changePeriod} disabled={loading} ariaLabel="Dashboard period" />
+        <div className="dashboard-welcome-actions">
+          {canUploadStatement ? <Link className="ui-button ui-button-primary ui-button-md" href="/reconciliation/statement-upload"><FileUp size={16} aria-hidden="true" /> Upload statement <ArrowUpRight size={15} aria-hidden="true" /></Link> : null}
+        </div>
       </section>
 
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
 
+      <div className="dashboard-section-heading">
+        <div><ChartNoAxesCombined size={18} aria-hidden="true" /><h2>At a glance</h2><span className="dashboard-section-caption">Your selected period</span></div>
+        <PeriodPicker value={period} maxMonth={currentMonthValue()} maxDate={currentDayValue()} onChange={changePeriod} disabled={loading} ariaLabel="Dashboard period" />
+      </div>
       <DashboardMetrics data={data} loading={loading} comparisonLabel={data?.filters.comparisonLabel ?? (period.mode === "DAY" ? "vs previous day" : "vs last month")} />
 
       <section className="dashboard-main-grid">
@@ -43,7 +53,7 @@ export function DashboardScreen() {
           <div className="dashboard-panel-header">
             <div>
               <h2>6-Month Transaction Trend</h2>
-              <p>{trendRange} · monthly cards above show only {monthLabel}</p>
+              <p>{trendRange} · monthly totals across six months</p>
             </div>
             <span>Historical</span>
           </div>
