@@ -36,34 +36,37 @@
 
 .brand {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .brandRow {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
 }
 
 .brandLogoWrap {
-  width: 116px;
-  height: 76px;
+  width: 76px;
+  height: 64px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  padding: 8px 10px;
-  border: 1px solid rgba(151, 183, 214, .26);
-  border-radius: 18px;
-  background: #ffffff;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .brandLogo {
-  width: 100%;
-  height: 100%;
+  display: block;
+  width: 76px;
+  height: 60.8px;
   object-fit: contain;
 }
 
 .brandTextGroup {
+  display: grid;
+  align-content: center;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -71,19 +74,21 @@
   margin: 0;
   color: #173b68;
   font-family: var(--font-display), Georgia, serif;
-  font-size: clamp(28px, 2.4vw, 36px);
-  line-height: 1.04;
+  font-size: clamp(28px, 2.4vw, 34px);
+  line-height: 1.15;
   font-weight: 760;
-  letter-spacing: -.03em;
+  letter-spacing: -.025em;
+  white-space: nowrap;
 }
 
 .brandSub {
-  display: inline-block;
-  margin-top: 8px;
+  display: block;
+  margin-top: 0;
   color: #6f8daf;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .30em;
+  font-size: 10px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: .32em;
 }
 
 .brandTagline {
@@ -91,7 +96,8 @@
   padding-top: 16px;
   border-top: 1px solid #dbe8f5;
   color: #7b93b0;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.6;
   font-weight: 560;
   letter-spacing: .02em;
 }
@@ -458,18 +464,31 @@
   }
 
   .brandRow {
-    align-items: flex-start;
+    align-items: center;
     gap: 14px;
   }
 
   .brandLogoWrap {
-    width: 96px;
-    height: 66px;
-    border-radius: 16px;
+    width: 60px;
+    height: 52px;
+  }
+
+  .brandLogo {
+    width: 60px;
+    height: 48px;
   }
 
   .brandName {
     font-size: 26px;
+  }
+
+  .brandTextGroup {
+    gap: 6px;
+  }
+
+  .brandSub {
+    font-size: 9px;
+    letter-spacing: .28em;
   }
 
   .brandTagline {

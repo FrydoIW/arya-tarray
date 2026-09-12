@@ -57,16 +57,18 @@
   box-shadow: none;
   color: #c0cde4;
 }
-.app-shell .brand-row { height: 98px; gap: 11px; padding: 0 9px; }
+.app-shell .brand-row { height: var(--shell-header-height); gap: 12px; padding: 0 9px; }
 .app-shell .brand-mark {
-  width: 60px;
+  width: 48px;
   height: 44px;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
-.app-shell .brand-copy strong { color: #fff; font-size: 18px; font-weight: 700; letter-spacing: -.7px; }
-.app-shell .brand-copy span { color: #8c9dbb; font-size: 9px; margin-top: 7px; letter-spacing: 2.8px; }
+.app-shell .brand-mark-image { display: block; width: 48px; height: 38.4px; }
+.app-shell .brand-copy { display: grid; align-content: center; gap: 6px; }
+.app-shell .brand-copy strong { color: #fff; font-size: 18px; font-weight: 700; line-height: 1.2; letter-spacing: -.4px; word-spacing: 1px; white-space: nowrap; }
+.app-shell .brand-copy span { color: #9bafcc; font-size: 8px; line-height: 1.25; margin-top: 0; letter-spacing: 2.5px; }
 .app-shell .sidebar-rule { height: 1px; background: #ffffff10; margin: 0 9px 20px; }
 .app-shell .nav-list { gap: 16px; padding-right: 2px; scrollbar-color: #31496e transparent; }
 .app-shell .nav-section-label { padding: 0 13px 3px; color: #8194b6; font-size: 9px; letter-spacing: 1.8px; }
@@ -282,9 +284,9 @@
 @media (max-width: 1199px) {
   .app-shell { display: block; --shell-content-inline: 24px; }
   .app-shell .sidebar { width: 272px; box-shadow: 20px 0 70px #09193640; }
-  .app-shell .brand-row { height: 88px; }
+  .app-shell .brand-row { height: var(--shell-header-height); }
   .app-shell .brand-copy strong { font-size: 16px; }
-  .app-shell .sidebar-close { width: 28px; height: 32px; }
+  .app-shell .sidebar-close { width: 28px; height: 32px; flex-shrink: 0; }
   .app-shell .topbar-workspace-label { display: none; }
   .app-shell .dashboard-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .app-shell .dashboard-metrics .ui-metric-card:first-child { grid-column: 1 / -1; min-height: 130px; flex-direction: row; align-items: center; gap: 22px; }

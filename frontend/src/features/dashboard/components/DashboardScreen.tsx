@@ -1,8 +1,7 @@
 "use client";
 
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
-import Link from "next/link";
-import { ArrowUpRight, ChartNoAxesCombined, FileUp } from "lucide-react";
+import { ChartNoAxesCombined } from "lucide-react";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
 import { formatDateTime } from "@/lib/format";
 import { DashboardMetrics } from "./DashboardMetrics";
@@ -25,21 +24,9 @@ export function DashboardScreen() {
   const canViewInquiry = user.menuCodes.includes("RECON_TRANSACTION_INQUIRY");
   const canViewMemberData = user.menuCodes.includes("MEMBER_DATA");
   const canViewMemberRegistration = user.menuCodes.includes("MEMBER_REGISTRATION");
-  const canUploadStatement = user.menuCodes.includes("RECON_STATEMENT_UPLOAD");
 
   return (
     <div className="page-stack dashboard-page" aria-busy={loading}>
-      <section className="dashboard-welcome">
-        <div>
-          <span className="dashboard-eyebrow"><span /> OPERATIONS OVERVIEW</span>
-          <h1>Every detail. <span>In view.</span></h1>
-          <p>Welcome back, {data?.viewer.fullName ?? user.fullName}. Here&apos;s your reconciliation overview.</p>
-        </div>
-        <div className="dashboard-welcome-actions">
-          {canUploadStatement ? <Link className="ui-button ui-button-primary ui-button-md" href="/reconciliation/statement-upload"><FileUp size={16} aria-hidden="true" /> Upload statement <ArrowUpRight size={15} aria-hidden="true" /></Link> : null}
-        </div>
-      </section>
-
       {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
 
       <div className="dashboard-section-heading">

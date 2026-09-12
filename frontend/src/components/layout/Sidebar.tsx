@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, ShieldCheck, X } from "lucide-react";
 import { navigation } from "@/config/navigation";
-import aryaLogo from "@/assets/brand/arya-logo-sidebar.svg";
+import aryaLogo from "@/assets/brand/arya-lotus-sidebar.svg";
 
 interface SidebarProps {
   pathname: string;
@@ -22,7 +22,7 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
       <div className="brand-row">
         <div className="brand-mark" aria-hidden="true">
-          <Image src={aryaLogo} alt="" width={72} height={48} className="brand-mark-image" unoptimized priority />
+          <Image src={aryaLogo} alt="" width={60} height={48} className="brand-mark-image" unoptimized priority />
         </div>
 
         <div className="brand-copy">
