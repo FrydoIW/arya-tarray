@@ -672,3 +672,13 @@
 @media (max-width: 760px) {
   .dashboard-metrics { gap: 9px; }
 }
+.dashboard-campaigns { padding: 22px; }
+.dashboard-campaign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.dashboard-campaign-item { display: grid; gap: 9px; border: 1px solid #e4e9f1; border-radius: 12px; padding: 16px; background: #fff; }
+.dashboard-campaign-item > div:first-child { display: grid; gap: 3px; }
+.dashboard-campaign-item strong { color: #273650; }
+.dashboard-campaign-item span, .dashboard-campaign-item small { color: #718096; }
+.dashboard-campaign-amount { font-weight: 700; color: #273650; }
+.dashboard-campaign-track { height: 7px; border-radius: 999px; background: #edf0f5; overflow: hidden; }
+.dashboard-campaign-track span { display: block; height: 100%; border-radius: inherit; background: #ad853d; }
+.dashboard-campaign-empty { padding: 10px 0 4px; color: #718096; }

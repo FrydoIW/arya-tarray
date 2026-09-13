@@ -7,6 +7,8 @@ import { discoverMemberIdentities } from "../../member/member-identity/member-id
 import { memberTransaction } from "../../member/member-identity/member-transaction.js";
 import { buildApprovalApproverSnapshot, LEGACY_APPROVAL_SNAPSHOT_MESSAGE } from "../../approval/sign-approval/approval-snapshot.domain.js";
 import { statementsHaveIdenticalContent } from "./statement-upload.duplicate.js";
+import { assertCampaignClassification } from "../campaign-classification.js";
+import { resolveTimeBasedUnits } from "../time-based-classification.js";
 
 const bankAccountSelect = {
   id: true,
@@ -22,7 +24,9 @@ const eventCodeSelect = {
   id: true,
   code: true,
   eventName: true,
-  activeFlag: true
+  eventType: true,
+  activeFlag: true,
+  timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } }
 } as const;
 
 const statementInclude = {
@@ -40,7 +44,8 @@ const statementInclude = {
   transactions: {
     include: {
       suggestedEventCode: { select: eventCodeSelect },
-      eventCode: { select: eventCodeSelect }
+      eventCode: { select: eventCodeSelect },
+      eventCampaign: { select: { id: true, campaignName: true } }
     },
     orderBy: [{ rowNo: "asc" as const }, { createdAt: "asc" as const }]
   }
@@ -64,7 +69,9 @@ export function loadRawStatementsForSummary() {
         select: {
           transactionType: true,
           originalAmount: true,
-          eventCodeId: true
+          eventCodeId: true,
+          eventCampaignId: true,
+          eventCode: { select: { eventType: true } }
         }
       }
     },
@@ -73,7 +80,7 @@ export function loadRawStatementsForSummary() {
 }
 
 export async function loadStatementUploadWorkspaceRecords(statementId?: string) {
-  const [bankAccounts, activeEventCodes, rawStatements, currentStatement] = await Promise.all([
+  const [bankAccounts, activeEventCodes, campaigns, rawStatements, currentStatement] = await Promise.all([
     prisma.bankAccount.findMany({
       where: { activeFlag: true },
       select: bankAccountSelect,
@@ -83,6 +90,14 @@ export async function loadStatementUploadWorkspaceRecords(statementId?: string) 
       where: { activeFlag: true },
       select: eventCodeSelect,
       orderBy: [{ code: "asc" }, { eventName: "asc" }]
+    }),
+    prisma.eventCampaign.findMany({
+      where: { OR: [
+        { activeFlag: true, eventCode: { activeFlag: true } },
+        ...(statementId ? [{ transactions: { some: { statementUploadId: statementId } } }] : [])
+      ] },
+      select: { id: true, eventCodeId: true, campaignName: true, startDate: true, endDate: true, activeFlag: true },
+      orderBy: [{ startDate: "desc" }, { campaignName: "asc" }]
     }),
     loadRawStatementsForSummary(),
     statementId
@@ -103,7 +118,7 @@ export async function loadStatementUploadWorkspaceRecords(statementId?: string) 
       })
     : [];
 
-  return { bankAccounts, activeEventCodes, rawStatements, currentStatement, overlappingStatements };
+  return { bankAccounts, activeEventCodes, campaigns, rawStatements, currentStatement, overlappingStatements };
 }
 
 export function findActiveBankAccount(bankAccountId: string) {
@@ -240,6 +255,7 @@ export async function updateTransactionFinalEventAtomic(input: {
   statementId: string;
   transactionId: string;
   eventCodeId: string | null;
+  eventCampaignId?: string | null;
   remark?: string;
   userId: string;
 }) {
@@ -249,7 +265,8 @@ export async function updateTransactionFinalEventAtomic(input: {
       include: {
         statementUpload: { select: { id: true, status: true } },
         suggestedEventCode: { select: eventCodeSelect },
-        eventCode: { select: eventCodeSelect }
+        eventCode: { select: eventCodeSelect },
+        eventCampaign: { select: { id: true, campaignName: true } }
       }
     });
 
@@ -264,32 +281,60 @@ export async function updateTransactionFinalEventAtomic(input: {
     if (input.eventCodeId) {
       const eventCode = await tx.eventCode.findFirst({
         where: { id: input.eventCodeId, activeFlag: true },
-        select: { id: true }
+        select: { id: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } }
       });
       if (!eventCode) throw new HttpError(400, "The selected Final Event is inactive or no longer available.");
+      const campaign = input.eventCampaignId ? await tx.eventCampaign.findUnique({
+        where: { id: input.eventCampaignId },
+        select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true }
+      }) : null;
+      assertCampaignClassification({
+        eventCode,
+        campaignId: input.eventCampaignId ?? null,
+        campaign,
+        transactionDate: current.transactionDate,
+        requiresClassification: storedTransactionRequiresClassification(current),
+        requireComplete: false,
+        historicalCampaignId: current.eventCodeId === input.eventCodeId ? current.eventCampaignId : null
+      });
+      resolveTimeBasedUnits({ eventCode, rule: eventCode.timeRule, transaction: current, requiresClassification: storedTransactionRequiresClassification(current) });
+    } else if (input.eventCampaignId) {
+      throw new HttpError(400, "Campaign requires a Final Event");
     }
 
-    if (current.eventCodeId === input.eventCodeId) return current;
+    if (current.eventCodeId === input.eventCodeId && current.eventCampaignId === (input.eventCampaignId ?? null)) return current;
 
     const updated = await tx.bankTransaction.update({
       where: { id: current.id },
       data: {
         eventCodeId: input.eventCodeId,
+        eventCampaignId: input.eventCampaignId ?? null,
         remark: input.remark ?? current.remark
       },
       include: {
         statementUpload: { select: { id: true, status: true } },
         suggestedEventCode: { select: eventCodeSelect },
-        eventCode: { select: eventCodeSelect }
+        eventCode: { select: eventCodeSelect },
+        eventCampaign: { select: { id: true, campaignName: true } }
       }
     });
 
-    await tx.bankTransactionHistory.create({
+    if (current.eventCodeId !== input.eventCodeId) await tx.bankTransactionHistory.create({
       data: {
         bankTransactionId: current.id,
         fieldName: "event_code_id",
         oldValue: current.eventCodeId,
         newValue: input.eventCodeId,
+        remark: input.remark ?? null,
+        changedById: input.userId
+      }
+    });
+    if (current.eventCampaignId !== (input.eventCampaignId ?? null)) await tx.bankTransactionHistory.create({
+      data: {
+        bankTransactionId: current.id,
+        fieldName: "event_campaign_id",
+        oldValue: current.eventCampaignId,
+        newValue: input.eventCampaignId ?? null,
         remark: input.remark ?? null,
         changedById: input.userId
       }
@@ -315,7 +360,12 @@ export async function executeStatementAtomic(input: { statementId: string; userI
             memberIdentityId: true,
             transactionType: true,
             originalAmount: true,
-            eventCodeId: true
+            baseAmount: true,
+            eventCodeId: true,
+            eventCampaignId: true,
+            eventCode: { select: { id: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
+            eventCampaign: { select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } },
+            transactionDate: true
           }
         },
         approval: {
@@ -334,7 +384,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
     }
 
     const unresolvedCount = statement.transactions.filter((transaction) =>
-      storedTransactionRequiresClassification(transaction) && !transaction.eventCodeId
+      storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))
     ).length;
 
     if (unresolvedCount > 0) {
@@ -342,6 +392,20 @@ export async function executeStatementAtomic(input: { statementId: string; userI
         400,
         `${unresolvedCount} transaction${unresolvedCount === 1 ? "" : "s"} still require Final Event classification.`
       );
+    }
+
+    for (const transaction of statement.transactions) {
+      if (!storedTransactionRequiresClassification(transaction) || !transaction.eventCodeId) continue;
+      assertCampaignClassification({
+        eventCode: transaction.eventCode,
+        campaignId: transaction.eventCampaignId,
+        campaign: transaction.eventCampaign,
+        transactionDate: transaction.transactionDate,
+        requiresClassification: true,
+        requireComplete: true,
+        historicalCampaignId: transaction.eventCampaignId
+      });
+      resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
     }
 
     const approvalConfig = await loadActiveStatementApprovalConfigWithEligibleApprovers(tx);

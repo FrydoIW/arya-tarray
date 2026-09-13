@@ -66,3 +66,11 @@ export type IdentityHistoryWorkspace = {
   rows: IdentityHistoryRow[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
 };
+
+export type SponsorshipWorkspace = {
+  eventOptions: Array<{ eventCodeId: string; code: string; eventName: string }>;
+  subscriptions: Array<{ subscriptionId: string; event: { eventCodeId: string; code: string; eventName: string }; referenceNo: string | null; displayName: string | null; startDate: string | null; validUntil: string | null; activeFlag: boolean; remark: string | null; status: "ACTIVE" | "INACTIVE" | "SCHEDULED" | "EXPIRED"; coverage: Array<{ coverageId: string; source: string; status: string; transactionId: string | null; transactionDate: string | null; referenceNo: string | null; amountApplied: string | null; unitAmount: string | null; durationMonths: number | null; grantedUnits: number | null; coverageFrom: string; coverageTo: string; remark: string | null; voidReason: string | null }> }>;
+  pendingPayments: Array<{ transactionId: string; transactionDate: string | null; referenceNo: string | null; amount: string; principalAmount: string; event: { eventCodeId: string; code: string; eventName: string } | null; grantedUnits: number | null; durationMonths: number | null; reason: string }>;
+};
+export type SubscriptionInput = { eventCodeId: string; referenceNo: string | null; displayName: string | null; startDate: string | null; activeFlag: boolean; remark: string | null };
+export type OpeningCoverageInput = { coverageFrom: string; coverageTo: string; remark: string };

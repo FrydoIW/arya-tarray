@@ -499,3 +499,14 @@
 .tableHeader { min-height: 66px; padding: 12px 14px; border-bottom: 1px solid #eef1f5; background: #fff; }
 .tableHeader h2 { color: #1d2939; font-size: var(--font-size-section); font-weight: var(--font-weight-bold); }
 .tableHeader p { color: #667085; font-size: var(--font-size-helper); line-height: var(--line-height-body); }
+.campaignActions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.campaignList { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 14px; }
+.campaignCard { border: 1px solid var(--border-color, #d9e0eb); border-radius: 12px; padding: 16px; background: #fff; }
+.campaignCardHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.campaignCardHead span { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: #7a5e28; }
+.campaignFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.campaignFields label { display: grid; gap: 5px; min-width: 0; font-size: 12px; font-weight: 650; color: #64748b; }
+.campaignFields input, .campaignFields select { width: 100%; min-width: 0; min-height: 36px; border: 1px solid #d9e0eb; border-radius: 8px; padding: 7px 9px; color: #20314d; background: #fff; font: inherit; }
+.campaignFields input:disabled, .campaignFields select:disabled { background: #f7f9fc; color: #475569; }
+.campaignRemark { grid-column: 1 / -1; }
+.campaignProgress { margin-top: 14px; padding-top: 11px; border-top: 1px solid #e5eaf2; font-size: 13px; font-weight: 650; color: #263b62; }

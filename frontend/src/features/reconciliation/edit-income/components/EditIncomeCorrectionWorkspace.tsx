@@ -39,7 +39,7 @@ type Props = {
   onBack: () => void;
   onEditMode: () => void;
   onInquiryMode: () => void;
-  onTransactionChange: (transactionId: string, field: "eventCodeId" | "remark", value: string | null) => void;
+  onTransactionChange: (transactionId: string, field: "eventCodeId" | "eventCampaignId" | "remark", value: string | null) => void;
   onAddAdjustment: (input: ManualAdjustmentInput) => void;
   onExclude: (transactionId: string, reason: string) => void;
   onRestore: (transactionId: string) => void;
@@ -121,6 +121,17 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       }
     },
     {
+      key: "eventCampaignId", header: "Campaign", minWidth: "190px",
+      render: (row) => {
+        if (getEventCode(detail.eventCodes, row.eventCodeId)?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>Not required</span>;
+        const current = detail.campaigns.find((item) => item.id === row.eventCampaignId);
+        if (!props.canEdit || row.correctionAction === "EXCLUDED" || row.reconciliationExcludedAt) return <span>{current?.campaignName ?? "Select Campaign..."}</span>;
+        const eligible = detail.campaigns.filter((item) => item.eventCodeId === row.eventCodeId && ((item.activeFlag && (!item.startDate || (row.transactionDate ?? "").slice(0, 10) >= item.startDate) && (!item.endDate || (row.transactionDate ?? "").slice(0, 10) <= item.endDate)) || item.id === row.eventCampaignId));
+        return <Select className={styles.eventSelect} value={row.eventCampaignId ?? ""} disabled={props.busy} onChange={(event) => props.onTransactionChange(row.id, "eventCampaignId", event.target.value || null)} aria-label={`Campaign row ${row.rowNo || "manual"}`}><option value="">Select Campaign...</option>{eligible.map((item) => <option key={item.id} value={item.id}>{item.campaignName}{!item.activeFlag ? " (historical)" : ""}</option>)}</Select>;
+      }
+    },
+    { key: "sponsorshipPreview", header: "Rupang", minWidth: "145px", render: (row) => { const event = getEventCode(detail.eventCodes, row.eventCodeId); const rule = event?.eventType === "TIME_BASED" ? event.timeRule : null; if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>{event?.eventType === "TIME_BASED" ? "Rule needed" : "—"}</span>; const units = Number(row.baseAmount) / Number(rule.unitAmount); return Number.isInteger(units) && units >= 1 ? <span className={styles.finalEvent}>+{units * rule.durationMonths} months</span> : <span className={styles.noMatch}>Exact unit required</span>; } },
+    {
       key: "remark", header: "Remark", minWidth: "190px", editable: (row) => props.canEdit && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
       getValue: (row) => row.remark ?? "",
       renderEditor: ({ row, value, onChange }) => <input className={`${styles.remarkInput} ui-table-input`} value={String(value ?? "")} maxLength={1000} disabled={!props.canEdit || props.busy} placeholder="Correction remark..." onChange={(event) => onChange(event.target.value)} aria-label={`Remark row ${row.rowNo || "manual"}`} />,
@@ -132,7 +143,7 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       if (row.correctionAction || row.reconciliationExcludedAt) return <IconButton label={row.correctionAction === "ADDED" ? "Remove staged adjustment" : "Undo staged exclusion"} icon={<Undo2 size={14} />} disabled={props.busy || Boolean(row.reconciliationExcludedAt)} onClick={() => props.onRestore(row.id)} />;
       return <IconButton label="Exclude from reconciliation" icon={<ShieldMinus size={14} />} variant="danger" disabled={props.busy} onClick={() => setExcludeTarget(row)} />;
     } }
-  ], [detail.eventCodes, props.busy, props.canEdit, props.onRestore, props.originalById]);
+  ], [detail.eventCodes, detail.campaigns, props.busy, props.canEdit, props.onRestore, props.originalById, props.onTransactionChange]);
 
   return (
     <section className={styles.correctionPanel}>
@@ -149,7 +160,7 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
 
       <DataTable rows={props.rows} columns={columns} rowKey={(row) => row.id} loading={props.loading} disabled={!props.canEdit || props.busy} minWidth="1520px" onCellChange={(row, columnKey, value) => { if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null); if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? "")); }} emptyState={{ title: "No transactions", description: "Try another transaction search or filter." }} pagination={{ page: props.page, pageSize: props.pageSize, total: props.rows.length, pageSizeOptions: [10, 25, 50], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }} />
 
-      <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes.filter((eventCode) => eventCode.activeFlag)} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
+      <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes.filter((eventCode) => eventCode.activeFlag)} campaigns={detail.campaigns} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
       <ExcludeTransactionModal transaction={excludeTarget} disabled={props.busy} onClose={() => setExcludeTarget(null)} onSubmit={props.onExclude} />
     </section>
   );

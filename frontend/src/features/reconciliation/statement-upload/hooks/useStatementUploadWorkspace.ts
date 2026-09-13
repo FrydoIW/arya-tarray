@@ -18,6 +18,7 @@ const EMPTY_WORKSPACE: StatementUploadWorkspace = {
   statement: null,
   transactions: [],
   eventCodes: [],
+  campaigns: [],
   bankAccounts: []
 };
 const STATEMENT_WORKSPACE_PREFIX = "reconciliation/statement-upload/workspace";
@@ -111,17 +112,17 @@ export function useStatementUploadWorkspace() {
   }, [searchInput]);
 
   const transactionCounts = useMemo(() => workspace.transactions.reduce((counts, transaction) => {
-    if (getDraftRowStatus(transaction) === "NEEDS_REVIEW") counts.needsReview += 1;
+    if (getDraftRowStatus(transaction, workspace.eventCodes) === "NEEDS_REVIEW") counts.needsReview += 1;
     else counts.resolvedTransactions += 1;
     if (requiresEventClassification(transaction)) counts.relevantIncoming += 1;
     return counts;
-  }, { needsReview: 0, resolvedTransactions: 0, relevantIncoming: 0 }), [workspace.transactions]);
+  }, { needsReview: 0, resolvedTransactions: 0, relevantIncoming: 0 }), [workspace.transactions, workspace.eventCodes]);
   const { needsReview, resolvedTransactions, relevantIncoming } = transactionCounts;
 
   const filteredTransactions = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return workspace.transactions.filter((transaction) => {
-      const rowStatus = getDraftRowStatus(transaction);
+      const rowStatus = getDraftRowStatus(transaction, workspace.eventCodes);
       const matchesStatus = statusFilter === "ALL" || rowStatus === statusFilter;
       const matchesEventCode = eventCodeFilter === "ALL" || transaction.eventCodeId === eventCodeFilter;
       const matchesSearch = !normalizedSearch || [
@@ -132,7 +133,7 @@ export function useStatementUploadWorkspace() {
       ].some((value) => value.toLowerCase().includes(normalizedSearch));
       return matchesStatus && matchesEventCode && matchesSearch;
     });
-  }, [eventCodeFilter, search, statusFilter, workspace.transactions]);
+  }, [eventCodeFilter, search, statusFilter, workspace.transactions, workspace.eventCodes]);
 
   useEffect(() => {
     setPage(1);
@@ -149,7 +150,7 @@ export function useStatementUploadWorkspace() {
     canEditDraft && workspace.statement?.id && workspace.transactions.length > 0 && needsReview === 0
   );
 
-  async function updateFinalEvent(transactionId: string, eventCodeId: string | null) {
+  async function updateFinalEvent(transactionId: string, eventCodeId: string | null, eventCampaignId: string | null = null) {
     if (!canEditDraft || savingTransactionId) return;
     setSavingTransactionId(transactionId);
     setError("");
@@ -157,7 +158,7 @@ export function useStatementUploadWorkspace() {
     try {
       const statementId = workspace.statement?.id;
       if (!statementId) return;
-      const result = await updateDraftTransactionFinalEvent({ statementId, transactionId, eventCodeId });
+      const result = await updateDraftTransactionFinalEvent({ statementId, transactionId, eventCodeId, eventCampaignId });
       const transactions = workspace.transactions.map((transaction) =>
         transaction.id === result.transaction.id ? result.transaction : transaction
       );
@@ -165,7 +166,7 @@ export function useStatementUploadWorkspace() {
         ...workspace,
         summary: result.summary,
         drafts: workspace.drafts.map((draft) => draft.id === statementId
-          ? { ...draft, needsReview: transactions.filter((transaction) => getDraftRowStatus(transaction) === "NEEDS_REVIEW").length }
+          ? { ...draft, needsReview: transactions.filter((transaction) => getDraftRowStatus(transaction, workspace.eventCodes) === "NEEDS_REVIEW").length }
           : draft),
         transactions
       };

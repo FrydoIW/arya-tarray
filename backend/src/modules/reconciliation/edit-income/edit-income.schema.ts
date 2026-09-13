@@ -28,6 +28,7 @@ const modifiedCorrectionSchema = z.object({
   action: z.literal("MODIFIED"),
   transactionId: z.string().uuid(),
   eventCodeId: z.string().uuid().nullable(),
+  eventCampaignId: z.string().uuid().nullable().optional().default(null),
   remark: z.string().trim().max(1000).nullable()
 });
 
@@ -46,6 +47,7 @@ const addedCorrectionSchema = z.object({
   amount: z.string().regex(/^\d{1,18}(?:\.\d{1,2})?$/, "Amount must be a positive value with at most 2 decimals")
     .refine((value) => Number(value) > 0, "Amount must be greater than zero"),
   eventCodeId: z.string().uuid().nullable(),
+  eventCampaignId: z.string().uuid().nullable().optional().default(null),
   remark: z.string().trim().max(1000).nullable(),
   reason: z.string().trim().min(1, "Correction Reason is required").max(1000)
 });
@@ -64,7 +66,7 @@ export const executeEditIncomeSchema = z.object({
     if (change.action === "ADDED" && change.direction === "INCOMING" && !change.eventCodeId) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["corrections", index, "eventCodeId"], message: "Final Event is required for an incoming adjustment" });
     }
-    if (change.action === "ADDED" && change.direction === "OUTGOING" && change.eventCodeId) {
+    if (change.action === "ADDED" && change.direction === "OUTGOING" && (change.eventCodeId || change.eventCampaignId)) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["corrections", index, "eventCodeId"], message: "Final Event is not applicable to an outgoing adjustment" });
     }
     const identity = change.action === "ADDED" ? `ADDED:${change.clientId}` : `EXISTING:${change.transactionId}`;

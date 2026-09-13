@@ -1,3 +1,5 @@
+import type { EventType } from "@/lib/event-type";
+
 export type EditIncomeDisplayStatus = "COMPLETE" | "PENDING_REAPPROVAL";
 export type EditIncomePeriodMode = "MONTH" | "DAY";
 export type EditIncomeStatusFilter = "ALL" | EditIncomeDisplayStatus;
@@ -49,8 +51,12 @@ export type EditIncomeEventCode = {
   id: string;
   code: string;
   eventName: string;
+  eventType: EventType;
   activeFlag: boolean;
+  timeRule?: { unitAmount: string; durationMonths: number; activeFlag: boolean } | null;
 };
+
+export type EditIncomeCampaign = { id: string; eventCodeId: string; campaignName: string; startDate: string | null; endDate: string | null; activeFlag: boolean };
 
 export type EditIncomeTransaction = {
   id: string;
@@ -64,6 +70,7 @@ export type EditIncomeTransaction = {
   suffixCode: string | null;
   suggestedEventCodeId: string | null;
   eventCodeId: string | null;
+  eventCampaignId: string | null;
   baseAmount: string | null;
   remark: string | null;
   requiresClassification: boolean;
@@ -79,6 +86,7 @@ export type EditIncomeDetail = {
     finalizedBy: { id: string; fullName: string } | null;
   };
   eventCodes: EditIncomeEventCode[];
+  campaigns: EditIncomeCampaign[];
   transactions: EditIncomeTransaction[];
   approvalHistory: Array<{
     id: string;
@@ -90,7 +98,7 @@ export type EditIncomeDetail = {
 };
 
 export type EditIncomeCorrectionRequest =
-  | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; remark: string | null }
+  | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCampaignId: string | null; remark: string | null }
   | { action: "EXCLUDED"; transactionId: string; reason: string }
   | {
       action: "ADDED";
@@ -100,6 +108,7 @@ export type EditIncomeCorrectionRequest =
       description: string;
       amount: string;
       eventCodeId: string | null;
+      eventCampaignId: string | null;
       remark: string | null;
       reason: string;
     };
@@ -110,6 +119,7 @@ export type ManualAdjustmentInput = {
   description: string;
   amount: string;
   eventCodeId: string | null;
+  eventCampaignId: string | null;
   remark: string | null;
   reason: string;
 };

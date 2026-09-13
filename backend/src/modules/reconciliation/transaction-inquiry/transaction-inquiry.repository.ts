@@ -5,7 +5,9 @@ const eventCodeSelect = {
   id: true,
   code: true,
   eventName: true,
-  activeFlag: true
+  activeFlag: true,
+  eventType: true,
+  timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } }
 } as const;
 
 const bankAccountSelect = {
@@ -37,6 +39,7 @@ const transactionListSelect = {
   reconciliationExclusionReason: true,
   suggestedEventCode: { select: eventCodeSelect },
   eventCode: { select: eventCodeSelect },
+  eventCampaign: { select: { id: true, campaignName: true, activeFlag: true, eventCodeId: true } },
   memberIdentity: {
     select: {
       id: true,
@@ -65,6 +68,7 @@ export type TransactionInquiryFilter = {
   status: "ALL" | "RAW" | "CHECK" | "FINALIZED";
   bankAccountId?: string;
   finalEventId?: string;
+  eventCampaignId?: string;
   memberId?: string;
   memberLinkStatus: "ALL" | "LINKED" | "UNLINKED";
 };
@@ -81,6 +85,7 @@ export function buildTransactionInquiryWhere(filter: TransactionInquiryFilter): 
   if (filter.status !== "ALL") conditions.push({ status: filter.status });
   if (filter.bankAccountId) conditions.push({ statementUpload: { is: { bankAccountId: filter.bankAccountId } } });
   if (filter.finalEventId) conditions.push({ eventCodeId: filter.finalEventId });
+  if (filter.eventCampaignId) conditions.push({ eventCampaignId: filter.eventCampaignId });
   if (filter.memberId) conditions.push({ memberIdentity: { is: { memberId: filter.memberId } } });
   if (filter.memberLinkStatus === "LINKED") {
     conditions.push({ memberIdentity: { is: { member: { isNot: null } } } });
@@ -129,7 +134,7 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
     ]
   };
 
-  const [transactions, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions] = await Promise.all([
+  const [transactions, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions, campaignOptions] = await Promise.all([
     prisma.bankTransaction.findMany({
       where,
       select: transactionListSelect,
@@ -156,6 +161,15 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
       where: historicalEventWhere,
       select: eventCodeSelect,
       orderBy: [{ activeFlag: "desc" }, { code: "asc" }, { eventName: "asc" }]
+    }),
+    prisma.eventCampaign.findMany({
+      where: { OR: [
+        { activeFlag: true },
+        ...(input.filter.eventCampaignId ? [{ id: input.filter.eventCampaignId }] : []),
+        { transactions: { some: { reconciliationExcludedAt: null } } }
+      ] },
+      select: { id: true, campaignName: true, eventCodeId: true, activeFlag: true },
+      orderBy: [{ activeFlag: "desc" }, { campaignName: "asc" }]
     })
   ]);
 
@@ -169,7 +183,8 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
     outgoingTransactions: totalDebit._count._all,
     completeTransactions,
     bankAccounts,
-    eventOptions
+    eventOptions,
+    campaignOptions
   };
 }
 
@@ -179,6 +194,8 @@ export async function loadTransactionInquiryDetailRecord(transactionId: string) 
     include: {
       suggestedEventCode: { select: eventCodeSelect },
       eventCode: { select: eventCodeSelect },
+      eventCampaign: { select: { id: true, campaignName: true, eventCodeId: true, activeFlag: true } },
+      memberEventCoverages: { where: { coverageStatus: "ACTIVE" }, select: { subscription: { select: { referenceNo: true, displayName: true } }, coverageFrom: true, coverageTo: true, grantedUnits: true, durationMonthsSnapshot: true }, take: 1 },
       manualAddedBy: { select: { id: true, fullName: true } },
       reconciliationExcludedBy: { select: { id: true, fullName: true } },
       memberIdentity: {
@@ -259,6 +276,14 @@ export async function loadEventCodeLabels(ids: string[]) {
 
 export function loadTransactionInquiryEventOption(eventCodeId: string) {
   return prisma.eventCode.findUnique({ where: { id: eventCodeId }, select: eventCodeSelect });
+}
+
+export function loadTransactionInquiryCampaignOption(eventCampaignId: string) {
+  return prisma.eventCampaign.findUnique({ where: { id: eventCampaignId }, select: { id: true, campaignName: true } });
+}
+
+export function loadCampaignLabels(ids: string[]) {
+  return ids.length ? prisma.eventCampaign.findMany({ where: { id: { in: ids } }, select: { id: true, campaignName: true } }) : Promise.resolve([]);
 }
 
 const memberOptionSelect = {

@@ -3,6 +3,7 @@ import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js";
+import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-time-based.service.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
 const ALREADY_DECIDED_MESSAGE = "This approval request has already been decided. Reload the approval queue.";
@@ -185,9 +186,12 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                 select: {
                   id: true,
                   code: true,
-                  eventName: true
+                  eventName: true,
+                  eventType: true,
+                  timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } }
                 }
-              }
+              },
+              eventCampaign: { select: { id: true, campaignName: true } }
             },
             orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }],
             take: 10
@@ -246,7 +250,9 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                 }
               },
               beforeEventCode: { select: { id: true, code: true, eventName: true } },
-              proposedEventCode: { select: { id: true, code: true, eventName: true } }
+              proposedEventCode: { select: { id: true, code: true, eventName: true } },
+              beforeEventCampaign: { select: { id: true, campaignName: true } },
+              proposedEventCampaign: { select: { id: true, campaignName: true } }
             },
             orderBy: [{ createdAt: "asc" }, { id: "asc" }]
           }
@@ -348,7 +354,9 @@ export async function decideSignApprovalAtomic(input: {
                 action: true,
                 bankTransactionId: true,
                 beforeEventCodeId: true,
+                beforeEventCampaignId: true,
                 proposedEventCodeId: true,
+                proposedEventCampaignId: true,
                 beforeRemark: true,
                 proposedRemark: true,
                 correctionReason: true,
@@ -360,6 +368,7 @@ export async function decideSignApprovalAtomic(input: {
                   select: {
                     id: true,
                     eventCodeId: true,
+                    eventCampaignId: true,
                     remark: true,
                     reconciliationExcludedAt: true
                   }
@@ -403,12 +412,13 @@ export async function decideSignApprovalAtomic(input: {
         for (const item of correctionProposal.items) {
           if (item.action === "MODIFIED") {
             if (!item.bankTransaction || item.bankTransaction.eventCodeId !== item.beforeEventCodeId
+              || item.bankTransaction.eventCampaignId !== item.beforeEventCampaignId
               || (item.bankTransaction.remark?.trim() || null) !== item.beforeRemark) {
               throw new HttpError(409, "Official transaction data changed after this correction was proposed. No correction was applied.");
             }
             await tx.bankTransaction.update({
               where: { id: item.bankTransaction.id },
-              data: { eventCodeId: item.proposedEventCodeId, remark: item.proposedRemark }
+              data: { eventCodeId: item.proposedEventCodeId, eventCampaignId: item.proposedEventCampaignId, remark: item.proposedRemark }
             });
             if (item.beforeEventCodeId !== item.proposedEventCodeId) {
               await tx.bankTransactionHistory.create({ data: {
@@ -416,6 +426,17 @@ export async function decideSignApprovalAtomic(input: {
                 fieldName: "event_code_id",
                 oldValue: item.beforeEventCodeId,
                 newValue: item.proposedEventCodeId,
+                remark: "Approved Edit Income correction",
+                changedAt: now,
+                changedById: input.userId
+              } });
+            }
+            if (item.beforeEventCampaignId !== item.proposedEventCampaignId) {
+              await tx.bankTransactionHistory.create({ data: {
+                bankTransactionId: item.bankTransaction.id,
+                fieldName: "event_campaign_id",
+                oldValue: item.beforeEventCampaignId,
+                newValue: item.proposedEventCampaignId,
                 remark: "Approved Edit Income correction",
                 changedAt: now,
                 changedById: input.userId
@@ -466,6 +487,7 @@ export async function decideSignApprovalAtomic(input: {
                   ? item.manualOriginalAmount
                   : null,
                 eventCodeId: item.proposedEventCodeId,
+                eventCampaignId: item.proposedEventCampaignId,
                 remark: item.proposedRemark,
                 status: "FINALIZED",
                 sourceType: "MANUAL",
@@ -524,6 +546,28 @@ export async function decideSignApprovalAtomic(input: {
         where: { statementUploadId: current.statementUploadId },
         data: { status: statementStatus }
       });
+    }
+
+    if (input.decision === "APPROVED") {
+      const changedTimeBasedTransactionIds = new Set(
+        correctionProposal?.items
+          .filter((item) => item.bankTransactionId && (item.action === "EXCLUDED" || (item.action === "MODIFIED" && item.beforeEventCodeId !== item.proposedEventCodeId)))
+          .map((item) => item.bankTransactionId!) ?? []
+      );
+      const timeBasedTransactions = await tx.bankTransaction.findMany({
+        where: {
+          statementUploadId: current.statementUploadId,
+          status: "FINALIZED",
+          OR: [
+            { eventCode: { is: { eventType: "TIME_BASED" } } },
+            { memberEventCoverages: { some: { coverageStatus: "ACTIVE" } } }
+          ]
+        },
+        select: { id: true }
+      });
+      for (const transaction of timeBasedTransactions) {
+        await synchronizeTimeBasedTransaction(tx, transaction.id, input.userId, { recalculate: changedTimeBasedTransactionIds.has(transaction.id) });
+      }
     }
 
     await tx.reconciliationApprovalHistory.create({

@@ -32,6 +32,7 @@ model Member {
   identities MemberIdentity[]
   identityHistoryFrom MemberIdentityHistory[] @relation("MemberIdentityHistoryFromMember")
   identityHistoryTo   MemberIdentityHistory[] @relation("MemberIdentityHistoryToMember")
+  eventSubscriptions MemberEventSubscription[]
   @@index([memberName], map: "idx_member_name")
   @@index([initialName], map: "idx_member_initial_name")
   @@index([city], map: "idx_member_city")
@@ -135,6 +136,14 @@ model User {
   createdMemberIdentities MemberIdentity[] @relation("MemberIdentityCreatedBy")
   updatedMemberIdentities MemberIdentity[] @relation("MemberIdentityUpdatedBy")
   memberIdentityHistoryActions MemberIdentityHistory[] @relation("MemberIdentityHistoryActionBy")
+  createdEventCampaigns EventCampaign[] @relation("EventCampaignCreatedBy")
+  updatedEventCampaigns EventCampaign[] @relation("EventCampaignUpdatedBy")
+  createdEventTimeRules EventTimeRule[] @relation("EventTimeRuleCreatedBy")
+  updatedEventTimeRules EventTimeRule[] @relation("EventTimeRuleUpdatedBy")
+  createdMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionCreatedBy")
+  updatedMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionUpdatedBy")
+  createdMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageCreatedBy")
+  voidedMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageVoidedBy")
   id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
   fullName     String   @map("full_name") @db.VarChar(150)
   email        String   @db.VarChar(150)
@@ -234,6 +243,7 @@ model EventCode {
   code        String   @db.Char(3)
   eventName   String   @map("event_name") @db.VarChar(150)
   category    String?  @db.VarChar(50)
+  eventType   String   @default("STANDARD") @map("event_type") @db.VarChar(20)
   description String?  @db.VarChar(500)
   activeFlag  Boolean  @default(true) @map("active_flag")
   createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
@@ -247,8 +257,122 @@ model EventCode {
   transactions          BankTransaction[] @relation("FinalEventCode")
   correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCode")
   correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCode")
+  campaigns EventCampaign[]
+  timeRule EventTimeRule?
+  memberSubscriptions MemberEventSubscription[]
 
+  @@index([eventType], map: "idx_event_code_type")
   @@map("arya_event_code")
+}
+
+model EventCampaign {
+  id String @id @default(uuid()) @map("event_campaign_id") @db.Char(36)
+  eventCodeId String @map("event_code_id") @db.Char(36)
+  campaignName String @map("campaign_name") @db.VarChar(200)
+  startDate DateTime? @map("start_date") @db.Date
+  endDate DateTime? @map("end_date") @db.Date
+  targetAmount Decimal? @map("target_amount") @db.Decimal(20, 2)
+  activeFlag Boolean @default(true) @map("active_flag")
+  remark String? @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  createdById String? @map("created_by") @db.Char(36)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  updatedById String? @map("updated_by") @db.Char(36)
+
+  eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_event_code")
+  createdBy User? @relation("EventCampaignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_created_by")
+  updatedBy User? @relation("EventCampaignUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_updated_by")
+  transactions BankTransaction[]
+  correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCampaign")
+  correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCampaign")
+
+  @@index([eventCodeId, activeFlag], map: "idx_event_campaign_event_active")
+  @@index([startDate, endDate], map: "idx_event_campaign_period")
+  @@index([createdById], map: "idx_event_campaign_created_by")
+  @@index([updatedById], map: "idx_event_campaign_updated_by")
+  @@map("arya_event_campaign")
+}
+
+model EventTimeRule {
+  eventCodeId String @id @map("event_code_id") @db.Char(36)
+  unitAmount Decimal @map("unit_amount") @db.Decimal(20, 2)
+  durationMonths Int @default(1) @map("duration_months") @db.UnsignedInt
+  activeFlag Boolean @default(true) @map("active_flag")
+  remark String? @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  createdById String? @map("created_by") @db.Char(36)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  updatedById String? @map("updated_by") @db.Char(36)
+
+  eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_event_code")
+  createdBy User? @relation("EventTimeRuleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_created_by")
+  updatedBy User? @relation("EventTimeRuleUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_updated_by")
+
+  @@index([createdById], map: "idx_event_time_rule_created_by")
+  @@index([updatedById], map: "idx_event_time_rule_updated_by")
+  @@map("arya_event_time_rule")
+}
+
+model MemberEventSubscription {
+  id String @id @default(uuid()) @map("member_event_subscription_id") @db.Char(36)
+  memberId String @map("member_id") @db.Char(36)
+  eventCodeId String @map("event_code_id") @db.Char(36)
+  referenceNo String? @map("reference_no") @db.VarChar(100)
+  displayName String? @map("display_name") @db.VarChar(200)
+  startDate DateTime? @map("start_date") @db.Date
+  validUntil DateTime? @map("valid_until") @db.Date
+  activeFlag Boolean @default(true) @map("active_flag")
+  remark String? @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById String? @map("created_by") @db.Char(36)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById String? @map("updated_by") @db.Char(36)
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_member")
+  eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code")
+  createdBy User? @relation("MemberEventSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_created_by")
+  updatedBy User? @relation("MemberEventSubscriptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_updated_by")
+  coverages MemberEventCoverage[]
+
+  @@index([memberId, eventCodeId, activeFlag], map: "idx_member_event_sub_member_event")
+  @@index([eventCodeId, activeFlag], map: "idx_member_event_sub_event")
+  @@index([referenceNo], map: "idx_member_event_sub_reference")
+  @@index([validUntil], map: "idx_member_event_sub_valid_until")
+  @@index([createdById], map: "idx_member_event_sub_created_by")
+  @@index([updatedById], map: "idx_member_event_sub_updated_by")
+  @@map("arya_member_event_subscription")
+}
+
+model MemberEventCoverage {
+  id String @id @default(uuid()) @map("member_event_coverage_id") @db.Char(36)
+  subscriptionId String @map("member_event_subscription_id") @db.Char(36)
+  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
+  coverageSource String @default("TRANSACTION") @map("coverage_source") @db.VarChar(20)
+  coverageStatus String @default("ACTIVE") @map("coverage_status") @db.VarChar(20)
+  unitAmountSnapshot Decimal? @map("unit_amount_snapshot") @db.Decimal(20, 2)
+  durationMonthsSnapshot Int? @map("duration_months_snapshot") @db.UnsignedInt
+  grantedUnits Int? @map("granted_units") @db.UnsignedInt
+  amountApplied Decimal? @map("amount_applied") @db.Decimal(20, 2)
+  coverageFrom DateTime @map("coverage_from") @db.Date
+  coverageTo DateTime @map("coverage_to") @db.Date
+  remark String? @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById String? @map("created_by") @db.Char(36)
+  voidedAt DateTime? @map("voided_at") @db.DateTime(3)
+  voidedById String? @map("voided_by") @db.Char(36)
+  voidReason String? @map("void_reason") @db.VarChar(1000)
+
+  subscription MemberEventSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_subscription")
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_transaction")
+  createdBy User? @relation("MemberEventCoverageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_created_by")
+  voidedBy User? @relation("MemberEventCoverageVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_voided_by")
+
+  @@index([subscriptionId, coverageStatus, coverageTo], map: "idx_member_event_cov_subscription")
+  @@index([bankTransactionId], map: "idx_member_event_cov_transaction")
+  @@index([coverageFrom, coverageTo], map: "idx_member_event_cov_period")
+  @@index([createdById], map: "idx_member_event_cov_created_by")
+  @@index([voidedById], map: "idx_member_event_cov_voided_by")
+  @@map("arya_member_event_coverage")
 }
 
 model BankAccount {
@@ -323,6 +447,7 @@ model BankTransaction {
   suffixCode           String?   @map("suffix_code") @db.Char(3)
   suggestedEventCodeId String?   @map("suggested_event_code_id") @db.Char(36)
   eventCodeId          String?   @map("event_code_id") @db.Char(36)
+  eventCampaignId      String?   @map("event_campaign_id") @db.Char(36)
   baseAmount           Decimal?  @map("base_amount") @db.Decimal(20, 2)
   status               String    @default("RAW") @db.VarChar(20)
   remark               String?   @db.VarChar(1000)
@@ -339,11 +464,14 @@ model BankTransaction {
   statementUpload    BankStatementUpload       @relation(fields: [statementUploadId], references: [id])
   suggestedEventCode EventCode?                @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
   eventCode          EventCode?                @relation("FinalEventCode", fields: [eventCodeId], references: [id])
+  eventCampaign      EventCampaign?            @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_campaign")
   manualAddedBy      User?                     @relation("BankTransactionManualAddedBy", fields: [manualAddedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_manual_added_by")
   reconciliationExcludedBy User?               @relation("BankTransactionExcludedBy", fields: [reconciliationExcludedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_excluded_by")
   history            BankTransactionHistory[]
   correctionItems    ReconciliationCorrectionItem[]
+  memberEventCoverages MemberEventCoverage[]
 
+  @@index([eventCampaignId], map: "idx_bank_transaction_event_campaign")
   @@index([manualAddedById], map: "idx_bank_transaction_manual_added_by")
   @@index([reconciliationExcludedAt], map: "idx_bank_transaction_reconciliation_excluded")
   @@index([reconciliationExcludedById], map: "idx_bank_transaction_excluded_by")
@@ -435,7 +563,9 @@ model ReconciliationCorrectionItem {
   action                String    @db.VarChar(20)
   bankTransactionId     String?   @map("bank_transaction_id") @db.Char(36)
   beforeEventCodeId     String?   @map("before_event_code_id") @db.Char(36)
+  beforeEventCampaignId String?   @map("before_event_campaign_id") @db.Char(36)
   proposedEventCodeId   String?   @map("proposed_event_code_id") @db.Char(36)
+  proposedEventCampaignId String? @map("proposed_event_campaign_id") @db.Char(36)
   beforeRemark          String?   @map("before_remark") @db.VarChar(1000)
   proposedRemark        String?   @map("proposed_remark") @db.VarChar(1000)
   correctionReason      String?   @map("correction_reason") @db.VarChar(1000)
@@ -449,11 +579,15 @@ model ReconciliationCorrectionItem {
   bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_transaction")
   beforeEventCode   EventCode? @relation("CorrectionBeforeEventCode", fields: [beforeEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event")
   proposedEventCode EventCode? @relation("CorrectionProposedEventCode", fields: [proposedEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event")
+  beforeEventCampaign EventCampaign? @relation("CorrectionBeforeEventCampaign", fields: [beforeEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_campaign")
+  proposedEventCampaign EventCampaign? @relation("CorrectionProposedEventCampaign", fields: [proposedEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_campaign")
 
   @@index([proposalId, action], map: "idx_correction_item_proposal_action")
   @@index([bankTransactionId], map: "idx_correction_item_transaction")
   @@index([beforeEventCodeId], map: "idx_correction_item_before_event")
   @@index([proposedEventCodeId], map: "idx_correction_item_proposed_event")
+  @@index([beforeEventCampaignId], map: "idx_correction_item_before_campaign")
+  @@index([proposedEventCampaignId], map: "idx_correction_item_proposed_campaign")
   @@map("arya_reconciliation_correction_item")
 }
 

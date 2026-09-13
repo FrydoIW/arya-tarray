@@ -15,6 +15,7 @@ function queryParams(query: Omit<TransactionInquiryQuery, "page" | "pageSize">) 
   if (query.status !== "ALL") params.set("status", query.status);
   if (query.bankAccountId !== "ALL") params.set("bankAccountId", query.bankAccountId);
   if (query.finalEventId !== "ALL") params.set("finalEventId", query.finalEventId);
+  if (query.eventCampaignId !== "ALL") params.set("eventCampaignId", query.eventCampaignId);
   if (query.memberId !== "ALL") params.set("memberId", query.memberId);
   if (query.memberLinkStatus !== "ALL") params.set("memberLinkStatus", query.memberLinkStatus);
   return params;

@@ -1,4 +1,8 @@
 import type { Request, Response } from "express";
+import { campaignExecuteSchema } from "./event-campaign.schema.js";
+import { executeCampaignChanges, getCampaignSummaries } from "./event-campaign.service.js";
+import { timeRuleExecuteSchema } from "./event-time-rule.schema.js";
+import { executeTimeRuleChange, getTimeRuleSummaries } from "./event-time-rule.service.js";
 import {
   eventCodeBulkPreviewBodySchema,
   eventCodeExecuteSchema,
@@ -14,6 +18,20 @@ import {
 export async function listEventCodesController(req: Request, res: Response) {
   const query = eventCodeListSchema.parse(req.query);
   res.json(await listEventCodes(query.search));
+}
+
+export async function listCampaignsController(_req: Request, res: Response) {
+  res.json(await getCampaignSummaries());
+}
+
+export async function executeCampaignsController(req: Request, res: Response) {
+  const input = campaignExecuteSchema.parse(req.body);
+  res.json(await executeCampaignChanges(input, req.auth!.userId));
+}
+
+export async function listTimeRulesController(_req: Request, res: Response) { res.json(await getTimeRuleSummaries()); }
+export async function executeTimeRuleController(req: Request, res: Response) {
+  res.json(await executeTimeRuleChange(timeRuleExecuteSchema.parse(req.body), req.auth!.userId));
 }
 
 export async function executeEventCodeChangesController(req: Request, res: Response) {

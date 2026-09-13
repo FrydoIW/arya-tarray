@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EventCodeMatchingRule } from "./EventCodeMatchingRule";
 import { EventCodeSummary } from "./EventCodeSummary";
 import { EventCodeTable } from "./EventCodeTable";
+import { EventCampaignSection } from "./EventCampaignSection";
+import { EventTimeRuleSection } from "./EventTimeRuleSection";
 import { BulkUploadEventCodesModal } from "./BulkUploadEventCodesModal";
 import { getEventCodeTemplate } from "../api/event-code.api";
 import { useEventCodes } from "../hooks/useEventCodes";
@@ -111,6 +113,8 @@ export function EventCodeScreen() {
         totalCount={eventCodes.allItems.length}
         onAdd={addRow}
       />
+      <EventCampaignSection eventCodes={eventCodes.allItems} />
+      <EventTimeRuleSection eventCodes={eventCodes.allItems} />
       <BulkUploadEventCodesModal
         open={bulkOpen}
         stagedCodes={eventCodes.allItems.filter((item) => item.isDraft).map((item) => item.code)}

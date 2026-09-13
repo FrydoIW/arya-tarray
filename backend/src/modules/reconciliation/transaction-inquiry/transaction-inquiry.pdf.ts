@@ -21,6 +21,7 @@ export type TransactionInquiryPdfInput = {
   bankAccountLabel: string;
   statusLabel: string;
   finalEventLabel: string;
+  campaignLabel?: string;
   memberLabel: string;
   memberLinkStatusLabel: string;
   searchLabel: string | null;
@@ -163,7 +164,8 @@ function drawReportHeader(page: PdfPage, input: TransactionInquiryPdfInput) {
   });
   page.text(MARGIN, 134, `Member: ${truncate(input.memberLabel, 350, 8)}`, 8);
   page.text(MARGIN + 390, 134, `Member Link: ${input.memberLinkStatusLabel}`, 8);
-  if (input.searchLabel) page.text(MARGIN, 148, `Search filter: ${truncate(input.searchLabel, 650, 8)}`, 8);
+  page.text(MARGIN, 148, `Campaign: ${truncate(input.campaignLabel ?? "All Campaigns", 350, 8)}`, 8);
+  if (input.searchLabel) page.text(MARGIN + 390, 148, `Search: ${truncate(input.searchLabel, 330, 8)}`, 8);
 }
 
 function drawFinancialSummary(page: PdfPage, input: TransactionInquiryPdfInput, top: number) {
@@ -239,7 +241,7 @@ export function buildTransactionInquiryPdf(input: TransactionInquiryPdfInput) {
   const document = new PdfDocument();
   const first = document.addPage();
   drawReportHeader(first, input);
-  let top = input.searchLabel ? 169 : 157;
+  let top = 169;
 
   if (input.includeFinancialSummary) {
     drawFinancialSummary(first, input, top);

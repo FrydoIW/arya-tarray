@@ -1,5 +1,5 @@
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import type { EventCode, EventCodeBulkPreview, EventCodeExecutePayload, EventCodeUser } from "../types";
+import type { CampaignInput, EventCampaign, EventCode, EventCodeBulkPreview, EventCodeExecutePayload, EventCodeUser, EventTimeRule, EventType, TimeRuleInput } from "../types";
 
 type EventCodeApiUser = {
   id: string;
@@ -11,6 +11,7 @@ type EventCodeApiItem = {
   code: string;
   eventName: string;
   category: string | null;
+  eventType?: EventType;
   description?: string | null;
   activeFlag: boolean;
   updatedAt?: string;
@@ -36,11 +37,28 @@ function mapEventCode(item: EventCodeApiItem): EventCode {
     code: item.code,
     eventName: item.eventName,
     category: item.category ?? null,
+    eventType: item.eventType ?? "STANDARD",
     description: item.description ?? null,
     activeFlag: item.activeFlag,
     updatedAt: item.updatedAt,
     updatedBy: mapUser(item.updatedBy)
   };
+}
+
+export function getCampaigns() {
+  return apiFetch<EventCampaign[]>("/configuration/event-codes/campaigns");
+}
+
+export function executeCampaignChanges(payload: { creates: CampaignInput[]; updates: Array<{ id: string; input: CampaignInput }> }) {
+  return apiFetch<{ changedCount: number; items: EventCampaign[] }>("/configuration/event-codes/campaigns/execute", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getTimeRules() { return apiFetch<EventTimeRule[]>("/configuration/event-codes/time-rules"); }
+export function executeTimeRuleChange(payload: { eventCodeId: string; input: TimeRuleInput }) {
+  return apiFetch<EventTimeRule[]>("/configuration/event-codes/time-rules/execute", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export async function getEventCodes() {

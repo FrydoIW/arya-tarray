@@ -10,7 +10,7 @@ import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
-import type { TransactionInquiryBankAccount, TransactionInquiryEvent, TransactionInquiryMember, TransactionInquiryMemberLinkStatus, TransactionInquiryPeriodMode, TransactionInquiryRow, TransactionInquiryStatus } from "../types";
+import type { TransactionInquiryBankAccount, TransactionInquiryCampaign, TransactionInquiryEvent, TransactionInquiryMember, TransactionInquiryMemberLinkStatus, TransactionInquiryPeriodMode, TransactionInquiryRow, TransactionInquiryStatus } from "../types";
 import { eventLabel, formatPeriodLabel, getLifecycleLabel, periodContext } from "../utils/transaction-inquiry.utils";
 import styles from "../styles/transaction-inquiry.module.css";
 
@@ -26,6 +26,7 @@ type Props = {
   status: TransactionInquiryStatus;
   bankAccountId: string;
   finalEventId: string;
+  eventCampaignId: string;
   memberId: string;
   memberLinkStatus: TransactionInquiryMemberLinkStatus;
   memberSearch: string;
@@ -34,6 +35,7 @@ type Props = {
   memberOptionsLoading: boolean;
   canViewMemberData: boolean;
   eventOptions: TransactionInquiryEvent[];
+  campaignOptions: TransactionInquiryCampaign[];
   page: number;
   pageSize: number;
   total: number;
@@ -44,6 +46,7 @@ type Props = {
   onStatusChange: (value: TransactionInquiryStatus) => void;
   onBankAccountChange: (value: string) => void;
   onFinalEventChange: (value: string) => void;
+  onCampaignChange: (value: string) => void;
   onMemberSearchChange: (value: string) => void;
   onMemberOptionsRequest: () => void;
   onMemberChange: (value: string) => void;
@@ -81,6 +84,7 @@ export function TransactionInquiryTable(props: Props) {
     { key: "type", header: "Type", minWidth: "96px", render: (row) => <span className={`${styles.typeBadge} ${typeOf(row) === "Incoming" ? styles.credit : styles.debit}`}>{typeOf(row)}</span> },
     { key: "suggestedEvent", header: "Suggested Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventDisplay(row, row.suggestedEvent)}</span> },
     { key: "finalEvent", header: "Final Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventDisplay(row, row.finalEvent)}</span> },
+    { key: "eventCampaign", header: "Campaign", minWidth: "170px", render: (row) => <span className={styles.eventText}>{row.eventCampaign?.campaignName ?? "—"}</span> },
     { key: "status", header: "Status", minWidth: "135px", render: (row) => <span className={`${styles.statusBadge} ${styles[`status${row.status}`]}`}>{getLifecycleLabel(row.status)}</span> },
     { key: "action", header: "Action", minWidth: "90px", sticky: "right", align: "center", render: (row) => <Button type="button" variant="outline" size="sm" icon={<Eye size={13} />} disabled={props.detailLoading} onClick={() => props.onView(row.id)}>View</Button> }
   ], [props.canViewMemberData, props.detailLoading, props.onView]);
@@ -109,6 +113,10 @@ export function TransactionInquiryTable(props: Props) {
           <Select className={styles.eventFilter} value={props.finalEventId} disabled={props.loading} onChange={(event) => props.onFinalEventChange(event.target.value)} aria-label="Final Event">
             <option value="ALL">All Events</option>
             {props.eventOptions.map((event) => <option key={event.id} value={event.id}>{event.code} - {event.eventName}{event.activeFlag ? "" : " (Inactive)"}</option>)}
+          </Select>
+          <Select className={styles.eventFilter} value={props.eventCampaignId} disabled={props.loading} onChange={(event) => props.onCampaignChange(event.target.value)} aria-label="Campaign">
+            <option value="ALL">All Campaigns</option>
+            {props.campaignOptions.filter((item) => props.finalEventId === "ALL" || item.eventCodeId === props.finalEventId).map((item) => <option key={item.id} value={item.id}>{item.campaignName}{item.activeFlag ? "" : " (Inactive)"}</option>)}
           </Select>
           <div className={styles.memberFilterGroup}>
             <SearchInput value={props.memberSearch} placeholder="Find Member" aria-label="Search Member options" aria-busy={props.memberOptionsLoading} onFocus={props.onMemberOptionsRequest} onChange={(event) => { props.onMemberOptionsRequest(); props.onMemberSearchChange(event.target.value); }} />

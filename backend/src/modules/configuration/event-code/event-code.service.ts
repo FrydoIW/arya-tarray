@@ -12,6 +12,7 @@ type EventCodeRecord = {
   code: string;
   eventName: string;
   category: string | null;
+  eventType: string;
   description: string | null;
   activeFlag: boolean;
   createdAt: Date;
@@ -28,6 +29,7 @@ function toResponse(item: EventCodeRecord) {
     code: item.code,
     eventName: item.eventName,
     category: item.category,
+    eventType: item.eventType,
     description: item.description,
     activeFlag: item.activeFlag,
     createdAt: item.createdAt,
@@ -101,12 +103,31 @@ export async function executeEventCodeChanges(input: EventCodeExecuteInput, user
 
   if (input.deletes.length > 0) {
     const usageRows = await findEventCodeUsage(input.deletes);
-    const used = usageRows.find((item) => item._count.suggestedTransactions > 0 || item._count.transactions > 0);
+    const used = usageRows.find((item) => item._count.suggestedTransactions > 0 || item._count.transactions > 0 || item._count.campaigns > 0 || item._count.memberSubscriptions > 0 || item.timeRule);
     if (used) {
       throw new HttpError(
         409,
         `Event Code ${used.code} sudah dipakai transaksi. Ubah status menjadi Inactive daripada menghapusnya.`
       );
+    }
+  }
+
+  const changedAwayFromCampaign = input.updates.filter((update) =>
+    existingById.get(update.id)?.eventType === "CAMPAIGN" && update.input.eventType !== "CAMPAIGN"
+  );
+  if (changedAwayFromCampaign.length > 0) {
+    const usage = await findEventCodeUsage(changedAwayFromCampaign.map((item) => item.id));
+    if (usage.some((item) => item._count.campaigns > 0)) {
+      throw new HttpError(409, "Event Code with Campaign history must remain CAMPAIGN. Deactivate it instead.");
+    }
+  }
+  const changedAwayFromTimeBased = input.updates.filter((update) =>
+    existingById.get(update.id)?.eventType === "TIME_BASED" && update.input.eventType !== "TIME_BASED"
+  );
+  if (changedAwayFromTimeBased.length > 0) {
+    const usage = await findEventCodeUsage(changedAwayFromTimeBased.map((item) => item.id));
+    if (usage.some((item) => item._count.memberSubscriptions > 0)) {
+      throw new HttpError(409, "Event Code with Time-Based subscription history must remain TIME_BASED. Deactivate it instead.");
     }
   }
 

@@ -31,7 +31,10 @@ export type TransactionInquiryEvent = {
   code: string;
   eventName: string;
   activeFlag: boolean;
+  eventType?: string;
 };
+
+export type TransactionInquiryCampaign = { id: string; eventCodeId: string; campaignName: string; activeFlag: boolean };
 
 export type TransactionInquiryRow = {
   id: string;
@@ -52,6 +55,7 @@ export type TransactionInquiryRow = {
   manualAddedAt: string | null;
   suggestedEvent: TransactionInquiryEvent | null;
   finalEvent: TransactionInquiryEvent | null;
+  eventCampaign: TransactionInquiryCampaign | null;
   memberIdentity: TransactionInquiryMemberIdentity | null;
   member: TransactionInquiryMember | null;
   bankAccount: TransactionInquiryBankAccount;
@@ -66,6 +70,7 @@ export type TransactionInquiryWorkspace = {
     status: TransactionInquiryStatus;
     bankAccountId: string | null;
     finalEventId: string | null;
+    eventCampaignId: string | null;
     memberId: string | null;
     memberLinkStatus: TransactionInquiryMemberLinkStatus;
   };
@@ -79,6 +84,7 @@ export type TransactionInquiryWorkspace = {
   };
   bankAccounts: TransactionInquiryBankAccount[];
   eventOptions: TransactionInquiryEvent[];
+  campaignOptions: TransactionInquiryCampaign[];
   transactions: TransactionInquiryRow[];
   pagination: {
     page: number;
@@ -124,8 +130,10 @@ export type TransactionInquiryDetail = {
     reconciliationExclusionReason: string | null;
     suggestedEvent: TransactionInquiryEvent | null;
     finalEvent: TransactionInquiryEvent | null;
+    eventCampaign: TransactionInquiryCampaign | null;
     memberIdentity: TransactionInquiryMemberIdentity | null;
     member: TransactionInquiryMember | null;
+    sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: string; coverageTo: string } | null } | null;
   };
   history: Array<{
     id: string;
@@ -148,6 +156,7 @@ export type TransactionInquiryQuery = {
   status: TransactionInquiryStatus;
   bankAccountId: string;
   finalEventId: string;
+  eventCampaignId: string;
   memberId: string;
   memberLinkStatus: TransactionInquiryMemberLinkStatus;
   page: number;

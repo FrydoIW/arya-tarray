@@ -31,6 +31,7 @@ export function transactionChanged(
 ) {
   if (!original) return current.correctionAction === "ADDED";
   return current.eventCodeId !== original.eventCodeId
+    || current.eventCampaignId !== original.eventCampaignId
     || normalizeRemark(current.remark) !== normalizeRemark(original.remark);
 }
 
@@ -57,6 +58,7 @@ export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactio
       description: item.description,
       amount: item.originalAmount.replace(/^-/, ""),
       eventCodeId: item.eventCodeId,
+      eventCampaignId: item.eventCampaignId,
       remark: normalizeRemark(item.remark),
       reason: item.correctionReason!
     });
@@ -69,6 +71,7 @@ export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactio
       action: "MODIFIED" as const,
       transactionId: item.id,
       eventCodeId: item.eventCodeId,
+      eventCampaignId: item.eventCampaignId,
       remark: normalizeRemark(item.remark)
     });
   }

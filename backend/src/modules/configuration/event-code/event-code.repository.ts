@@ -1,4 +1,5 @@
 import { prisma } from "../../../lib/prisma.js";
+import { HttpError } from "../../../lib/http.js";
 
 const updatedByInclude = {
   updatedBy: {
@@ -37,9 +38,12 @@ export function findEventCodeUsage(ids: string[]) {
       _count: {
         select: {
           suggestedTransactions: true,
-          transactions: true
+          transactions: true,
+          campaigns: true,
+          memberSubscriptions: true
         }
-      }
+      },
+      timeRule: { select: { eventCodeId: true } }
     }
   });
 }
@@ -49,6 +53,7 @@ export async function applyEventCodeChangesAtomic(data: {
     code: string;
     eventName: string;
     category: string | null;
+    eventType: string;
     description: string | null;
     activeFlag: boolean;
   }>;
@@ -58,6 +63,7 @@ export async function applyEventCodeChangesAtomic(data: {
       code: string;
       eventName: string;
       category: string | null;
+      eventType: string;
       description: string | null;
       activeFlag: boolean;
     };
@@ -66,6 +72,16 @@ export async function applyEventCodeChangesAtomic(data: {
   userId: string;
 }) {
   return prisma.$transaction(async (tx) => {
+    const nonCampaignIds = data.updates.filter((item) => item.input.eventType !== "CAMPAIGN").map((item) => item.id);
+    if (nonCampaignIds.length) {
+      const used = await tx.eventCode.findFirst({ where: { id: { in: nonCampaignIds }, campaigns: { some: {} } }, select: { code: true } });
+      if (used) throw new HttpError(409, `Event Code ${used.code} has Campaign history. Deactivate it instead.`);
+    }
+    const nonTimeBasedIds = data.updates.filter((item) => item.input.eventType !== "TIME_BASED").map((item) => item.id);
+    if (nonTimeBasedIds.length) {
+      const used = await tx.eventCode.findFirst({ where: { id: { in: nonTimeBasedIds }, memberSubscriptions: { some: {} } }, select: { code: true } });
+      if (used) throw new HttpError(409, `Event Code ${used.code} has Time-Based subscription history. Deactivate it instead.`);
+    }
     if (data.deletes.length > 0) {
       await tx.eventCode.deleteMany({
         where: { id: { in: data.deletes } }
@@ -79,6 +95,7 @@ export async function applyEventCodeChangesAtomic(data: {
           code: update.input.code,
           eventName: update.input.eventName,
           category: update.input.category,
+          eventType: update.input.eventType,
           description: update.input.description,
           activeFlag: update.input.activeFlag,
           updatedById: data.userId
@@ -92,6 +109,7 @@ export async function applyEventCodeChangesAtomic(data: {
           code: create.code,
           eventName: create.eventName,
           category: create.category,
+          eventType: create.eventType,
           description: create.description,
           activeFlag: create.activeFlag,
           createdById: data.userId,

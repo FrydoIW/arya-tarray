@@ -1,3 +1,5 @@
+import type { EventType } from "@/lib/event-type";
+
 export type StatementLifecycleStatus = "RAW" | "CHECK" | "FINALIZED";
 export type TransactionDirection = "CR" | "DB";
 export type DraftRowStatus = "MATCHED" | "READY" | "NEEDS_REVIEW" | "NOT_APPLICABLE";
@@ -7,7 +9,11 @@ export type EventCodeOption = {
   id: string;
   code: string;
   eventName: string;
+  eventType: EventType;
+  timeRule?: { unitAmount: string; durationMonths: number; activeFlag: boolean } | null;
 };
+
+export type CampaignOption = { id: string; eventCodeId: string; campaignName: string; startDate: string | null; endDate: string | null; activeFlag: boolean };
 
 export type BankAccountOption = {
   id: string;
@@ -66,6 +72,7 @@ export type DraftTransaction = {
   suffixCode?: string | null;
   suggestedEventCodeId?: string | null;
   eventCodeId?: string | null;
+  eventCampaignId?: string | null;
   baseAmount?: string | null;
   remark?: string | null;
   requiresClassification: boolean;
@@ -84,6 +91,7 @@ export type StatementUploadWorkspace = {
   statement: StatementDraft | null;
   transactions: DraftTransaction[];
   eventCodes: EventCodeOption[];
+  campaigns: CampaignOption[];
   bankAccounts: BankAccountOption[];
 };
 
@@ -91,6 +99,7 @@ export type UpdateFinalEventInput = {
   statementId: string;
   transactionId: string;
   eventCodeId: string | null;
+  eventCampaignId: string | null;
 };
 
 export type UpdateFinalEventResponse = {

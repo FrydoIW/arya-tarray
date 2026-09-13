@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import type { DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityMetadataInput, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace } from "../types";
+import type { DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityMetadataInput, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace, OpeningCoverageInput, SponsorshipWorkspace, SubscriptionInput } from "../types";
 
 const base = "/member/data";
 export function getWorkspace(query: MemberDataQuery, signal?: AbortSignal) {
@@ -15,6 +15,11 @@ export function getDonations(memberId: string, query: DonationQuery, signal?: Ab
     search: query.search, page: String(query.page), pageSize: String(query.pageSize)
   }), { signal });
 }
+export function getSponsorship(memberId: string, signal?: AbortSignal) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/sponsorship`, { signal }); }
+export function createSubscription(memberId: string, input: SubscriptionInput) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions`, { method: "POST", body: JSON.stringify(input) }); }
+export function updateSubscription(memberId: string, subscriptionId: string, input: Omit<SubscriptionInput, "eventCodeId">) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}`, { method: "PATCH", body: JSON.stringify(input) }); }
+export function allocateSponsorshipPayment(memberId: string, subscriptionId: string, transactionId: string) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/allocate`, { method: "POST", body: JSON.stringify({ transactionId }) }); }
+export function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/opening-coverage`, { method: "POST", body: JSON.stringify(input) }); }
 export function getIdentityHistory(memberId: string, page: number, pageSize: number, signal?: AbortSignal) {
   return apiFetch<IdentityHistoryWorkspace>(`${base}/${encodeURIComponent(memberId)}/identity-history?` + new URLSearchParams({
     page: String(page), pageSize: String(pageSize)

@@ -68,15 +68,17 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
           <div className={styles.classificationGrid}>
             <div><span>Suggested Event</span><strong>{outgoing ? "Outgoing" : eventLabel(transaction.suggestedEvent)}</strong><small>{outgoing ? "Event Code is not required for debit transactions" : "Machine suggestion at upload"}</small></div>
             <div><span>Final Event</span><strong>{outgoing ? "Outgoing" : eventLabel(transaction.finalEvent)}</strong><small>{outgoing ? "Direction provides the business meaning" : "Current operator-approved classification"}</small></div>
+            <div><span>Campaign</span><strong>{transaction.eventCampaign?.campaignName ?? "—"}</strong><small>Official Campaign assignment</small></div>
           </div>
         </section>
+        {transaction.sponsorship ? <section className={styles.detailSection}><h3>Rupang sponsorship</h3><div className={styles.detailGrid}><DetailItem label="Current rule" value={`${formatMoney(transaction.sponsorship.unitAmount)} = ${transaction.sponsorship.durationMonths} month`} /><DetailItem label="Estimated entitlement" value={`+${transaction.sponsorship.grantedMonths} months`} /><DetailItem label="Allocation" value={transaction.sponsorship.allocation ? transaction.sponsorship.allocation.referenceNo || transaction.sponsorship.allocation.displayName || "Allocated" : "Pending allocation"} /><DetailItem label="Coverage period" value={transaction.sponsorship.allocation ? `${formatDate(transaction.sponsorship.allocation.coverageFrom)} – ${formatDate(transaction.sponsorship.allocation.coverageTo)}` : "—"} /></div></section> : null}
         <section className={styles.detailSection}>
           <h3>Transaction History</h3>
           {detail.history.length === 0 ? <div className={styles.emptyHistory}>No manual changes have been recorded for this transaction.</div> : (
             <div className={styles.historyList}>
               {detail.history.map((item) => (
                 <article key={item.id}>
-                  <div><strong>{item.fieldName === "event_code_id" ? "Final Event" : item.fieldName === "remark" ? "Remark" : item.fieldName || "Change"}</strong><span>{formatDateTime(item.changedAt)}</span></div>
+                  <div><strong>{item.fieldName === "event_code_id" ? "Final Event" : item.fieldName === "event_campaign_id" ? "Campaign" : item.fieldName === "remark" ? "Remark" : item.fieldName || "Change"}</strong><span>{formatDateTime(item.changedAt)}</span></div>
                   <p><b>{item.oldValueLabel || "-"}</b><i>→</i><b>{item.newValueLabel || "-"}</b></p>
                   <small>{item.changedBy.fullName}{item.remark ? ` · ${item.remark}` : ""}</small>
                 </article>

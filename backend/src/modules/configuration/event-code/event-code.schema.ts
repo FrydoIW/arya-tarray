@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EVENT_TYPES } from "./event-type.js";
 
 const code = z.string().trim().regex(/^\d{3}$/, "Code harus terdiri dari tepat 3 digit");
 const eventName = z.string().trim().min(1, "Event name wajib diisi").max(150);
@@ -11,6 +12,7 @@ export const eventCodeExecuteValueSchema = z.object({
   code,
   eventName,
   category,
+  eventType: z.enum(EVENT_TYPES).default("STANDARD"),
   description: z.string().trim().max(500).nullable(),
   activeFlag: z.boolean()
 });

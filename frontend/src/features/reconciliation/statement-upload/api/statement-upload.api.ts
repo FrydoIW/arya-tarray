@@ -28,7 +28,7 @@ export function updateDraftTransactionFinalEvent(
     `/reconciliation/statement-upload/${encodeURIComponent(input.statementId)}/transactions/${encodeURIComponent(input.transactionId)}/final-event`,
     {
       method: "PATCH",
-      body: JSON.stringify({ eventCodeId: input.eventCodeId })
+      body: JSON.stringify({ eventCodeId: input.eventCodeId, eventCampaignId: input.eventCampaignId })
     }
   );
 }

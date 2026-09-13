@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { Plus, ShieldMinus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import type { EditIncomeEventCode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
+import type { EditIncomeCampaign, EditIncomeEventCode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
 import styles from "../styles/edit-income.module.css";
 
 type AddAdjustmentModalProps = {
   open: boolean;
   defaultDate: string;
   eventCodes: EditIncomeEventCode[];
+  campaigns: EditIncomeCampaign[];
   disabled: boolean;
   onClose: () => void;
   onSubmit: (input: ManualAdjustmentInput) => void;
@@ -22,6 +23,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [eventCodeId, setEventCodeId] = useState("");
+  const [eventCampaignId, setEventCampaignId] = useState("");
   const [remark, setRemark] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -33,6 +35,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
     setDescription("");
     setAmount("");
     setEventCodeId("");
+    setEventCampaignId("");
     setRemark("");
     setReason("");
     setError("");
@@ -47,6 +50,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
       setError("Final Event is required for an incoming adjustment.");
       return;
     }
+    if (direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" && !eventCampaignId) { setError("Campaign is required for this Event Code."); return; }
     if (!reason.trim()) {
       setError("Correction Reason is required.");
       return;
@@ -57,6 +61,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
       description: description.trim(),
       amount,
       eventCodeId: direction === "INCOMING" ? eventCodeId : null,
+      eventCampaignId: direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" ? eventCampaignId : null,
       remark: remark.trim() || null,
       reason: reason.trim()
     });
@@ -71,7 +76,8 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
           <label className={styles.field}><span>Direction</span><select value={direction} disabled={props.disabled} onChange={(event) => { setDirection(event.target.value as "INCOMING" | "OUTGOING"); setEventCodeId(""); }}><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></select></label>
           <label className={styles.field}><span>Date</span><input type="date" value={transactionDate} disabled={props.disabled} onChange={(event) => setTransactionDate(event.target.value)} /></label>
           <label className={styles.field}><span>Amount</span><input inputMode="decimal" value={amount} disabled={props.disabled} placeholder="500000" onChange={(event) => setAmount(event.target.value)} /></label>
-          <label className={styles.field}><span>Final Event</span><select value={eventCodeId} disabled={props.disabled || direction === "OUTGOING"} onChange={(event) => setEventCodeId(event.target.value)}><option value="">{direction === "OUTGOING" ? "Not applicable" : "Select Event..."}</option>{props.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</select></label>
+          <label className={styles.field}><span>Final Event</span><select value={eventCodeId} disabled={props.disabled || direction === "OUTGOING"} onChange={(event) => { setEventCodeId(event.target.value); setEventCampaignId(""); }}><option value="">{direction === "OUTGOING" ? "Not applicable" : "Select Event..."}</option>{props.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</select></label>
+          {direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" && <label className={styles.field}><span>Campaign</span><select value={eventCampaignId} disabled={props.disabled} onChange={(event) => setEventCampaignId(event.target.value)}><option value="">Select Campaign...</option>{props.campaigns.filter((item) => item.eventCodeId === eventCodeId && item.activeFlag && (!item.startDate || transactionDate >= item.startDate) && (!item.endDate || transactionDate <= item.endDate)).map((item) => <option key={item.id} value={item.id}>{item.campaignName}</option>)}</select></label>}
         </div>
         <label className={styles.field}><span>Description</span><input value={description} maxLength={2000} disabled={props.disabled} placeholder="Manual adjustment description" onChange={(event) => setDescription(event.target.value)} /></label>
         <label className={styles.field}><span>Remark</span><input value={remark} maxLength={1000} disabled={props.disabled} placeholder="Optional business remark" onChange={(event) => setRemark(event.target.value)} /></label>

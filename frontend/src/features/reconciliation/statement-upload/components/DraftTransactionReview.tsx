@@ -12,6 +12,7 @@ import type {
   DraftRowStatus,
   DraftRowStatusFilter,
   DraftTransaction,
+  CampaignOption,
   EventCodeOption
 } from "../types";
 import {
@@ -26,6 +27,7 @@ import styles from "../styles/statement-upload.module.css";
 type Props = {
   rows: DraftTransaction[];
   eventCodes: EventCodeOption[];
+  campaigns: CampaignOption[];
   search: string;
   statusFilter: DraftRowStatusFilter;
   eventCodeFilter: string;
@@ -40,7 +42,7 @@ type Props = {
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onReload: () => void;
-  onFinalEventChange: (transactionId: string, eventCodeId: string | null) => void;
+  onFinalEventChange: (transactionId: string, eventCodeId: string | null, eventCampaignId?: string | null) => void;
 };
 
 function RowStatus({ status, outgoing }: { status: DraftRowStatus; outgoing: boolean }) {
@@ -56,6 +58,7 @@ function RowStatus({ status, outgoing }: { status: DraftRowStatus; outgoing: boo
 export function DraftTransactionReview({
   rows,
   eventCodes,
+  campaigns,
   search,
   statusFilter,
   eventCodeFilter,
@@ -150,6 +153,30 @@ export function DraftTransactionReview({
       }
     },
     {
+      key: "eventCampaignId",
+      header: "Campaign",
+      minWidth: "185px",
+      render: (row) => {
+        if (getEventCode(eventCodes, row.eventCodeId)?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>Not required</span>;
+        const eligible = campaigns.filter((item) => item.eventCodeId === row.eventCodeId && ((item.activeFlag && (!item.startDate || row.transactionDate.slice(0, 10) >= item.startDate) && (!item.endDate || row.transactionDate.slice(0, 10) <= item.endDate)) || item.id === row.eventCampaignId));
+        return <Select className={styles.eventSelect} value={row.eventCampaignId ?? ""} disabled={disabled} onChange={(event) => onFinalEventChange(row.id, row.eventCodeId ?? null, event.target.value || null)} aria-label={`Campaign row ${row.rowNo}`}>
+          <option value="">Select Campaign...</option>
+          {eligible.map((item) => <option key={item.id} value={item.id}>{item.campaignName}{!item.activeFlag ? " (historical)" : ""}</option>)}
+        </Select>;
+      }
+    },
+    {
+      key: "sponsorshipPreview",
+      header: "Rupang",
+      minWidth: "150px",
+      render: (row) => {
+        const event = getEventCode(eventCodes, row.eventCodeId); const rule = event?.eventType === "TIME_BASED" ? event.timeRule : null;
+        if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>{event?.eventType === "TIME_BASED" ? "Rule needed" : "—"}</span>;
+        const units = Number(row.baseAmount) / Number(rule.unitAmount);
+        return Number.isInteger(units) && units >= 1 ? <span className={styles.finalEvent}>+{units * rule.durationMonths} months</span> : <span className={styles.noMatch}>Exact unit required</span>;
+      }
+    },
+    {
       key: "finalEventCode",
       header: "Event Code",
       minWidth: "96px",
@@ -174,9 +201,9 @@ export function DraftTransactionReview({
       header: "Status",
       minWidth: "135px",
       sticky: "right",
-      render: (row) => <RowStatus status={getDraftRowStatus(row)} outgoing={row.direction === "DB"} />
+      render: (row) => <RowStatus status={getDraftRowStatus(row, eventCodes)} outgoing={row.direction === "DB"} />
     }
-  ], [disabled, eventCodes]);
+  ], [disabled, eventCodes, campaigns, onFinalEventChange]);
 
   return (
     <CollapsibleSection

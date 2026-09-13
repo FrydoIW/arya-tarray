@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import type { TransactionInquiryBankAccount, TransactionInquiryEvent, TransactionInquiryMember, TransactionInquiryMemberLinkStatus, TransactionInquiryPeriodMode, TransactionInquiryStatus, TransactionReportOptions } from "../types";
+import type { TransactionInquiryBankAccount, TransactionInquiryCampaign, TransactionInquiryEvent, TransactionInquiryMember, TransactionInquiryMemberLinkStatus, TransactionInquiryPeriodMode, TransactionInquiryStatus, TransactionReportOptions } from "../types";
 import { formatPeriodLabel, getLifecycleLabel } from "../utils/transaction-inquiry.utils";
 import styles from "../styles/transaction-inquiry.module.css";
 
@@ -15,10 +15,12 @@ export function GenerateReportModal(props: {
   status: TransactionInquiryStatus;
   bankAccountId: string;
   finalEventId: string;
+  eventCampaignId: string;
   member: TransactionInquiryMember | null;
   memberLinkStatus: TransactionInquiryMemberLinkStatus;
   bankAccounts: TransactionInquiryBankAccount[];
   eventOptions: TransactionInquiryEvent[];
+  campaignOptions: TransactionInquiryCampaign[];
   loading: boolean;
   onClose: () => void;
   onGenerate: (options: TransactionReportOptions) => Promise<boolean>;
@@ -27,6 +29,7 @@ export function GenerateReportModal(props: {
   useEffect(() => { if (props.open) setOptions({ includeFinancialSummary: true, includeClassificationSummary: true, includeTransactionDetail: true }); }, [props.open]);
   const selectedBank = props.bankAccounts.find((item) => item.id === props.bankAccountId);
   const selectedEvent = props.eventOptions.find((item) => item.id === props.finalEventId);
+  const selectedCampaign = props.campaignOptions.find((item) => item.id === props.eventCampaignId);
   const valid = options.includeFinancialSummary || options.includeClassificationSummary || options.includeTransactionDetail;
 
   async function generate() {
@@ -42,6 +45,7 @@ export function GenerateReportModal(props: {
           <div><span>Bank Account</span><strong>{selectedBank ? `${selectedBank.bankCode} - ${selectedBank.accountNo}` : "All Bank Accounts"}</strong></div>
           <div><span>Status</span><strong>{props.status === "ALL" ? "All Status" : getLifecycleLabel(props.status)}</strong></div>
           <div><span>Final Event</span><strong>{selectedEvent ? `${selectedEvent.code} - ${selectedEvent.eventName}${selectedEvent.activeFlag ? "" : " (Inactive)"}` : "All Final Events"}</strong></div>
+          <div><span>Campaign</span><strong>{selectedCampaign?.campaignName ?? "All Campaigns"}</strong></div>
           <div><span>Member</span><strong>{props.member ? `${props.member.memberCode} - ${props.member.memberName}${props.member.activeFlag ? "" : " · Inactive"}` : "All Members"}</strong></div>
           <div><span>Member Link</span><strong>{props.memberLinkStatus === "LINKED" ? "Linked" : props.memberLinkStatus === "UNLINKED" ? "Unlinked" : "All"}</strong></div>
           <div><span>Search</span><strong>{props.search || "No search filter"}</strong></div>

@@ -38,6 +38,7 @@ export interface DashboardSummary {
     totalOutgoing: DashboardMoneyMetricValue;
     completeTransactions: DashboardMetricValue;
   };
+  sponsorshipSummary: { activeSubscriptions: number; expiringSoon: number; expiredSubscriptions: number };
   trend: Array<{
     month: string;
     label: string;
@@ -69,6 +70,18 @@ export interface DashboardSummary {
       transactionCount: number;
       totalAmount: string;
     }>;
+  }>;
+  campaigns: Array<{
+    id: string;
+    campaignName: string;
+    eventCode: { code: string; eventName: string };
+    startDate: string | null;
+    endDate: string | null;
+    targetAmount: string | null;
+    collectedAmount: string;
+    progressPercent: number | null;
+    targetReached: boolean;
+    displayStatus: "ACTIVE" | "SCHEDULED" | "ENDED" | "CLOSED";
   }>;
   memberSummary: {
     linkedAmount: string;

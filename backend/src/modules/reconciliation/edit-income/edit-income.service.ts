@@ -107,7 +107,13 @@ export async function getEditIncomeDetail(statementId: string) {
       approvalStatus: statement.approval.status,
       editable: statement.status === "FINALIZED"
     },
-    eventCodes: records.eventCodes.map((item) => ({ id: item.id, code: item.code, eventName: item.eventName, activeFlag: item.activeFlag })),
+    eventCodes: records.eventCodes.map((item) => ({ id: item.id, code: item.code, eventName: item.eventName, eventType: item.eventType, activeFlag: item.activeFlag, timeRule: item.timeRule ? { unitAmount: item.timeRule.unitAmount.toString(), durationMonths: item.timeRule.durationMonths, activeFlag: item.timeRule.activeFlag } : null })),
+    campaigns: records.campaigns.map((item) => ({
+      id: item.id, eventCodeId: item.eventCodeId, campaignName: item.campaignName,
+      startDate: item.startDate?.toISOString().slice(0, 10) ?? null,
+      endDate: item.endDate?.toISOString().slice(0, 10) ?? null,
+      activeFlag: item.activeFlag
+    })),
     transactions: statement.transactions.map((transaction) => ({
       id: transaction.id,
       rowNo: transaction.rowNo ?? 0,
@@ -120,6 +126,7 @@ export async function getEditIncomeDetail(statementId: string) {
       suffixCode: transaction.suffixCode,
       suggestedEventCodeId: transaction.suggestedEventCodeId,
       eventCodeId: transaction.eventCodeId,
+      eventCampaignId: transaction.eventCampaignId,
       baseAmount: transaction.baseAmount ? decimalToString(transaction.baseAmount) : null,
       remark: transaction.remark,
       sourceType: transaction.sourceType,

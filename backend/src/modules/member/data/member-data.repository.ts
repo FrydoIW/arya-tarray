@@ -6,6 +6,7 @@ import { recordMemberIdentityHistory } from "../member-identity/member-identity-
 import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInput } from "./member-data.schema.js";
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
 import { canonicalMemberDonationWhere, officialDonationTransactionWhere } from "../member-donation.rules.js";
+import { synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
 
 export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string; search?: string };
 
@@ -121,6 +122,24 @@ export function findMemberDetail(memberId: string) {
   } });
 }
 
+export function loadMemberSponsorship(memberId: string) {
+  return prisma.$transaction(async tx => {
+    const [member, subscriptions, pending, eventOptions] = await Promise.all([
+      tx.member.findUnique({ where: { id: memberId }, select: { id: true } }),
+      tx.memberEventSubscription.findMany({ where: { memberId }, include: {
+        eventCode: { select: { id: true, code: true, eventName: true, eventType: true } },
+        coverages: { include: { bankTransaction: { select: { id: true, transactionDate: true, referenceNo: true, originalAmount: true, baseAmount: true } } }, orderBy: [{ coverageFrom: "desc" }, { id: "desc" }] }
+      }, orderBy: [{ activeFlag: "desc" }, { validUntil: "asc" }, { id: "asc" }] }),
+      tx.bankTransaction.findMany({ where: { status: "FINALIZED", reconciliationExcludedAt: null, originalAmount: { gt: 0 }, eventCode: { is: { eventType: "TIME_BASED" } }, memberIdentity: { is: { memberId, verificationStatus: "VERIFIED" } }, memberEventCoverages: { none: { coverageStatus: "ACTIVE" } } }, select: {
+        id: true, transactionDate: true, referenceNo: true, originalAmount: true, baseAmount: true,
+        eventCode: { select: { id: true, code: true, eventName: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }
+      }, orderBy: [{ transactionDate: "desc" }, { id: "desc" }] }),
+      tx.eventCode.findMany({ where: { eventType: "TIME_BASED", activeFlag: true }, select: { id: true, code: true, eventName: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] })
+    ]);
+    return { member, subscriptions, pending, eventOptions };
+  });
+}
+
 export async function loadIdentityHistory(memberId: string, requestedPage: number, pageSize: number) {
   const member = await prisma.member.findUnique({ where: { id: memberId }, select: { id: true } });
   if (!member) return { member: null, rows: [], total: 0, page: 1 };
@@ -210,6 +229,7 @@ export function attachIdentity(memberId: string, identityId: string, userId: str
       memberIdentityId: identityId, action: "ATTACH", before: identity,
       after: { memberId, verificationStatus: "VERIFIED" }, actionById: userId, actionAt: now
     });
+    await synchronizePendingTimeBasedForMember(tx, memberId, userId);
   });
 }
 
@@ -229,6 +249,7 @@ export function moveIdentity(sourceMemberId: string, identityId: string, destina
       memberIdentityId: identityId, action: "MOVE", before: identity,
       after: { memberId: destinationMemberId, verificationStatus: "VERIFIED" }, reason, actionById: userId, actionAt: now
     });
+    await synchronizePendingTimeBasedForMember(tx, destinationMemberId, userId);
   });
 }
 

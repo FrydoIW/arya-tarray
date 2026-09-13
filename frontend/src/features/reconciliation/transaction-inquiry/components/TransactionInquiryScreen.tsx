@@ -40,6 +40,7 @@ export function TransactionInquiryScreen() {
         status={inquiry.status}
         bankAccountId={inquiry.bankAccountId}
         finalEventId={inquiry.finalEventId}
+        eventCampaignId={inquiry.eventCampaignId}
         memberId={inquiry.memberId}
         memberLinkStatus={inquiry.memberLinkStatus}
         memberSearch={inquiry.memberSearch}
@@ -48,6 +49,7 @@ export function TransactionInquiryScreen() {
         memberOptionsLoading={inquiry.memberOptionsLoading}
         canViewMemberData={canViewMemberData}
         eventOptions={inquiry.workspace.eventOptions}
+        campaignOptions={inquiry.workspace.campaignOptions}
         page={inquiry.page}
         pageSize={inquiry.pageSize}
         total={inquiry.workspace.pagination.total}
@@ -58,6 +60,7 @@ export function TransactionInquiryScreen() {
         onStatusChange={inquiry.changeStatus}
         onBankAccountChange={inquiry.changeBankAccount}
         onFinalEventChange={inquiry.changeFinalEvent}
+        onCampaignChange={inquiry.changeCampaign}
         onMemberSearchChange={inquiry.setMemberSearch}
         onMemberOptionsRequest={inquiry.requestMemberOptions}
         onMemberChange={inquiry.changeMember}
@@ -76,10 +79,12 @@ export function TransactionInquiryScreen() {
         status={inquiry.status}
         bankAccountId={inquiry.bankAccountId}
         finalEventId={inquiry.finalEventId}
+        eventCampaignId={inquiry.eventCampaignId}
         member={inquiry.selectedMember}
         memberLinkStatus={inquiry.memberLinkStatus}
         bankAccounts={inquiry.workspace.bankAccounts}
         eventOptions={inquiry.workspace.eventOptions}
+        campaignOptions={inquiry.workspace.campaignOptions}
         loading={inquiry.reportLoading}
         onClose={() => setReportOpen(false)}
         onGenerate={inquiry.generateReport}

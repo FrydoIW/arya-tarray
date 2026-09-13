@@ -57,6 +57,7 @@ function mapTransaction(transaction: CurrentTransaction) {
     suffixCode: transaction.suffixCode,
     suggestedEventCodeId: transaction.suggestedEventCodeId,
     eventCodeId: transaction.eventCodeId,
+    eventCampaignId: transaction.eventCampaignId,
     baseAmount: decimalToString(transaction.baseAmount),
     remark: transaction.remark,
     requiresClassification: storedTransactionRequiresClassification(transaction)
@@ -72,7 +73,7 @@ function mapSummary(rawStatements: RawSummaryRecords) {
     totalTransactions += statement.transactions.length;
     let statementNeedsReview = 0;
     for (const transaction of statement.transactions) {
-      if (storedTransactionRequiresClassification(transaction) && !transaction.eventCodeId) {
+      if (storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))) {
         statementNeedsReview += 1;
       }
     }
@@ -94,7 +95,7 @@ function mapWorkspace(records: WorkspaceRecords) {
     summary: mapSummary(records.rawStatements),
     drafts: records.rawStatements.map((draft) => {
       const needsReview = draft.transactions.filter((transaction) =>
-        storedTransactionRequiresClassification(transaction) && !transaction.eventCodeId
+        storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))
       ).length;
       return {
         id: draft.id,
@@ -133,7 +134,17 @@ function mapWorkspace(records: WorkspaceRecords) {
     eventCodes: records.activeEventCodes.map((eventCode) => ({
       id: eventCode.id,
       code: eventCode.code,
-      eventName: eventCode.eventName
+      eventName: eventCode.eventName,
+      eventType: eventCode.eventType,
+      timeRule: eventCode.timeRule ? { unitAmount: eventCode.timeRule.unitAmount.toString(), durationMonths: eventCode.timeRule.durationMonths, activeFlag: eventCode.timeRule.activeFlag } : null
+    })),
+    campaigns: records.campaigns.map((campaign) => ({
+      id: campaign.id,
+      eventCodeId: campaign.eventCodeId,
+      campaignName: campaign.campaignName,
+      startDate: campaign.startDate?.toISOString().slice(0, 10) ?? null,
+      endDate: campaign.endDate?.toISOString().slice(0, 10) ?? null,
+      activeFlag: campaign.activeFlag
     })),
     bankAccounts: records.bankAccounts.map((account) => ({
       id: account.id,
@@ -279,6 +290,7 @@ export async function updateFinalEvent(
     statementId,
     transactionId,
     eventCodeId: input.eventCodeId,
+    eventCampaignId: input.eventCampaignId,
     remark: input.remark,
     userId
   });

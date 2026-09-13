@@ -1,11 +1,14 @@
 import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
+import { memberTransaction } from "../member-identity/member-transaction.js";
+import { manuallyAllocateTimeBasedPayment } from "../time-based/member-time-based.service.js";
+import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { deriveAge } from "./member-data.domain.js";
 import { aggregateCategories, centsToDecimal } from "./member-donation.domain.js";
 import * as repository from "./member-data.repository.js";
-import type { IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput } from "./member-data.schema.js";
+import type { IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput, OpeningCoverageInput, SubscriptionCreateInput, SubscriptionUpdateInput } from "./member-data.schema.js";
 
 const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 function listMember(row: Awaited<ReturnType<typeof repository.workspaceRecords>>["rows"][number]) {
@@ -53,6 +56,71 @@ export async function getDetail(memberId: string) {
   const { id, birthDate, identities, ...member } = row;
   return { ...member, memberId: id, birthDate: dateOnly(birthDate), age: deriveAge(birthDate, currentBusinessDayValue()),
     identities: identities.map(({ id: identityId, _count, ...identity }) => ({ ...identity, memberIdentityId: identityId, transactionCount: _count.transactions })) };
+}
+
+function sponsorshipStatus(item: { activeFlag: boolean; startDate: Date | null; validUntil: Date | null }) {
+  const today = currentBusinessDayValue();
+  if (!item.activeFlag) return "INACTIVE";
+  if (item.startDate && dateOnly(item.startDate)! > today) return "SCHEDULED";
+  if (item.validUntil && dateOnly(item.validUntil)! < today) return "EXPIRED";
+  return "ACTIVE";
+}
+
+export async function getSponsorship(memberId: string) {
+  const result = await repository.loadMemberSponsorship(memberId);
+  if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
+  const subscriptions = result.subscriptions.map(item => ({
+    subscriptionId: item.id, event: { eventCodeId: item.eventCode.id, code: item.eventCode.code, eventName: item.eventCode.eventName }, referenceNo: item.referenceNo,
+    displayName: item.displayName, startDate: dateOnly(item.startDate), validUntil: dateOnly(item.validUntil), activeFlag: item.activeFlag, remark: item.remark,
+    status: sponsorshipStatus(item), coverage: item.coverages.map(coverage => ({ coverageId: coverage.id, source: coverage.coverageSource, status: coverage.coverageStatus,
+      transactionId: coverage.bankTransactionId, transactionDate: dateOnly(coverage.bankTransaction?.transactionDate ?? null), referenceNo: coverage.bankTransaction?.referenceNo ?? null,
+      amountApplied: coverage.amountApplied?.toString() ?? null, unitAmount: coverage.unitAmountSnapshot?.toString() ?? null,
+      durationMonths: coverage.durationMonthsSnapshot, grantedUnits: coverage.grantedUnits, coverageFrom: dateOnly(coverage.coverageFrom), coverageTo: dateOnly(coverage.coverageTo),
+      remark: coverage.remark, voidReason: coverage.voidReason }))
+  }));
+  return { subscriptions, eventOptions: result.eventOptions.map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })), pendingPayments: result.pending.map(payment => {
+    let estimate: ReturnType<typeof resolveTimeBasedUnits> = null; let reason = "No active subscription for this Event Code";
+    try { estimate = resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true }); }
+    catch (caught) { reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; }
+    const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === payment.eventCode?.id && subscription.activeFlag);
+    if (matching.length > 1) reason = "Multiple active subscriptions — choose one";
+    return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
+  }) };
+}
+
+export async function createSubscription(memberId: string, input: SubscriptionCreateInput, userId: string) {
+  await memberTransaction(async tx => {
+    const [member, event] = await Promise.all([tx.member.findUnique({ where: { id: memberId }, select: { activeFlag: true } }), tx.eventCode.findUnique({ where: { id: input.eventCodeId }, select: { eventType: true, activeFlag: true } })]);
+    if (!member?.activeFlag) throw new HttpError(400, "Active Member is required for a sponsorship subscription");
+    if (!event || event.eventType !== "TIME_BASED" || !event.activeFlag) throw new HttpError(400, "Choose an active TIME_BASED Event Code");
+    await tx.memberEventSubscription.create({ data: { memberId, eventCodeId: input.eventCodeId, referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, createdById: userId, updatedById: userId } });
+  });
+  return getSponsorship(memberId);
+}
+
+export async function updateSubscription(memberId: string, subscriptionId: string, input: SubscriptionUpdateInput, userId: string) {
+  await memberTransaction(async tx => {
+    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { memberId: true } });
+    if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
+    await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, updatedById: userId } });
+  });
+  return getSponsorship(memberId);
+}
+
+export async function allocateSubscription(memberId: string, subscriptionId: string, transactionId: string, userId: string) {
+  await memberTransaction(tx => manuallyAllocateTimeBasedPayment(tx, { memberId, subscriptionId, transactionId, userId }));
+  return getSponsorship(memberId);
+}
+
+export async function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
+  await memberTransaction(async tx => {
+    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true, validUntil: true } });
+    if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
+    const from = new Date(`${input.coverageFrom}T00:00:00.000Z`); const to = new Date(`${input.coverageTo}T00:00:00.000Z`);
+    await tx.memberEventCoverage.create({ data: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE", coverageFrom: from, coverageTo: to, remark: input.remark, createdById: userId } });
+    if (!sub.validUntil || sub.validUntil < to) await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { validUntil: to, updatedById: userId } });
+  });
+  return getSponsorship(memberId);
 }
 
 export async function getIdentityHistory(memberId: string, query: IdentityHistoryQuery) {

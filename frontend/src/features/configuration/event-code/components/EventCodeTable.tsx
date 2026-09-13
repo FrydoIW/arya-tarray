@@ -85,6 +85,20 @@ export function EventCodeTable({
       placeholder: "e.g. RUPANG"
     },
     {
+      key: "eventType",
+      header: "Type",
+      minWidth: "150px",
+      editable: mode === "EDIT",
+      render: (row) => row.eventType.replace("_", " "),
+      renderEditor: ({ value, onChange }) => (
+        <select value={String(value ?? "STANDARD")} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+          <option value="STANDARD">Standard</option>
+          <option value="CAMPAIGN">Campaign</option>
+          <option value="TIME_BASED">Time Based</option>
+        </select>
+      )
+    },
+    {
       key: "description",
       header: "Description",
       minWidth: "380px",

@@ -83,6 +83,25 @@ export function DashboardScreen() {
         />
       </section>
 
+      <section className="ui-card dashboard-panel dashboard-campaigns" aria-label="Campaign monitoring">
+        <div className="dashboard-panel-header"><div><h2>Campaign monitoring</h2><p>Official finalized incoming funds across active and upcoming Campaigns</p></div></div>
+        {data?.campaigns?.length ? <div className="dashboard-campaign-grid">{data.campaigns.map((campaign) => <div className="dashboard-campaign-item" key={campaign.id}>
+          <div><strong>{campaign.campaignName}</strong><span>{campaign.eventCode.code} · {campaign.eventCode.eventName}</span></div>
+          <div className="dashboard-campaign-amount">Rp{Number(campaign.collectedAmount).toLocaleString("id-ID")}{campaign.targetAmount ? ` / Rp${Number(campaign.targetAmount).toLocaleString("id-ID")}` : ""}</div>
+          {campaign.targetAmount && <><div className="dashboard-campaign-track"><span style={{ width: `${Math.min(100, Math.max(0, campaign.progressPercent ?? 0))}%` }} /></div><small>{Math.round(campaign.progressPercent ?? 0)}%{campaign.targetReached ? " · Target reached" : ""}</small></>}
+          <small>{campaign.displayStatus === "SCHEDULED" ? "Scheduled" : "Active"}{campaign.startDate || campaign.endDate ? ` · ${campaign.startDate ?? "Anytime"} – ${campaign.endDate ?? "Open"}` : ""}</small>
+        </div>)}</div> : <p className="dashboard-campaign-empty">No active Campaigns yet.</p>}
+      </section>
+
+      <section className="ui-card dashboard-panel" aria-label="Rupang sponsorship monitoring">
+        <div className="dashboard-panel-header"><div><h2>Rupang sponsorship</h2><p>Current Time-Based coverage across all programs</p></div></div>
+        <div className="dashboard-member-metrics">
+          <div className="metric-card"><span>Active subscriptions</span><strong>{(data?.sponsorshipSummary?.activeSubscriptions ?? 0).toLocaleString("id-ID")}</strong><small>Currently valid</small></div>
+          <div className="metric-card"><span>Expiring soon</span><strong>{(data?.sponsorshipSummary?.expiringSoon ?? 0).toLocaleString("id-ID")}</strong><small>Within 30 calendar days</small></div>
+          <div className="metric-card"><span>Expired</span><strong>{(data?.sponsorshipSummary?.expiredSubscriptions ?? 0).toLocaleString("id-ID")}</strong><small>Active records past validity</small></div>
+        </div>
+      </section>
+
       <MemberDashboardSection
         data={data}
         loading={loading && !data}

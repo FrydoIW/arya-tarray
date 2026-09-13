@@ -47,6 +47,18 @@ export function TransactionPreview({ items, totalTransactions }: TransactionPrev
         : "—"
     },
     {
+      key: "campaign",
+      header: "Campaign",
+      minWidth: "180px",
+      render: (row) => row.campaign?.campaignName ?? "—"
+    },
+    {
+      key: "sponsorship",
+      header: "Rupang",
+      minWidth: "175px",
+      render: (row) => row.sponsorship ? <div className={styles.eventCell}><strong>+{row.sponsorship.grantedMonths} months</strong><small>{formatMoney(row.sponsorship.unitAmount)} = {row.sponsorship.durationMonths} month</small></div> : "—"
+    },
+    {
       key: "status",
       header: "Status",
       width: "120px",

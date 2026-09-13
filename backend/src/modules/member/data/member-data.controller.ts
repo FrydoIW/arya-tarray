@@ -42,3 +42,16 @@ export async function donations(req: Request, res: Response) {
   const { memberId } = schema.memberDataParamsSchema.parse(req.params);
   res.json(await service.getDonations(memberId, schema.memberDonationQuerySchema.parse(req.query)));
 }
+export async function sponsorship(req: Request, res: Response) { res.json(await service.getSponsorship(schema.memberDataParamsSchema.parse(req.params).memberId)); }
+export async function createSubscription(req: Request, res: Response) {
+  const { memberId } = schema.memberDataParamsSchema.parse(req.params); res.json(await service.createSubscription(memberId, schema.subscriptionCreateSchema.parse(req.body), req.auth!.userId));
+}
+export async function updateSubscription(req: Request, res: Response) {
+  const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params); res.json(await service.updateSubscription(memberId, subscriptionId, schema.subscriptionUpdateSchema.parse(req.body), req.auth!.userId));
+}
+export async function allocateSubscription(req: Request, res: Response) {
+  const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params); res.json(await service.allocateSubscription(memberId, subscriptionId, schema.allocationSchema.parse(req.body).transactionId, req.auth!.userId));
+}
+export async function openingCoverage(req: Request, res: Response) {
+  const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params); res.json(await service.addOpeningCoverage(memberId, subscriptionId, schema.openingCoverageSchema.parse(req.body), req.auth!.userId));
+}

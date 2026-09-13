@@ -32,9 +32,10 @@ export function requiresEventClassification(transaction: DraftTransaction) {
   return transaction.requiresClassification;
 }
 
-export function getDraftRowStatus(transaction: DraftTransaction): DraftRowStatus {
+export function getDraftRowStatus(transaction: DraftTransaction, eventCodes: EventCodeOption[] = []): DraftRowStatus {
   if (!requiresEventClassification(transaction)) return "NOT_APPLICABLE";
   if (!transaction.eventCodeId) return "NEEDS_REVIEW";
+  if (getEventCode(eventCodes, transaction.eventCodeId)?.eventType === "CAMPAIGN" && !transaction.eventCampaignId) return "NEEDS_REVIEW";
   if (transaction.suggestedEventCodeId && transaction.eventCodeId === transaction.suggestedEventCodeId) {
     return "MATCHED";
   }

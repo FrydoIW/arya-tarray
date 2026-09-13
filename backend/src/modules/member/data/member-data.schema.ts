@@ -62,8 +62,28 @@ export const identityHistoryQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(25)
 });
 
+const sponsorshipDate = z.string().refine(isValidPeriodDate, "Date must use YYYY-MM-DD format").nullable();
+export const subscriptionCreateSchema = z.object({
+  eventCodeId: z.string().uuid(), referenceNo: z.string().trim().max(100).nullable(), displayName: z.string().trim().max(200).nullable(),
+  startDate: sponsorshipDate, activeFlag: z.boolean().default(true), remark: z.string().trim().max(1000).nullable()
+});
+export const subscriptionUpdateSchema = z.object({
+  referenceNo: z.string().trim().max(100).nullable(), displayName: z.string().trim().max(200).nullable(),
+  startDate: sponsorshipDate, activeFlag: z.boolean(), remark: z.string().trim().max(1000).nullable()
+});
+export const subscriptionParamsSchema = z.object({ memberId: z.string().uuid(), subscriptionId: z.string().uuid() });
+export const allocationSchema = z.object({ transactionId: z.string().uuid() });
+export const openingCoverageSchema = z.object({
+  coverageFrom: z.string().refine(isValidPeriodDate, "Coverage start must use YYYY-MM-DD format"),
+  coverageTo: z.string().refine(isValidPeriodDate, "Coverage end must use YYYY-MM-DD format"),
+  remark: z.string().trim().min(3, "Opening coverage remark is required").max(1000)
+}).refine(value => value.coverageFrom <= value.coverageTo, { path: ["coverageTo"], message: "Coverage end must not precede start" });
+
 export type MemberDataWorkspaceQuery = z.infer<typeof memberDataWorkspaceQuerySchema>;
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 export type IdentityMetadataInput = z.infer<typeof identityMetadataSchema>;
 export type MemberDonationQuery = z.infer<typeof memberDonationQuerySchema>;
 export type IdentityHistoryQuery = z.infer<typeof identityHistoryQuerySchema>;
+export type SubscriptionCreateInput = z.infer<typeof subscriptionCreateSchema>;
+export type SubscriptionUpdateInput = z.infer<typeof subscriptionUpdateSchema>;
+export type OpeningCoverageInput = z.infer<typeof openingCoverageSchema>;

@@ -6,6 +6,7 @@ import {
   loadDashboardMemberRecords,
   loadDashboardPeriodSummary,
   loadDashboardRecentActivityCandidates,
+  loadDashboardTimeBasedSummary,
   loadDashboardTrendMonth,
   loadDashboardViewer,
   loadTopFinalEvents,
@@ -13,6 +14,7 @@ import {
 } from "./dashboard.repository.js";
 import type { DashboardWorkspaceQuery } from "./dashboard.schema.js";
 import { isRegistrationFollowUpIdentity, summarizeDashboardMemberDonations } from "./dashboard-member.domain.js";
+import { getCampaignSummaries } from "../../configuration/event-code/event-campaign.service.js";
 
 const TREND_MONTHS = 6;
 const RECENT_ACTIVITY_LIMIT = 6;
@@ -87,7 +89,7 @@ function summarizeTransactionStatus(records: Awaited<ReturnType<typeof loadDashb
   const pendingApproval = statusCount(records.transactionStatusGroups, "CHECK");
   const complete = statusCount(records.transactionStatusGroups, "FINALIZED");
   const needsReview = records.rawTransactions.filter((transaction) =>
-    storedTransactionRequiresClassification(transaction) && !transaction.eventCodeId
+    storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))
   ).length;
   const draft = Math.max(0, raw - needsReview);
 
@@ -184,7 +186,9 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     : monthRange(previousMonth);
   const trendMonths = Array.from({ length: TREND_MONTHS }, (_, index) => shiftMonth(period.month, index - (TREND_MONTHS - 1)));
 
-  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords] = await Promise.all([
+  const today = new Date(`${currentBusinessDayValue()}T00:00:00.000Z`);
+  const expiringUntil = new Date(today); expiringUntil.setUTCDate(expiringUntil.getUTCDate() + 30);
+  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords, campaigns, sponsorshipSummary] = await Promise.all([
     loadDashboardViewer(userId),
     loadDashboardPeriodSummary(currentRange),
     loadDashboardPeriodSummary(previousRange),
@@ -194,7 +198,9 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     }))),
     loadTopFinalEvents(currentRange),
     loadDashboardRecentActivityCandidates(),
-    loadDashboardMemberRecords(currentRange)
+    loadDashboardMemberRecords(currentRange),
+    getCampaignSummaries({ dashboard: true }),
+    loadDashboardTimeBasedSummary(today, expiringUntil)
   ]);
 
   if (!viewer) throw new HttpError(401, "Current user is no longer available");
@@ -275,6 +281,7 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
         changePercent: numberChange(current.completeTransactions, previous.completeTransactions)
       }
     },
+    sponsorshipSummary,
     trend: trendRecords.map(({ month: trendMonth, record }) => ({
       month: trendMonth,
       label: monthLabel(trendMonth),
@@ -321,6 +328,7 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
       }))
     },
     recentActivities: mapRecentActivities(recentCandidates),
+    campaigns: campaigns.filter((campaign) => campaign.displayStatus === "ACTIVE" || campaign.displayStatus === "SCHEDULED").slice(0, 6),
     lastUpdatedAt: new Date()
   };
 }

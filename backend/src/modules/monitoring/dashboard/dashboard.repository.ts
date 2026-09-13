@@ -70,7 +70,9 @@ export async function loadDashboardPeriodSummary(range: DashboardPeriodRange) {
       select: {
         transactionType: true,
         originalAmount: true,
-        eventCodeId: true
+        eventCodeId: true,
+        eventCampaignId: true,
+        eventCode: { select: { eventType: true } }
       }
     })
   ]);
@@ -215,6 +217,16 @@ export function loadDashboardViewer(userId: string) {
     where: { id: userId },
     select: { id: true, fullName: true, email: true }
   });
+}
+
+export async function loadDashboardTimeBasedSummary(today: Date, expiringUntil: Date) {
+  const base = { activeFlag: true } as const;
+  const [activeSubscriptions, expiringSoon, expiredSubscriptions] = await Promise.all([
+    prisma.memberEventSubscription.count({ where: { ...base, AND: [{ OR: [{ startDate: null }, { startDate: { lte: today } }] }, { OR: [{ validUntil: null }, { validUntil: { gte: today } }] }] } }),
+    prisma.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today, lte: expiringUntil }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
+    prisma.memberEventSubscription.count({ where: { ...base, validUntil: { lt: today } } })
+  ]);
+  return { activeSubscriptions, expiringSoon, expiredSubscriptions };
 }
 
 const officialMemberDonationWhere = (range: DashboardPeriodRange): Prisma.BankTransactionWhereInput => ({

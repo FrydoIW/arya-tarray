@@ -43,6 +43,13 @@
 .eyebrow { color: #5f7fa2; }
 .tabs button span { background: #f1f5f9; }
 .audit { background: #f9fafb; }
+.sponsorshipStack { display: grid; gap: 12px; padding: 16px; }
+.sponsorshipCard, .pendingPayments { overflow: hidden; border: 1px solid #e4e9f0; border-radius: 10px; background: #fff; }
+.sponsorshipCard header { display: flex; justify-content: space-between; gap: 12px; padding: 13px 15px; background: #f9fafb; border-bottom: 1px solid #eef1f5; }.sponsorshipCard header div, .coverageList div, .pendingPayments > div > div { display: grid; gap: 3px; }.sponsorshipCard header small, .coverageList small, .pendingPayments small { color: var(--muted); font-size: 11px; }.sponsorshipCard header > span { align-self: start; padding: 3px 7px; border-radius: 999px; background: #edf5fd; color: #3973a8; font-size: 10px; font-weight: 800; }
+.sponsorshipMeta { display: flex; flex-wrap: wrap; gap: 18px; padding: 11px 15px; color: var(--muted); font-size: 11px; }.sponsorshipMeta b { color: var(--ink); margin-left: 4px; }.sponsorshipCard .compactActions { padding: 0 11px 8px; }
+.coverageList { display: grid; border-top: 1px solid #eef1f5; }.coverageList > div { grid-template-columns: minmax(120px, 1fr) minmax(160px, 1fr) minmax(150px, 1fr); gap: 10px; padding: 10px 15px; border-bottom: 1px solid #eef1f5; font-size: 11px; }.coverageList > div:last-child { border-bottom: 0; }.coverageList > small { padding: 12px 15px; color: var(--muted); }
+.pendingPayments { padding: 14px 15px; }.pendingPayments h3 { margin: 0 0 9px; font-size: 13px; }.pendingPayments > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #eef1f5; }.pendingPayments em { color: #8b5b18; font-size: 11px; font-style: normal; }.pendingPayments select { min-width: 150px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; font: inherit; font-size: 11px; }
+@media (max-width: 720px) { .coverageList > div { grid-template-columns: 1fr; gap: 4px; }.pendingPayments > div { align-items: stretch; flex-direction: column; }.pendingPayments select { width: 100%; } }
 .toggle, .confirm { background: #f9fafb; }
 .evidence { border-left-color: #8ab6e8; background: #f8fbff; }
 .donationToolbar { padding: 15px 17px; border-color: #e4e9f0; border-radius: 11px; background: #fff; }

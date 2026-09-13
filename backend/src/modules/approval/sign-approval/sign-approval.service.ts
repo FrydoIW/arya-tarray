@@ -1,4 +1,5 @@
 import { HttpError } from "../../../lib/http.js";
+import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import type { ApproveDecisionInput, RejectDecisionInput } from "./sign-approval.schema.js";
 import {
   decideSignApprovalAtomic,
@@ -156,6 +157,8 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
         } : null,
         beforeEvent: item.beforeEventCode,
         proposedEvent: item.proposedEventCode,
+        beforeCampaign: item.beforeEventCampaign,
+        proposedCampaign: item.proposedEventCampaign,
         beforeRemark: item.beforeRemark,
         proposedRemark: item.proposedRemark,
         correctionReason: item.correctionReason,
@@ -191,6 +194,8 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
             eventName: transaction.eventCode.eventName
           }
         : null,
+      campaign: transaction.eventCampaign,
+      sponsorship: (() => { try { const units = resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true }); return units ? { unitAmount: units.unitAmount, durationMonths: units.durationMonths, grantedMonths: units.durationMonths * units.grantedUnits } : null; } catch { return null; } })(),
       status: transaction.status
     })),
     history: approval.history.map((item) => ({

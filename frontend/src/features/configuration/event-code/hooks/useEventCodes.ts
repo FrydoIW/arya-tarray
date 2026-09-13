@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
+import { EVENT_TYPES } from "@/lib/event-type";
 import { executeEventCodeChanges, getEventCodes } from "../api/event-code.api";
 import type { EventCode, EventCodeInput, EventCodeMode, EventCodeStatusFilter } from "../types";
 
@@ -10,6 +11,7 @@ function normalizeInput(item: EventCode): EventCodeInput {
     code: item.code.trim(),
     eventName: item.eventName.trim(),
     category: item.category?.trim() || null,
+    eventType: item.eventType,
     description: item.description?.trim() || null,
     activeFlag: item.activeFlag
   };
@@ -19,6 +21,7 @@ function sameInput(a: EventCodeInput, b: EventCodeInput) {
   return a.code === b.code
     && a.eventName === b.eventName
     && a.category === b.category
+    && a.eventType === b.eventType
     && a.description === b.description
     && a.activeFlag === b.activeFlag;
 }
@@ -138,6 +141,7 @@ export function useEventCodes() {
       if (field === "code") return { ...item, code: String(value).replace(/\D/g, "").slice(0, 3) };
       if (field === "eventName") return { ...item, eventName: String(value) };
       if (field === "category") return { ...item, category: String(value).slice(0, 50) };
+      if (field === "eventType" && EVENT_TYPES.some((type) => type === value)) return { ...item, eventType: value as EventCode["eventType"] };
       if (field === "description") return { ...item, description: String(value) };
       if (field === "activeFlag") return { ...item, activeFlag: Boolean(value) };
       return item;
@@ -155,6 +159,7 @@ export function useEventCodes() {
         code: "",
         eventName: "",
         category: "",
+        eventType: "STANDARD",
         description: "",
         activeFlag: true,
         updatedBy: null,
@@ -179,6 +184,7 @@ export function useEventCodes() {
     const drafts: EventCode[] = inputs.map((input) => ({
       id: `draft-${crypto.randomUUID()}`,
       ...input,
+      eventType: input.eventType ?? "STANDARD",
       updatedBy: null,
       isDraft: true
     }));
