@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, LayoutGrid, LogOut, Menu } from "lucide-react";
+import { ChevronRight, LayoutGrid, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { User } from "@/features/auth/types";
 import { getNavigationTitle } from "@/config/navigation";
 
@@ -8,6 +8,8 @@ interface TopbarProps {
   pathname: string;
   user: User;
   menuOpen: boolean;
+  sidebarCollapsed: boolean;
+  onSidebarToggle: () => void;
   onMenuOpen: () => void;
   onLogout: () => void;
 }
@@ -21,11 +23,30 @@ function initials(name: string) {
     .join("") || "AT";
 }
 
-export function Topbar({ pathname, user, menuOpen, onMenuOpen, onLogout }: TopbarProps) {
+export function Topbar({
+  pathname,
+  user,
+  menuOpen,
+  sidebarCollapsed,
+  onSidebarToggle,
+  onMenuOpen,
+  onLogout
+}: TopbarProps) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
         <div className="topbar-leading">
+          <button
+            className="icon-button desktop-sidebar-toggle"
+            type="button"
+            onClick={onSidebarToggle}
+            aria-label={sidebarCollapsed ? "Perluas sidebar" : "Perkecil sidebar"}
+            title={sidebarCollapsed ? "Perluas sidebar" : "Perkecil sidebar"}
+            aria-pressed={sidebarCollapsed}
+            aria-controls="app-sidebar"
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+          </button>
           <button
             className="mobile-menu-button"
             type="button"

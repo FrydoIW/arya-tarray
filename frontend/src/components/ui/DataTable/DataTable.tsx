@@ -65,8 +65,9 @@ export function DataTable<T>({
   const tableStyle: CSSProperties = minWidth ? { minWidth } : {};
 
   return (
-    <div className="ui-data-table-shell" aria-busy={loading}>
-      <div className="ui-data-table-scroll">
+    <div className="ui-data-table-shell">
+      <span className="ui-table-loading-status" role="status">{loading ? loadingText : ""}</span>
+      <div className="ui-data-table-scroll" tabIndex={0} role="region" aria-label={`${ariaLabel} — scroll area`} aria-busy={loading}>
         <table className="ui-data-table" style={tableStyle} aria-label={ariaLabel}>
           <thead>
             <tr>
@@ -84,7 +85,15 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={columns.length} className="ui-data-table-message"><span role="status" aria-live="polite">{loadingText}</span></td></tr>
+              Array.from({ length: Math.min(pagination?.pageSize ?? 5, 5) }, (_, index) => (
+                <tr key={`loading-${index}`} aria-hidden="true" className="ui-table-skeleton-row">
+                  {columns.map((column, columnIndex) => (
+                    <td key={column.key} className={columnClass(column)}>
+                      <span className="ui-table-skeleton" style={{ width: `${48 + ((index + columnIndex) % 3) * 16}%` }} />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="ui-data-table-empty-cell">

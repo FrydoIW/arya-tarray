@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, ShieldCheck, X } from "lucide-react";
+import { ChevronDown, ShieldCheck, X } from "lucide-react";
 import { navigation } from "@/config/navigation";
-import aryaLogo from "@/assets/brand/arya-lotus-sidebar.svg";
+import aryaLogo from "@/assets/brand/arya-buddha-white-gold.svg";
 
 interface SidebarProps {
   pathname: string;
@@ -22,7 +22,7 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
       <div className="brand-row">
         <div className="brand-mark" aria-hidden="true">
-          <Image src={aryaLogo} alt="" width={60} height={48} className="brand-mark-image" unoptimized priority />
+          <Image src={aryaLogo} alt="" width={184} height={188} className="brand-mark-image" unoptimized priority />
         </div>
 
         <div className="brand-copy">
@@ -45,15 +45,17 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
           const visibleChildren = group.children.filter((child) => !child.enabled || allowed.has(child.menuCode));
           if (visibleChildren.length === 0) return null;
           const expanded = expandedGroups[group.menuCode] ?? false;
+          const groupActive = visibleChildren.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
           const childrenId = `nav-group-${group.menuCode.toLowerCase().replaceAll("_", "-")}`;
 
           return (
-            <section className="nav-group" key={group.menuCode}>
+            <section className={`nav-group${groupActive ? " nav-group-current" : ""}`} key={group.menuCode}>
               <button
                 className="nav-group-label"
                 type="button"
                 aria-expanded={expanded}
                 aria-controls={childrenId}
+                title={group.label}
                 onClick={() => setExpandedGroups((current) => ({
                   ...current,
                   [group.menuCode]: !(current[group.menuCode] ?? false)
@@ -61,38 +63,38 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
               >
                 <GroupIcon size={17} aria-hidden="true" />
                 <span>{group.label}</span>
-                {expanded
-                  ? <ChevronUp size={14} aria-hidden="true" />
-                  : <ChevronDown size={14} aria-hidden="true" />}
+                <ChevronDown className="nav-group-chevron" size={14} aria-hidden="true" />
               </button>
 
-              <div className="nav-children" id={childrenId} hidden={!expanded}>
-                {visibleChildren.map((child) => {
-                  const ChildIcon = child.icon;
-                  const active = Boolean(child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
-
-                  return (
-                    <Link
-                      key={child.menuCode}
-                      href={child.href ?? "#"}
-                      aria-disabled={!child.enabled}
-                      aria-current={active ? "page" : undefined}
-                      tabIndex={child.enabled ? 0 : -1}
-                      onClick={(event) => {
-                        if (!child.enabled) {
-                          event.preventDefault();
-                          return;
-                        }
-                        onClose();
-                      }}
-                      className={`nav-child ${active ? "active" : ""} ${!child.enabled ? "nav-child-disabled" : ""}`}
-                      title={!child.enabled ? "Feature belum dibuka pada fase ini" : undefined}
-                    >
-                      <ChildIcon size={15} aria-hidden="true" />
-                      <span>{child.label}</span>
-                    </Link>
-                  );
-                })}
+              <div className="nav-children-reveal" data-expanded={expanded} inert={!expanded}>
+                <div className="nav-children" id={childrenId}>
+                  {visibleChildren.map((child) => {
+                    const ChildIcon = child.icon;
+                    const active = Boolean(child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
+  
+                    return (
+                      <Link
+                        key={child.menuCode}
+                        href={child.href ?? "#"}
+                        aria-disabled={!child.enabled}
+                        aria-current={active ? "page" : undefined}
+                        tabIndex={child.enabled ? 0 : -1}
+                        onClick={(event) => {
+                          if (!child.enabled) {
+                            event.preventDefault();
+                            return;
+                          }
+                          onClose();
+                        }}
+                        className={`nav-child ${active ? "active" : ""} ${!child.enabled ? "nav-child-disabled" : ""}`}
+                        title={!child.enabled ? `${child.label} · Feature belum dibuka pada fase ini` : child.label}
+                      >
+                        <ChildIcon size={15} aria-hidden="true" />
+                        <span>{child.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
             </section>
           );

@@ -20,6 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const prefetchedRoutes = useRef(new Set<string>());
 
   useEffect(() => {
@@ -95,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthSessionProvider user={user}>
-    <div className="app-shell">
+    <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <Sidebar
         pathname={pathname}
         mobileOpen={mobileOpen}
@@ -116,6 +117,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           pathname={pathname}
           user={user}
           menuOpen={mobileOpen}
+          sidebarCollapsed={sidebarCollapsed}
+          onSidebarToggle={() => setSidebarCollapsed((current) => !current)}
           onMenuOpen={() => setMobileOpen(true)}
           onLogout={logout}
         />

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import aryaLogo from "@/assets/brand/arya-lotus.svg";
+import aryaLogo from "@/assets/brand/arya-buddha-navy-gold.svg";
 import styles from "../styles/login.module.css";
 
 export function AryaBrand() {
@@ -10,9 +10,10 @@ export function AryaBrand() {
           <Image
             src={aryaLogo}
             alt=""
-            width={116}
-            height={92}
+            width={184}
+            height={188}
             className={styles.brandLogo}
+            unoptimized
             priority
           />
         </div>

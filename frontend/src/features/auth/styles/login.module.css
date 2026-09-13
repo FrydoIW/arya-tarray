@@ -58,8 +58,8 @@
 
 .brandLogo {
   display: block;
-  width: 76px;
-  height: 60.8px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
 }
 
@@ -474,8 +474,8 @@
   }
 
   .brandLogo {
-    width: 60px;
-    height: 48px;
+    width: 52px;
+    height: 52px;
   }
 
   .brandName {
