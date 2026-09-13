@@ -191,7 +191,8 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                   timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } }
                 }
               },
-              eventCampaign: { select: { id: true, campaignName: true } }
+              eventCampaign: { select: { id: true, campaignName: true } },
+              memberEventCoverages: { where: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" }, select: { unitAmountSnapshot: true, durationMonthsSnapshot: true, grantedUnits: true }, take: 1 }
             },
             orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }],
             take: 10

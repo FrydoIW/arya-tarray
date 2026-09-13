@@ -259,7 +259,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
           requireComplete: true
         });
         const event = requested.eventCodeId ? selectedEventById.get(requested.eventCodeId) ?? null : null;
-        resolveTimeBasedUnits({ eventCode: event, rule: event?.timeRule ?? null, transaction: { originalAmount: { toString: () => requested.amount }, baseAmount: { toString: () => requested.amount } }, requiresClassification: requested.direction === "INCOMING" });
+        if (event?.eventType === "TIME_BASED") throw new HttpError(400, "TIME_BASED Event Codes are not available for manual adjustments because they have no MemberIdentity for sponsorship allocation.");
         proposalItems.push({
           action: "ADDED",
           proposedEventCodeId: requested.eventCodeId,

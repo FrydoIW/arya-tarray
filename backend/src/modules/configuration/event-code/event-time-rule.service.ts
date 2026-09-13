@@ -22,6 +22,18 @@ export async function executeTimeRuleChange(input: TimeRuleExecuteInput, userId:
     const event = await tx.eventCode.findUnique({ where: { id: input.eventCodeId }, select: { id: true, eventType: true, activeFlag: true } });
     if (!event || event.eventType !== "TIME_BASED") throw new HttpError(400, "Time Rules require a TIME_BASED Event Code");
     if (!event.activeFlag) throw new HttpError(400, "Time Rule Event Code must be active");
+    const unresolved = await tx.bankTransaction.findFirst({
+      where: {
+        eventCodeId: event.id,
+        reconciliationExcludedAt: null,
+        OR: [
+          { status: "CHECK" },
+          { status: "FINALIZED", originalAmount: { gt: 0 }, memberEventCoverages: { none: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" } } }
+        ]
+      },
+      select: { id: true }
+    });
+    if (unresolved) throw new HttpError(409, "Resolve or allocate pending TIME_BASED payments before changing this Time Rule. Existing unresolved official or pending approval transactions have no protected rule snapshot.");
     await tx.eventTimeRule.upsert({
       where: { eventCodeId: input.eventCodeId },
       create: { eventCodeId: input.eventCodeId, unitAmount: new Prisma.Decimal(input.input.unitAmount), durationMonths: input.input.durationMonths, activeFlag: input.input.activeFlag, remark: input.input.remark, createdById: userId, updatedById: userId },

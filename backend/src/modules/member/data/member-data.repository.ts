@@ -6,7 +6,7 @@ import { recordMemberIdentityHistory } from "../member-identity/member-identity-
 import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInput } from "./member-data.schema.js";
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
 import { canonicalMemberDonationWhere, officialDonationTransactionWhere } from "../member-donation.rules.js";
-import { synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
+import { reconcileTimeBasedCoverageForIdentity, synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
 
 export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string; search?: string };
 
@@ -249,6 +249,8 @@ export function moveIdentity(sourceMemberId: string, identityId: string, destina
       memberIdentityId: identityId, action: "MOVE", before: identity,
       after: { memberId: destinationMemberId, verificationStatus: "VERIFIED" }, reason, actionById: userId, actionAt: now
     });
+    await reconcileTimeBasedCoverageForIdentity(tx, identityId, userId);
+    await synchronizePendingTimeBasedForMember(tx, sourceMemberId, userId);
     await synchronizePendingTimeBasedForMember(tx, destinationMemberId, userId);
   });
 }
@@ -267,6 +269,8 @@ export function detachIdentity(memberId: string, identityId: string, reason: str
       memberIdentityId: identityId, action: "DETACH", before: identity,
       after: { memberId: null, verificationStatus: "UNVERIFIED" }, reason, actionById: userId, actionAt: now
     });
+    await reconcileTimeBasedCoverageForIdentity(tx, identityId, userId);
+    await synchronizePendingTimeBasedForMember(tx, memberId, userId);
   });
 }
 

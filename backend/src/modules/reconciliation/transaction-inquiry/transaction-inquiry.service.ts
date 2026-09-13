@@ -184,10 +184,12 @@ export async function getTransactionInquiryDetail(transactionId: string) {
   const campaignLabels = new Map((await loadCampaignLabels(campaignIds)).map((item) => [item.id, item.campaignName]));
   const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
   let sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: Date; coverageTo: Date } | null } | null = null;
-  try {
+  const coverage = transaction.memberEventCoverages.find(item => item.subscription.memberId === member?.id) ?? null;
+  if (coverage?.unitAmountSnapshot && coverage.durationMonthsSnapshot && coverage.grantedUnits) {
+    sponsorship = { unitAmount: coverage.unitAmountSnapshot.toString(), durationMonths: coverage.durationMonthsSnapshot, grantedMonths: coverage.durationMonthsSnapshot * coverage.grantedUnits, allocation: { referenceNo: coverage.subscription.referenceNo, displayName: coverage.subscription.displayName, coverageFrom: coverage.coverageFrom, coverageTo: coverage.coverageTo } };
+  } else try {
     const units = resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
     if (units) {
-      const coverage = transaction.memberEventCoverages[0] ?? null;
       sponsorship = { unitAmount: units.unitAmount, durationMonths: units.durationMonths, grantedMonths: units.durationMonths * units.grantedUnits, allocation: coverage ? { referenceNo: coverage.subscription.referenceNo, displayName: coverage.subscription.displayName, coverageFrom: coverage.coverageFrom, coverageTo: coverage.coverageTo } : null };
     }
   } catch { sponsorship = null; }

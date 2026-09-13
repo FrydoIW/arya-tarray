@@ -222,7 +222,7 @@ export function loadDashboardViewer(userId: string) {
 export async function loadDashboardTimeBasedSummary(today: Date, expiringUntil: Date) {
   const base = { activeFlag: true } as const;
   const [activeSubscriptions, expiringSoon, expiredSubscriptions] = await Promise.all([
-    prisma.memberEventSubscription.count({ where: { ...base, AND: [{ OR: [{ startDate: null }, { startDate: { lte: today } }] }, { OR: [{ validUntil: null }, { validUntil: { gte: today } }] }] } }),
+    prisma.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
     prisma.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today, lte: expiringUntil }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
     prisma.memberEventSubscription.count({ where: { ...base, validUntil: { lt: today } } })
   ]);

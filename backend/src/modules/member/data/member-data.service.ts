@@ -2,7 +2,7 @@ import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib
 import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
-import { manuallyAllocateTimeBasedPayment } from "../time-based/member-time-based.service.js";
+import { manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { deriveAge } from "./member-data.domain.js";
@@ -79,11 +79,13 @@ export async function getSponsorship(memberId: string) {
       remark: coverage.remark, voidReason: coverage.voidReason }))
   }));
   return { subscriptions, eventOptions: result.eventOptions.map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })), pendingPayments: result.pending.map(payment => {
-    let estimate: ReturnType<typeof resolveTimeBasedUnits> = null; let reason = "No active subscription for this Event Code";
+    let estimate: ReturnType<typeof resolveTimeBasedUnits> = null;
     try { estimate = resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true }); }
-    catch (caught) { reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; }
+    catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, grantedUnits: null, durationMonths: null, reason }; }
     const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === payment.eventCode?.id && subscription.activeFlag);
-    if (matching.length > 1) reason = "Multiple active subscriptions — choose one";
+    const reason = matching.length === 0 ? "No active subscription for this Event Code"
+      : matching.length > 1 ? "Multiple active subscriptions — choose one"
+        : "Allocation pending synchronization";
     return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
   }) };
 }
@@ -94,6 +96,7 @@ export async function createSubscription(memberId: string, input: SubscriptionCr
     if (!member?.activeFlag) throw new HttpError(400, "Active Member is required for a sponsorship subscription");
     if (!event || event.eventType !== "TIME_BASED" || !event.activeFlag) throw new HttpError(400, "Choose an active TIME_BASED Event Code");
     await tx.memberEventSubscription.create({ data: { memberId, eventCodeId: input.eventCodeId, referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, createdById: userId, updatedById: userId } });
+    if (input.activeFlag) await synchronizePendingTimeBasedForMember(tx, memberId, userId, input.eventCodeId);
   });
   return getSponsorship(memberId);
 }
@@ -114,11 +117,11 @@ export async function allocateSubscription(memberId: string, subscriptionId: str
 
 export async function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
   await memberTransaction(async tx => {
-    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true, validUntil: true } });
+    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true } });
     if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
     const from = new Date(`${input.coverageFrom}T00:00:00.000Z`); const to = new Date(`${input.coverageTo}T00:00:00.000Z`);
     await tx.memberEventCoverage.create({ data: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE", coverageFrom: from, coverageTo: to, remark: input.remark, createdById: userId } });
-    if (!sub.validUntil || sub.validUntil < to) await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { validUntil: to, updatedById: userId } });
+    await rebuildTimeBasedSubscription(tx, subscriptionId, userId, "Coverage chain rebuilt after opening coverage was recorded");
   });
   return getSponsorship(memberId);
 }

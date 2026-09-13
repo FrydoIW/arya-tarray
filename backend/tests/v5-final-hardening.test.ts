@@ -14,7 +14,7 @@ test("Edit Income keeps historical inactive Event Codes readable but only permit
   assert.match(service, /activeFlag:\s*item\.activeFlag/);
   assert.match(component, /\(Inactive\)/);
   assert.match(component, /disabled=\{!eventCode\.activeFlag && eventCode\.id !== originalEventCodeId\}/);
-  assert.match(component, /eventCodes=\{detail\.eventCodes\.filter\(\(eventCode\) => eventCode\.activeFlag\)\}/);
+  assert.match(component, /eventCodes=\{detail\.eventCodes\.filter\(\(eventCode\) => eventCode\.activeFlag && eventCode\.eventType !== "TIME_BASED"\)\}/);
 });
 
 test("Transaction Inquiry exposes relevant inactive historical events and clamps server pagination", () => {

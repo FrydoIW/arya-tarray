@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { timeRuleValueSchema } from "../src/modules/configuration/event-code/event-time-rule.schema.js";
 import { resolveTimeBasedUnits } from "../src/modules/reconciliation/time-based-classification.js";
-import { addCalendarMonthsInclusive } from "../src/modules/member/time-based/member-time-based.service.js";
+import { addCalendarMonthsInclusive, historicalCoverageEntitlement, isCurrentTimeBasedAllocation, resolveCoverageStart } from "../src/modules/member/time-based/member-time-based.service.js";
 
 const event = { id: "rupang", eventType: "TIME_BASED" };
 const rule = { unitAmount: { toString: () => "50000.00" }, durationMonths: 1, activeFlag: true };
@@ -26,14 +26,37 @@ test("calendar coverage is inclusive and retains the day-of-month boundary", () 
   assert.equal(addCalendarMonthsInclusive(new Date("2026-01-31T00:00:00Z"), 1).toISOString().slice(0, 10), "2026-02-27");
 });
 
+test("expired subscription with an old start date restarts coverage at payment date", () => {
+  const startDate = new Date("2026-09-13T00:00:00Z");
+  const paymentDate = new Date("2027-03-10T00:00:00Z");
+  assert.equal(resolveCoverageStart({ latestCoverageTo: null, startDate, transactionDate: paymentDate }).toISOString().slice(0, 10), "2026-09-13");
+  assert.equal(resolveCoverageStart({ latestCoverageTo: new Date("2027-01-31T00:00:00Z"), startDate, transactionDate: paymentDate }).toISOString().slice(0, 10), "2027-03-10");
+  assert.equal(resolveCoverageStart({ latestCoverageTo: new Date("2027-03-31T00:00:00Z"), startDate, transactionDate: paymentDate }).toISOString().slice(0, 10), "2027-04-01");
+});
+
+test("identity move or detach invalidates an allocation owned by a different current Member", () => {
+  const allocation = { subscriptionMemberId: "member-a", subscriptionEventCodeId: "event-a", paymentEventCodeId: "event-a", verificationStatus: "VERIFIED" as const };
+  assert.equal(isCurrentTimeBasedAllocation({ ...allocation, paymentMemberId: "member-a" }), true);
+  assert.equal(isCurrentTimeBasedAllocation({ ...allocation, paymentMemberId: "member-b" }), false);
+  assert.equal(isCurrentTimeBasedAllocation({ ...allocation, paymentMemberId: null, verificationStatus: "UNVERIFIED" }), false);
+});
+
+test("historical coverage snapshot remains valid after the current rule changes", () => {
+  const oldSnapshot = historicalCoverageEntitlement({ eventCodeId: "event-a", subscriptionEventCodeId: "event-a", unitAmount: { toString: () => "50000.00" }, durationMonths: 1, grantedUnits: 4, amountApplied: { toString: () => "200000.00" } });
+  assert.deepEqual(oldSnapshot, { unitAmount: "50000.00", durationMonths: 1, grantedUnits: 4, amountApplied: "200000.00" });
+  assert.equal(historicalCoverageEntitlement({ eventCodeId: "event-b", subscriptionEventCodeId: "event-a", unitAmount: { toString: () => "50000.00" }, durationMonths: 1, grantedUnits: 4, amountApplied: { toString: () => "200000.00" } }), null);
+});
+
 test("coverage service preserves snapshots, starts from validity, and prevents duplicate active entitlement", () => {
   const source = readFileSync(new URL("../src/modules/member/time-based/member-time-based.service.ts", import.meta.url), "utf8");
-  assert.match(source, /if \(validUntil[\s\S]*>=.*transactionDate.*\) return addDays\(validUntil, 1\)/);
-  assert.match(source, /if \(sameOfficialEvent && !options\?\.recalculate\) return/);
+  assert.match(source, /if \(sameOfficialAllocation && !options\?\.recalculate\) return/);
+  assert.match(source, /isCurrentTimeBasedAllocation/);
+  assert.match(source, /reconcileTimeBasedCoverageForIdentity/);
   assert.match(source, /bankTransactionId: payment\.id[\s\S]*coverageStatus: "ACTIVE"/);
   assert.match(source, /This payment is already allocated to active coverage/);
   const memberData = readFileSync(new URL("../src/modules/member/data/member-data.service.ts", import.meta.url), "utf8");
   assert.match(memberData, /coverageSource: "OPENING"/);
+  assert.match(memberData, /rebuildTimeBasedSubscription/);
 });
 
 test("finalization, identity linking, correction, and dashboard summary retain their separate responsibilities", () => {
@@ -45,6 +68,16 @@ test("finalization, identity linking, correction, and dashboard summary retain t
   assert.match(registration, /synchronizePendingTimeBasedForMember/);
   assert.match(dashboard, /loadDashboardTimeBasedSummary/);
   assert.match(dashboard, /validUntil: \{ gte: today, lte: expiringUntil \}/);
+});
+
+test("rate guard, manual adjustment restriction, and subscription resync protect unresolved payments", () => {
+  const rules = readFileSync(new URL("../src/modules/configuration/event-code/event-time-rule.service.ts", import.meta.url), "utf8");
+  const editIncome = readFileSync(new URL("../src/modules/reconciliation/edit-income/edit-income.repository.ts", import.meta.url), "utf8");
+  const memberData = readFileSync(new URL("../src/modules/member/data/member-data.service.ts", import.meta.url), "utf8");
+  assert.match(rules, /Resolve or allocate pending TIME_BASED payments/);
+  assert.match(rules, /status: "FINALIZED"[\s\S]*memberEventCoverages/);
+  assert.match(editIncome, /TIME_BASED Event Codes are not available for manual adjustments/);
+  assert.match(memberData, /synchronizePendingTimeBasedForMember\(tx, memberId, userId, input\.eventCodeId\)/);
 });
 
 test("no Stage 3 database schema or migration workflow is introduced", () => {
