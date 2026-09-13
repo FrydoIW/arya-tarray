@@ -193,7 +193,7 @@ export function BankAccountTable({
           onPageSizeChange: (nextPageSize) => { setPageSize(nextPageSize); setPage(1); }
         }}
         footerActions={(
-          <Button type="button" size="sm" icon={<Plus size={16} />} onClick={() => {
+          <Button type="button" variant="outline" size="sm" icon={<Plus size={16} />} onClick={() => {
             onAdd();
             setPage(Math.max(1, Math.ceil((allItems.length + 1) / pageSize)));
           }} disabled={disabled}>

@@ -120,7 +120,7 @@ export function TransactionInquiryTable(props: Props) {
           <Select className={styles.memberLinkFilter} value={props.memberLinkStatus} disabled={props.loading} onChange={(event) => props.onMemberLinkStatusChange(event.target.value as TransactionInquiryMemberLinkStatus)} aria-label="Member link status">
             <option value="ALL">All Member Links</option><option value="LINKED">Linked</option><option value="UNLINKED">Unlinked</option>
           </Select>
-          <Button className={styles.reloadButton} type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading} onClick={props.onReload}>Reload</Button>
+          <Button className={styles.reloadButton} type="button" variant="secondary" size="md" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading} onClick={props.onReload}>Reload</Button>
         </div>}
     >
       <DataTable

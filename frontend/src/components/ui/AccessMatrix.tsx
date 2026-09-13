@@ -29,6 +29,7 @@ type AccessMatrixProps = {
   groups: AccessMatrixGroup[];
   editable?: boolean;
   disabled?: boolean;
+  loading?: boolean;
   minWidth?: string;
   cornerHeader?: ReactNode;
   hasAccess: (columnId: string, rowId: string) => boolean;
@@ -44,6 +45,7 @@ export function AccessMatrix({
   groups,
   editable = false,
   disabled = false,
+  loading = false,
   minWidth = "920px",
   cornerHeader = "Item",
   hasAccess,
@@ -51,6 +53,26 @@ export function AccessMatrix({
   emptyState
 }: AccessMatrixProps) {
   const rowCount = groups.reduce((total, group) => total + group.rows.length, 0);
+
+  // While the workspace is still loading the matrix is unknown, not empty.
+  if (loading && (columns.length === 0 || rowCount === 0)) {
+    return (
+      <div className="ui-access-matrix-scroll">
+        <table className="ui-access-matrix" style={{ minWidth }} aria-busy="true" aria-label="Access matrix — loading">
+          <thead>
+            <tr><th className="ui-access-matrix-feature">{cornerHeader}</th></tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 4 }, (_, index) => (
+              <tr key={`matrix-loading-${index}`} aria-hidden="true" className="ui-table-skeleton-row">
+                <td className="ui-access-matrix-feature"><span className="ui-table-skeleton" style={{ width: `${44 + ((index % 3) * 14)}%` }} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   if (columns.length === 0 || rowCount === 0) {
     return (

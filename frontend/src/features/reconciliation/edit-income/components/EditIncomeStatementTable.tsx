@@ -137,7 +137,7 @@ export function EditIncomeStatementTable(props: Props) {
             <option value="ALL">All Bank Accounts</option>
             {props.bankAccounts.map((account) => <option value={account.id} key={account.id}>{account.bankCode} - {account.accountNo}</option>)}
           </Select>
-          <Button className={styles.reloadButton} type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button>
+          <Button className={styles.reloadButton} type="button" variant="secondary" size="md" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button>
         </div>}
     >
       <DataTable

@@ -159,14 +159,6 @@
 
 /* Dashboard: editorial heading, a cobalt primary metric and quiet data surfaces. */
 .app-shell .dashboard-page { gap: 20px; }
-.app-shell .dashboard-welcome { align-items: center; padding: 5px 0 12px; gap: 24px; }
-.app-shell .dashboard-eyebrow { display: flex; align-items: center; gap: 8px; margin-bottom: 15px; color: #7c8ca6; font-size: 9px; font-weight: 700; letter-spacing: 1.6px; }
-.app-shell .dashboard-eyebrow > span { width: 6px; height: 6px; border-radius: 50%; background: #3668ee; box-shadow: 0 0 0 4px #3668ee0a; }
-.app-shell .dashboard-welcome h1 { color: #15284a; font-size: clamp(32px, 2.7vw, 46px); font-weight: 800; letter-spacing: -1.8px; line-height: 1.2; }
-.app-shell .dashboard-welcome h1 > span { color: #7185aa; font-weight: 500; }
-.app-shell .dashboard-welcome p { margin-top: 12px; color: #76859d; font-size: 12px; }
-.app-shell .dashboard-welcome-actions { flex: 0 0 auto; }
-.app-shell .dashboard-welcome-actions .ui-button { min-height: 42px; gap: 9px; font-size: 11px; }
 .app-shell .dashboard-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: -4px; }
 .app-shell .dashboard-section-heading > div:first-child { display: flex; align-items: center; gap: 9px; }
 .app-shell .dashboard-section-heading > div:first-child > svg { color: #3c69cd; }
@@ -297,8 +289,6 @@
   .app-shell .dashboard-bottom-grid > :last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 860px) {
-  .app-shell .dashboard-welcome { flex-direction: row; align-items: center; }
-  .app-shell .dashboard-welcome h1 { font-size: 32px; letter-spacing: -1.2px; }
   .app-shell .dashboard-main-grid { grid-template-columns: 1fr; }
   .app-shell .dashboard-status-layout { grid-template-columns: 160px 1fr; padding-top: 8px; padding-bottom: 26px; }
   .app-shell .dashboard-section-caption { display: none; }
@@ -312,11 +302,6 @@
   .app-shell .topbar-actions { gap: 6px; }
   .app-shell .user-chip { display: flex; padding: 0 4px; }
   .app-shell .user-avatar { width: 31px; height: 31px; }
-  .app-shell .dashboard-welcome { flex-direction: column; align-items: stretch; gap: 18px; }
-  .app-shell .dashboard-welcome h1 { font-size: 33px; }
-  .app-shell .dashboard-welcome p { line-height: 1.8; max-width: 330px; }
-  .app-shell .dashboard-eyebrow { font-size: 8px; margin-bottom: 12px; }
-  .app-shell .dashboard-welcome-actions .ui-button { width: 100%; min-height: 44px; }
   .app-shell .dashboard-section-heading { align-items: stretch; flex-direction: column; gap: 12px; }
   .app-shell .dashboard-section-heading :is(.ui-select, .ui-month-picker-trigger) { min-height: 44px; height: 44px; }
   .app-shell .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -338,7 +323,7 @@
   .app-shell .ui-data-table-page { height: 42px; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .app-shell .dashboard-welcome, .app-shell .dashboard-metrics, .app-shell .dashboard-main-grid { animation: workspace-arrive .4s ease both; }
+  .app-shell .dashboard-metrics, .app-shell .dashboard-main-grid { animation: workspace-arrive .4s ease both; }
   .app-shell .dashboard-metrics { animation-delay: .05s; }
   .app-shell .dashboard-main-grid { animation-delay: .1s; }
   @keyframes workspace-arrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
@@ -383,6 +368,7 @@
 .app-shell .align-right .ui-table-skeleton { margin-left: auto; }
 .app-shell .align-center .ui-table-skeleton { margin-inline: auto; }
 .app-shell .ui-data-table tbody .ui-table-skeleton-row:hover { background: transparent; }
+.app-shell .ui-access-matrix tbody .ui-table-skeleton-row:hover { background: transparent; }
 
 /* Gentle feedback on existing controls and messages. */
 .app-shell :is(.ui-button, .icon-button, .workspace-tab-close, .ui-data-table-pagination > button):active:not(:disabled) { transform: translateY(1px); }

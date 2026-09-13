@@ -27,7 +27,6 @@
   padding: 0 8px;
 }
 
-.brand-seal { display: none; }
 .brand-mark {
   width: 72px;
   height: 48px;
@@ -241,7 +240,6 @@
   border-color: #c9dff4;
   transform: translateY(-1px);
 }
-.topbar-divider { display: none; }
 .user-chip {
   min-height: 44px;
   display: flex;

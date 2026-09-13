@@ -19,7 +19,7 @@
     --shell-content-inline: 12px;
   }
   .topbar-page-title { font-size: 13px; }
-  .user-copy, .topbar-divider { display: none; }
+  .user-copy { display: none; }
   .page-stage { padding-top: 20px; padding-bottom: 32px; }
   .page-stack { gap: 16px; }
   .ui-page-header { gap: 18px; }
@@ -72,6 +72,11 @@
 @media (max-width: 1199px) {
   :root { --shell-content-inline: 20px; }
   .sidebar { box-shadow: 18px 0 45px rgba(16,24,40,.14); }
+}
+/* Tablet and narrow-desktop topbar: free the width the page title needs. */
+@media (max-width: 1023px) {
+  .user-copy { display: none; }
+  .app-shell .user-chip { padding: 0; background: transparent; border-color: transparent; }
 }
 @media (max-width: 767px) {
   .ui-page-header h1 { font-size: 24px; }

@@ -16,7 +16,9 @@ interface SidebarProps {
 
 export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: SidebarProps) {
   const allowed = new Set(allowedMenuCodes);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ MONITORING: true });
+  // Explicit user toggles only. A group with no entry here falls back to its
+  // default state, so refreshing on a nested route always reveals its parent.
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
 
   return (
     <aside id="app-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} aria-label="Application navigation">
@@ -44,8 +46,8 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
           const GroupIcon = group.icon;
           const visibleChildren = group.children.filter((child) => !child.enabled || allowed.has(child.menuCode));
           if (visibleChildren.length === 0) return null;
-          const expanded = expandedGroups[group.menuCode] ?? false;
           const groupActive = visibleChildren.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
+          const expanded = groupOverrides[group.menuCode] ?? (groupActive || group.menuCode === "MONITORING");
           const childrenId = `nav-group-${group.menuCode.toLowerCase().replaceAll("_", "-")}`;
 
           return (
@@ -56,9 +58,9 @@ export function Sidebar({ pathname, mobileOpen, allowedMenuCodes, onClose }: Sid
                 aria-expanded={expanded}
                 aria-controls={childrenId}
                 title={group.label}
-                onClick={() => setExpandedGroups((current) => ({
+                onClick={() => setGroupOverrides((current) => ({
                   ...current,
-                  [group.menuCode]: !(current[group.menuCode] ?? false)
+                  [group.menuCode]: !(current[group.menuCode] ?? (groupActive || group.menuCode === "MONITORING"))
                 }))}
               >
                 <GroupIcon size={17} aria-hidden="true" />

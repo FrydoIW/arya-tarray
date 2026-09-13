@@ -14,7 +14,7 @@
 .memberFilterGroup > label:first-child { width: 130px; }
 .memberFilterGroup > label:last-child { min-width: 180px; }
 .memberLinkFilter { min-width: 145px; flex: 0 0 145px; }
-.reloadButton { height: var(--control-height); flex: 0 0 auto; }
+.reloadButton { flex: 0 0 auto; }
 .primaryCell, .amountCell, .eventText { color: #34415d; font-size: 11px; white-space: nowrap; }
 .amountCell { font-weight: 680; }
 .debitAmount { color: #a84a51; }

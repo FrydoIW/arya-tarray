@@ -128,6 +128,7 @@ export function RoleAccessMatrix({
         groups={groups}
         editable={mode === "EDIT"}
         disabled={disabled}
+        loading={loading}
         minWidth={`${Math.max(900, 300 + columns.length * 150)}px`}
         cornerHeader="Menu / Feature"
         hasAccess={(roleId, menuId) => hasAccess(roleId, menuId)}
