@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { timeRuleValueSchema } from "../src/modules/configuration/event-code/event-time-rule.schema.js";
+import { assertEventTypeTransition } from "../src/modules/configuration/event-code/event-code.service.js";
+import { sponsorshipStatus } from "../src/modules/member/data/member-data.service.js";
 import { resolveTimeBasedUnits } from "../src/modules/reconciliation/time-based-classification.js";
-import { addCalendarMonthsInclusive, historicalCoverageEntitlement, isCurrentTimeBasedAllocation, resolveCoverageStart } from "../src/modules/member/time-based/member-time-based.service.js";
+import { addCalendarMonthsInclusive, historicalCoverageEntitlement, isCurrentTimeBasedAllocation, resolveCoverageStart, selectHistoricalCoverageEntitlement } from "../src/modules/member/time-based/member-time-based.service.js";
 
 const event = { id: "rupang", eventType: "TIME_BASED" };
 const rule = { unitAmount: { toString: () => "50000.00" }, durationMonths: 1, activeFlag: true };
@@ -41,10 +43,25 @@ test("identity move or detach invalidates an allocation owned by a different cur
   assert.equal(isCurrentTimeBasedAllocation({ ...allocation, paymentMemberId: null, verificationStatus: "UNVERIFIED" }), false);
 });
 
-test("historical coverage snapshot remains valid after the current rule changes", () => {
+test("VOIDED coverage preserves the historical snapshot for unchanged reallocation", () => {
   const oldSnapshot = historicalCoverageEntitlement({ eventCodeId: "event-a", subscriptionEventCodeId: "event-a", unitAmount: { toString: () => "50000.00" }, durationMonths: 1, grantedUnits: 4, amountApplied: { toString: () => "200000.00" } });
   assert.deepEqual(oldSnapshot, { unitAmount: "50000.00", durationMonths: 1, grantedUnits: 4, amountApplied: "200000.00" });
-  assert.equal(historicalCoverageEntitlement({ eventCodeId: "event-b", subscriptionEventCodeId: "event-a", unitAmount: { toString: () => "50000.00" }, durationMonths: 1, grantedUnits: 4, amountApplied: { toString: () => "200000.00" } }), null);
+  const voidedCoverage = { coverageStatus: "VOIDED", subscriptionEventCodeId: "event-a", unitAmount: { toString: () => "50000.00" }, durationMonths: 1, grantedUnits: 4, amountApplied: { toString: () => "200000.00" } };
+  assert.deepEqual(selectHistoricalCoverageEntitlement({ eventCodeId: "event-a", recalculate: false, coverages: [voidedCoverage] }), oldSnapshot);
+  assert.equal(selectHistoricalCoverageEntitlement({ eventCodeId: "event-b", recalculate: false, coverages: [voidedCoverage] }), null);
+  assert.equal(selectHistoricalCoverageEntitlement({ eventCodeId: "event-a", recalculate: true, coverages: [voidedCoverage] }), null);
+});
+
+test("Event Type transition blocks historical transactions while allowing a clean Event Code", () => {
+  assert.throws(() => assertEventTypeTransition({ currentType: "STANDARD", nextType: "TIME_BASED", transactionCount: 1, subscriptionCount: 0 }), /cannot become TIME_BASED/);
+  assert.throws(() => assertEventTypeTransition({ currentType: "TIME_BASED", nextType: "STANDARD", transactionCount: 1, subscriptionCount: 0 }), /must remain TIME_BASED/);
+  assert.throws(() => assertEventTypeTransition({ currentType: "TIME_BASED", nextType: "CAMPAIGN", transactionCount: 0, subscriptionCount: 1 }), /must remain TIME_BASED/);
+  assert.doesNotThrow(() => assertEventTypeTransition({ currentType: "STANDARD", nextType: "TIME_BASED", transactionCount: 0, subscriptionCount: 0 }));
+});
+
+test("subscription without coverage is PENDING instead of funded ACTIVE", () => {
+  assert.equal(sponsorshipStatus({ activeFlag: true, startDate: null, validUntil: null }), "PENDING");
+  assert.equal(sponsorshipStatus({ activeFlag: true, startDate: null, validUntil: new Date("2099-12-31T00:00:00Z") }), "ACTIVE");
 });
 
 test("coverage service preserves snapshots, starts from validity, and prevents duplicate active entitlement", () => {

@@ -27,6 +27,30 @@ export function historicalCoverageEntitlement(input: { eventCodeId: string; subs
   return { unitAmount: input.unitAmount.toString(), durationMonths: input.durationMonths, grantedUnits: input.grantedUnits, amountApplied: input.amountApplied.toString() };
 }
 
+export function selectHistoricalCoverageEntitlement(input: {
+  eventCodeId: string | null;
+  recalculate: boolean;
+  coverages: Array<{
+    coverageStatus: string;
+    subscriptionEventCodeId: string;
+    unitAmount: { toString(): string } | null;
+    durationMonths: number | null;
+    grantedUnits: number | null;
+    amountApplied: { toString(): string } | null;
+  }>;
+}) {
+  if (!input.eventCodeId || input.recalculate) return null;
+  const historical = input.coverages.find((coverage) => coverage.subscriptionEventCodeId === input.eventCodeId);
+  return historical ? historicalCoverageEntitlement({
+    eventCodeId: input.eventCodeId,
+    subscriptionEventCodeId: historical.subscriptionEventCodeId,
+    unitAmount: historical.unitAmount,
+    durationMonths: historical.durationMonths,
+    grantedUnits: historical.grantedUnits,
+    amountApplied: historical.amountApplied
+  }) : null;
+}
+
 function isIncoming(transaction: { originalAmount: { toString(): string } }) { return !transaction.originalAmount.toString().startsWith("-"); }
 
 async function refreshSubscriptionValidity(tx: Tx, subscriptionId: string) {
@@ -96,11 +120,21 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
     memberIdentity: { select: { memberId: true, verificationStatus: true } }
   } });
   if (!payment) return { state: "MISSING" as const };
-  const active = await tx.memberEventCoverage.findMany({ where: { bankTransactionId: transactionId, ...activeCoverage }, select: { id: true, subscriptionId: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true, memberId: true } } } });
+  const coverageHistory = await tx.memberEventCoverage.findMany({ where: { bankTransactionId: transactionId, coverageSource: "TRANSACTION" }, orderBy: [{ coverageStatus: "asc" }, { createdAt: "desc" }, { id: "desc" }], select: { id: true, subscriptionId: true, coverageStatus: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true, memberId: true } } } });
+  const active = coverageHistory.filter(item => item.coverageStatus === "ACTIVE");
   const sameOfficialAllocation = active.length === 1 && isCurrentTimeBasedAllocation({ subscriptionMemberId: active[0].subscription.memberId, subscriptionEventCodeId: active[0].subscription.eventCodeId, paymentMemberId: payment.memberIdentity?.memberId, paymentEventCodeId: payment.eventCodeId, verificationStatus: payment.memberIdentity?.verificationStatus });
-  const historicalUnits = active.length === 1 && !options?.recalculate
-    ? historicalCoverageEntitlement({ eventCodeId: payment.eventCodeId ?? "", subscriptionEventCodeId: active[0].subscription.eventCodeId, unitAmount: active[0].unitAmountSnapshot, durationMonths: active[0].durationMonthsSnapshot, grantedUnits: active[0].grantedUnits, amountApplied: active[0].amountApplied })
-    : null;
+  const historicalUnits = selectHistoricalCoverageEntitlement({
+    eventCodeId: payment.eventCodeId,
+    recalculate: options?.recalculate ?? false,
+    coverages: coverageHistory.map((coverage) => ({
+      coverageStatus: coverage.coverageStatus,
+      subscriptionEventCodeId: coverage.subscription.eventCodeId,
+      unitAmount: coverage.unitAmountSnapshot,
+      durationMonths: coverage.durationMonthsSnapshot,
+      grantedUnits: coverage.grantedUnits,
+      amountApplied: coverage.amountApplied
+    }))
+  });
   // A recorded snapshot is the historical source of truth. Do this before
   // consulting today's rule, which may no longer divide the old payment.
   if (sameOfficialAllocation && !options?.recalculate) return { state: "ALLOCATED" as const, subscriptionId: active[0].subscriptionId };

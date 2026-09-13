@@ -72,6 +72,20 @@ export async function applyEventCodeChangesAtomic(data: {
   userId: string;
 }) {
   return prisma.$transaction(async (tx) => {
+    const requestedTypes = new Map(data.updates.map((item) => [item.id, item.input.eventType]));
+    const currentTypes = await tx.eventCode.findMany({
+      where: { id: { in: [...requestedTypes.keys()] } },
+      select: { id: true, eventType: true, code: true, _count: { select: { transactions: true, memberSubscriptions: true } } }
+    });
+    for (const current of currentTypes) {
+      const nextType = requestedTypes.get(current.id)!;
+      if (current.eventType !== "TIME_BASED" && nextType === "TIME_BASED" && current._count.transactions > 0) {
+        throw new HttpError(409, `Event Code ${current.code} with transaction history cannot become TIME_BASED. Create a new Event Code instead.`);
+      }
+      if (current.eventType === "TIME_BASED" && nextType !== "TIME_BASED" && (current._count.transactions > 0 || current._count.memberSubscriptions > 0)) {
+        throw new HttpError(409, `TIME_BASED Event Code ${current.code} with transaction or subscription history must remain TIME_BASED. Deactivate it instead.`);
+      }
+    }
     const nonCampaignIds = data.updates.filter((item) => item.input.eventType !== "CAMPAIGN").map((item) => item.id);
     if (nonCampaignIds.length) {
       const used = await tx.eventCode.findFirst({ where: { id: { in: nonCampaignIds }, campaigns: { some: {} } }, select: { code: true } });

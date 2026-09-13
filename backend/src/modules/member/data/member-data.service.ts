@@ -58,9 +58,10 @@ export async function getDetail(memberId: string) {
     identities: identities.map(({ id: identityId, _count, ...identity }) => ({ ...identity, memberIdentityId: identityId, transactionCount: _count.transactions })) };
 }
 
-function sponsorshipStatus(item: { activeFlag: boolean; startDate: Date | null; validUntil: Date | null }) {
+export function sponsorshipStatus(item: { activeFlag: boolean; startDate: Date | null; validUntil: Date | null }) {
   const today = currentBusinessDayValue();
   if (!item.activeFlag) return "INACTIVE";
+  if (!item.validUntil) return "PENDING";
   if (item.startDate && dateOnly(item.startDate)! > today) return "SCHEDULED";
   if (item.validUntil && dateOnly(item.validUntil)! < today) return "EXPIRED";
   return "ACTIVE";
