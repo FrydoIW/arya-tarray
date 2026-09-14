@@ -7,6 +7,7 @@ import {
   loadDashboardPeriodSummary,
   loadDashboardRecentActivityCandidates,
   loadDashboardTimeBasedSummary,
+  loadDashboardTimeBasedCarry,
   loadDashboardTrendMonth,
   loadDashboardViewer,
   loadTopFinalEvents,
@@ -188,7 +189,7 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
 
   const today = new Date(`${currentBusinessDayValue()}T00:00:00.000Z`);
   const expiringUntil = new Date(today); expiringUntil.setUTCDate(expiringUntil.getUTCDate() + 30);
-  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords, campaigns, sponsorshipSummary] = await Promise.all([
+  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords, campaigns, sponsorshipSummary, sponsorshipCarry] = await Promise.all([
     loadDashboardViewer(userId),
     loadDashboardPeriodSummary(currentRange),
     loadDashboardPeriodSummary(previousRange),
@@ -200,7 +201,8 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     loadDashboardRecentActivityCandidates(),
     loadDashboardMemberRecords(currentRange),
     getCampaignSummaries({ dashboard: true }),
-    loadDashboardTimeBasedSummary(today, expiringUntil)
+    loadDashboardTimeBasedSummary(today, expiringUntil),
+    loadDashboardTimeBasedCarry()
   ]);
 
   if (!viewer) throw new HttpError(401, "Current user is no longer available");
@@ -281,7 +283,7 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
         changePercent: numberChange(current.completeTransactions, previous.completeTransactions)
       }
     },
-    sponsorshipSummary,
+    sponsorshipSummary: { ...sponsorshipSummary, ...sponsorshipCarry },
     trend: trendRecords.map(({ month: trendMonth, record }) => ({
       month: trendMonth,
       label: monthLabel(trendMonth),

@@ -68,7 +68,7 @@ export type ApprovalTransactionPreview = {
   suggestedEvent: ApprovalEventCode | null;
   finalEvent: ApprovalEventCode | null;
   campaign: { id: string; campaignName: string } | null;
-  sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number } | null;
+  sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; principalAmount: string; paymentOnlyRemainder: string } | null;
   status: string;
 };
 

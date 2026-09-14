@@ -195,7 +195,17 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
           }
         : null,
       campaign: transaction.eventCampaign,
-      sponsorship: (() => { const coverage = transaction.memberEventCoverages[0]; if (coverage?.unitAmountSnapshot && coverage.durationMonthsSnapshot && coverage.grantedUnits) return { unitAmount: coverage.unitAmountSnapshot.toString(), durationMonths: coverage.durationMonthsSnapshot, grantedMonths: coverage.durationMonthsSnapshot * coverage.grantedUnits }; try { const units = resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true }); return units ? { unitAmount: units.unitAmount, durationMonths: units.durationMonths, grantedMonths: units.durationMonths * units.grantedUnits } : null; } catch { return null; } })(),
+      sponsorship: (() => {
+        try {
+          const units = resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
+          if (!units) return null;
+          const principal = decimalToCents(transaction.baseAmount ?? transaction.originalAmount);
+          const unit = decimalToCents({ toString: () => units.unitAmount });
+          return { unitAmount: units.unitAmount, durationMonths: units.durationMonths,
+            grantedMonths: units.durationMonths * units.grantedUnits, principalAmount: centsToDecimal(principal),
+            paymentOnlyRemainder: centsToDecimal(principal % unit) };
+        } catch { return null; }
+      })(),
       status: transaction.status
     })),
     history: approval.history.map((item) => ({

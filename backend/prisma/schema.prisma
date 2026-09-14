@@ -144,6 +144,8 @@ model User {
   updatedMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionUpdatedBy")
   createdMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageCreatedBy")
   voidedMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageVoidedBy")
+  createdMemberEventBalanceEntries MemberEventBalanceLedger[] @relation("MemberEventBalanceCreatedBy")
+  voidedMemberEventBalanceEntries MemberEventBalanceLedger[] @relation("MemberEventBalanceVoidedBy")
   id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
   fullName     String   @map("full_name") @db.VarChar(150)
   email        String   @db.VarChar(150)
@@ -333,6 +335,7 @@ model MemberEventSubscription {
   createdBy User? @relation("MemberEventSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_created_by")
   updatedBy User? @relation("MemberEventSubscriptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_updated_by")
   coverages MemberEventCoverage[]
+  balanceLedger MemberEventBalanceLedger[]
 
   @@index([memberId, eventCodeId, activeFlag], map: "idx_member_event_sub_member_event")
   @@index([eventCodeId, activeFlag], map: "idx_member_event_sub_event")
@@ -366,6 +369,7 @@ model MemberEventCoverage {
   bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_transaction")
   createdBy User? @relation("MemberEventCoverageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_created_by")
   voidedBy User? @relation("MemberEventCoverageVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_voided_by")
+  balanceLedger MemberEventBalanceLedger[]
 
   @@index([subscriptionId, coverageStatus, coverageTo], map: "idx_member_event_cov_subscription")
   @@index([bankTransactionId], map: "idx_member_event_cov_transaction")
@@ -373,6 +377,39 @@ model MemberEventCoverage {
   @@index([createdById], map: "idx_member_event_cov_created_by")
   @@index([voidedById], map: "idx_member_event_cov_voided_by")
   @@map("arya_member_event_coverage")
+}
+
+model MemberEventBalanceLedger {
+  id String @id @default(uuid()) @map("member_event_balance_ledger_id") @db.Char(36)
+  subscriptionId String @map("member_event_subscription_id") @db.Char(36)
+  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
+  coverageId String? @map("member_event_coverage_id") @db.Char(36)
+  entryType String @map("entry_type") @db.VarChar(20)
+  entryStatus String @default("ACTIVE") @map("entry_status") @db.VarChar(20)
+  amountDelta Decimal @map("amount_delta") @db.Decimal(20, 2)
+  effectiveDate DateTime @map("effective_date") @db.Date
+  unitAmountSnapshot Decimal? @map("unit_amount_snapshot") @db.Decimal(20, 2)
+  durationMonthsSnapshot Int? @map("duration_months_snapshot") @db.UnsignedInt
+  remark String? @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById String? @map("created_by") @db.Char(36)
+  voidedAt DateTime? @map("voided_at") @db.DateTime(3)
+  voidedById String? @map("voided_by") @db.Char(36)
+  voidReason String? @map("void_reason") @db.VarChar(1000)
+
+  subscription MemberEventSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_subscription")
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_transaction")
+  coverage MemberEventCoverage? @relation(fields: [coverageId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_coverage")
+  createdBy User? @relation("MemberEventBalanceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_created_by")
+  voidedBy User? @relation("MemberEventBalanceVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_voided_by")
+
+  @@index([subscriptionId, entryStatus, effectiveDate], map: "idx_member_event_balance_subscription")
+  @@index([bankTransactionId], map: "idx_member_event_balance_transaction")
+  @@index([coverageId], map: "idx_member_event_balance_coverage")
+  @@index([entryType, entryStatus], map: "idx_member_event_balance_type")
+  @@index([createdById], map: "idx_member_event_balance_created_by")
+  @@index([voidedById], map: "idx_member_event_balance_voided_by")
+  @@map("arya_member_event_balance_ledger")
 }
 
 model BankAccount {
@@ -470,6 +507,7 @@ model BankTransaction {
   history            BankTransactionHistory[]
   correctionItems    ReconciliationCorrectionItem[]
   memberEventCoverages MemberEventCoverage[]
+  memberEventBalanceLedger MemberEventBalanceLedger[]
 
   @@index([eventCampaignId], map: "idx_bank_transaction_event_campaign")
   @@index([manualAddedById], map: "idx_bank_transaction_manual_added_by")

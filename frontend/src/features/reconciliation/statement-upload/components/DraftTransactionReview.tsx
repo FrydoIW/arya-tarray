@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
+import { paymentOnlyTimePreview } from "@/lib/time-based-preview";
 import type {
   DraftRowStatus,
   DraftRowStatusFilter,
@@ -153,27 +154,25 @@ export function DraftTransactionReview({
       }
     },
     {
-      key: "eventCampaignId",
-      header: "Campaign",
-      minWidth: "185px",
+      key: "program",
+      header: "Program",
+      minWidth: "215px",
       render: (row) => {
-        if (getEventCode(eventCodes, row.eventCodeId)?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>Not required</span>;
+        const event = getEventCode(eventCodes, row.eventCodeId);
+        if (event?.eventType === "TIME_BASED") {
+          const rule = event.timeRule;
+          if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>Rule needed</span>;
+          const preview = paymentOnlyTimePreview(row.baseAmount, rule.unitAmount, rule.durationMonths);
+          return preview
+            ? <span className={styles.finalEvent}>{formatMoney(rule.unitAmount)} / {rule.durationMonths} month · payment alone: {preview.months} month + {formatMoney(preview.remainder)} carry</span>
+            : <span className={styles.noMatch}>Positive principal required</span>;
+        }
+        if (event?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>—</span>;
         const eligible = campaigns.filter((item) => item.eventCodeId === row.eventCodeId && ((item.activeFlag && (!item.startDate || row.transactionDate.slice(0, 10) >= item.startDate) && (!item.endDate || row.transactionDate.slice(0, 10) <= item.endDate)) || item.id === row.eventCampaignId));
         return <Select className={styles.eventSelect} value={row.eventCampaignId ?? ""} disabled={disabled} onChange={(event) => onFinalEventChange(row.id, row.eventCodeId ?? null, event.target.value || null)} aria-label={`Campaign row ${row.rowNo}`}>
           <option value="">Select Campaign...</option>
           {eligible.map((item) => <option key={item.id} value={item.id}>{item.campaignName}{!item.activeFlag ? " (historical)" : ""}</option>)}
         </Select>;
-      }
-    },
-    {
-      key: "sponsorshipPreview",
-      header: "Rupang",
-      minWidth: "150px",
-      render: (row) => {
-        const event = getEventCode(eventCodes, row.eventCodeId); const rule = event?.eventType === "TIME_BASED" ? event.timeRule : null;
-        if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>{event?.eventType === "TIME_BASED" ? "Rule needed" : "—"}</span>;
-        const units = Number(row.baseAmount) / Number(rule.unitAmount);
-        return Number.isInteger(units) && units >= 1 ? <span className={styles.finalEvent}>+{units * rule.durationMonths} months</span> : <span className={styles.noMatch}>Exact unit required</span>;
       }
     },
     {
@@ -261,7 +260,7 @@ export function DraftTransactionReview({
         rowKey={(row) => row.id}
         loading={loading}
         disabled={disabled}
-        minWidth="1356px"
+        minWidth="1220px"
         onCellChange={(row, columnKey, value) => {
           if (columnKey === "eventCodeId") onFinalEventChange(row.id, value ? String(value) : null);
         }}

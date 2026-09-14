@@ -4,8 +4,9 @@ import { eventCodeExecuteValueSchema } from "./event-code.schema.js";
 
 const SHEET_NAME = "Event Codes";
 const REQUIRED_HEADERS = ["Event Code", "Event Name", "Category", "Description", "Status"] as const;
+const OPTIONAL_HEADERS = ["Type"] as const;
 
-type HeaderName = typeof REQUIRED_HEADERS[number];
+type HeaderName = typeof REQUIRED_HEADERS[number] | typeof OPTIONAL_HEADERS[number];
 
 export type EventCodeBulkPreviewRow = {
   rowNumber: number;
@@ -13,6 +14,7 @@ export type EventCodeBulkPreviewRow = {
   eventName: string;
   category: string | null;
   description: string | null;
+  eventType: string;
   status: string;
   activeFlag: boolean | null;
   errors: string[];
@@ -50,7 +52,7 @@ function eventCodeCellText(cell: ExcelJS.Cell) {
 function findHeaderColumns(sheet: ExcelJS.Worksheet) {
   const headerRow = sheet.getRow(1);
   const columns = new Map<HeaderName, number>();
-  const expectedByKey = new Map(REQUIRED_HEADERS.map((header) => [normalizeHeader(header), header]));
+  const expectedByKey = new Map([...REQUIRED_HEADERS, ...OPTIONAL_HEADERS].map((header) => [normalizeHeader(header), header]));
 
   headerRow.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
     const header = expectedByKey.get(normalizeHeader(rawCellText(cell)));
@@ -71,6 +73,7 @@ function schemaErrors(row: EventCodeBulkPreviewRow) {
     code: row.code,
     eventName: row.eventName,
     category: row.category,
+    eventType: row.eventType,
     description: row.description,
     activeFlag: row.activeFlag ?? false
   });
@@ -81,6 +84,7 @@ function schemaErrors(row: EventCodeBulkPreviewRow) {
     if (field === "code") return row.code ? "Event Code must contain exactly 3 digits." : "Event Code is required.";
     if (field === "eventName") return row.eventName ? "Event Name must not exceed 150 characters." : "Event Name is required.";
     if (field === "category") return "Category must not exceed 50 characters.";
+    if (field === "eventType") return "Type must be STANDARD, CAMPAIGN, or TIME_BASED.";
     if (field === "description") return "Description must not exceed 500 characters.";
     return issue.message;
   });
@@ -99,9 +103,10 @@ export async function createEventCodeTemplate() {
     { header: "Event Name", key: "eventName", width: 32 },
     { header: "Category", key: "category", width: 22 },
     { header: "Description", key: "description", width: 46 },
-    { header: "Status", key: "status", width: 16 }
+    { header: "Status", key: "status", width: 16 },
+    { header: "Type", key: "eventType", width: 18 }
   ];
-  sheet.autoFilter = "A1:E1";
+  sheet.autoFilter = "A1:F1";
   sheet.getRow(1).height = 24;
   sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   sheet.getRow(1).alignment = { vertical: "middle" };
@@ -116,6 +121,9 @@ export async function createEventCodeTemplate() {
       errorTitle: "Invalid status",
       error: "Choose Active or Inactive."
     };
+    sheet.getCell(`F${rowNumber}`).dataValidation = { type: "list", allowBlank: true,
+      formulae: ['"STANDARD,CAMPAIGN,TIME_BASED"'], showErrorMessage: true,
+      errorTitle: "Invalid type", error: "Choose STANDARD, CAMPAIGN, or TIME_BASED." };
   }
 
   const instructions = workbook.addWorksheet("Instructions");
@@ -128,10 +136,11 @@ export async function createEventCodeTemplate() {
   instructions.addRow(["Category", "Optional. Maximum 50 characters. Values are imported exactly as supplied; no mapping is inferred."]);
   instructions.addRow(["Description", "Optional. Maximum 500 characters."]);
   instructions.addRow(["Status", "Required. Choose Active or Inactive."]);
+  instructions.addRow(["Type", "Optional. Choose STANDARD, CAMPAIGN, or TIME_BASED. Blank defaults to STANDARD."]);
   instructions.addRow([]);
   instructions.addRow(["Important", "Blank rows are ignored. Existing or already-staged Event Codes are rejected and never overwritten."]);
   instructions.addRow(["Saving", "Upload validates and stages rows only. Nothing is saved until Execute is confirmed."]);
-  instructions.addRow(["Example", "091 | Dana Kegiatan | DONASI | Optional description | Active"]);
+  instructions.addRow(["Example", "091 | Dana Kegiatan | DONASI | Optional description | Active | CAMPAIGN"]);
   instructions.getRow(1).font = { bold: true, size: 14, color: { argb: "FF7A1F2B" } };
   instructions.getRow(3).font = { bold: true, color: { argb: "FFFFFFFF" } };
   instructions.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF7A1F2B" } };
@@ -166,7 +175,8 @@ export async function parseEventCodeBulkWorkbook(
     const categoryText = rawCellText(source.getCell(columns.get("Category")!));
     const descriptionText = rawCellText(source.getCell(columns.get("Description")!));
     const statusText = rawCellText(source.getCell(columns.get("Status")!));
-    if (![code, eventName, categoryText, descriptionText, statusText].some(Boolean)) continue;
+    const typeText = columns.has("Type") ? rawCellText(source.getCell(columns.get("Type")!)) : "";
+    if (![code, eventName, categoryText, descriptionText, statusText, typeText].some(Boolean)) continue;
 
     const normalizedStatus = statusText.trim().toLowerCase();
     const activeFlag = normalizedStatus === "active" ? true : normalizedStatus === "inactive" ? false : null;
@@ -176,6 +186,7 @@ export async function parseEventCodeBulkWorkbook(
       eventName: eventName.trim(),
       category: categoryText.trim() || null,
       description: descriptionText.trim() || null,
+      eventType: typeText.trim().toUpperCase() || "STANDARD",
       status: activeFlag === true ? "Active" : activeFlag === false ? "Inactive" : statusText.trim(),
       activeFlag,
       errors: []

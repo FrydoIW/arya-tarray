@@ -561,7 +561,8 @@ export async function decideSignApprovalAtomic(input: {
           status: "FINALIZED",
           OR: [
             { eventCode: { is: { eventType: "TIME_BASED" } } },
-            { memberEventCoverages: { some: { coverageStatus: "ACTIVE" } } }
+            { memberEventCoverages: { some: { coverageStatus: "ACTIVE" } } },
+            { memberEventBalanceLedger: { some: { entryType: "PAYMENT", entryStatus: "ACTIVE" } } }
           ]
         },
         select: { id: true }

@@ -8,6 +8,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
+import { paymentOnlyTimePreview } from "@/lib/time-based-preview";
 import type { CorrectionDirectionFilter, CorrectionRowStatus, CorrectionRowStatusFilter, EditIncomeDetail, EditIncomeMode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
 import { getCorrectionRowStatus, getEventCode, getEventCodeLabel } from "../utils/edit-income.utils";
 import { AddAdjustmentModal, ExcludeTransactionModal } from "./CorrectionModals";
@@ -121,16 +122,24 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       }
     },
     {
-      key: "eventCampaignId", header: "Campaign", minWidth: "190px",
+      key: "program", header: "Program", minWidth: "220px",
       render: (row) => {
-        if (getEventCode(detail.eventCodes, row.eventCodeId)?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>Not required</span>;
+        const event = getEventCode(detail.eventCodes, row.eventCodeId);
+        if (event?.eventType === "TIME_BASED") {
+          const rule = event.timeRule;
+          if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>Rule needed</span>;
+          const preview = paymentOnlyTimePreview(row.baseAmount, rule.unitAmount, rule.durationMonths);
+          return preview
+            ? <span className={styles.finalEvent}>{formatMoney(rule.unitAmount)} / {rule.durationMonths} month · payment alone: {preview.months} month + {formatMoney(preview.remainder)} carry</span>
+            : <span className={styles.noMatch}>Positive principal required</span>;
+        }
+        if (event?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>—</span>;
         const current = detail.campaigns.find((item) => item.id === row.eventCampaignId);
         if (!props.canEdit || row.correctionAction === "EXCLUDED" || row.reconciliationExcludedAt) return <span>{current?.campaignName ?? "Select Campaign..."}</span>;
         const eligible = detail.campaigns.filter((item) => item.eventCodeId === row.eventCodeId && ((item.activeFlag && (!item.startDate || (row.transactionDate ?? "").slice(0, 10) >= item.startDate) && (!item.endDate || (row.transactionDate ?? "").slice(0, 10) <= item.endDate)) || item.id === row.eventCampaignId));
         return <Select className={styles.eventSelect} value={row.eventCampaignId ?? ""} disabled={props.busy} onChange={(event) => props.onTransactionChange(row.id, "eventCampaignId", event.target.value || null)} aria-label={`Campaign row ${row.rowNo || "manual"}`}><option value="">Select Campaign...</option>{eligible.map((item) => <option key={item.id} value={item.id}>{item.campaignName}{!item.activeFlag ? " (historical)" : ""}</option>)}</Select>;
       }
     },
-    { key: "sponsorshipPreview", header: "Rupang", minWidth: "145px", render: (row) => { const event = getEventCode(detail.eventCodes, row.eventCodeId); const rule = event?.eventType === "TIME_BASED" ? event.timeRule : null; if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>{event?.eventType === "TIME_BASED" ? "Rule needed" : "—"}</span>; const units = Number(row.baseAmount) / Number(rule.unitAmount); return Number.isInteger(units) && units >= 1 ? <span className={styles.finalEvent}>+{units * rule.durationMonths} months</span> : <span className={styles.noMatch}>Exact unit required</span>; } },
     {
       key: "remark", header: "Remark", minWidth: "190px", editable: (row) => props.canEdit && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
       getValue: (row) => row.remark ?? "",

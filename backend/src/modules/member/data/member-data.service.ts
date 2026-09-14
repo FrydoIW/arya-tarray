@@ -1,8 +1,9 @@
+import type { Prisma } from "@prisma/client";
 import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
-import { manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
+import { manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { deriveAge } from "./member-data.domain.js";
@@ -67,47 +68,83 @@ export function sponsorshipStatus(item: { activeFlag: boolean; startDate: Date |
   return "ACTIVE";
 }
 
+export function pendingTimeBasedPaymentPreview(payment: {
+  id: string; transactionDate: Date | null; referenceNo: string | null;
+  originalAmount: { toString(): string }; baseAmount: { toString(): string } | null;
+  eventCode: { id: string; code: string; eventName: string; timeRule: { unitAmount: { toString(): string }; durationMonths: number; activeFlag: boolean } | null } | null;
+  memberEventCoverages: Array<{ coverageStatus: string; unitAmountSnapshot: { toString(): string } | null; durationMonthsSnapshot: number | null; grantedUnits: number | null; amountApplied: { toString(): string } | null; subscription: { eventCodeId: string } }>;
+  memberEventBalanceLedger?: Array<{ entryType: string; amountDelta: { toString(): string }; unitAmountSnapshot: { toString(): string } | null; durationMonthsSnapshot: number | null; subscription: { eventCodeId: string } }>;
+}, subscriptions: Array<{ event: { eventCodeId: string }; activeFlag: boolean }>) {
+  let estimate: ReturnType<typeof resolveTimeBasedUnits> = null;
+  const ledgerSnapshot = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCode?.id ?? null,
+    principalAmount: payment.baseAmount ?? payment.originalAmount, recalculate: false, entries: payment.memberEventBalanceLedger ?? [] });
+  const coverageSnapshot = selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCode?.id ?? null, principalAmount: payment.baseAmount ?? payment.originalAmount, recalculate: false,
+    coverages: payment.memberEventCoverages.map(row => ({ coverageStatus: row.coverageStatus, subscriptionEventCodeId: row.subscription.eventCodeId, unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot, grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });
+  try {
+    const historical = ledgerSnapshot ?? coverageSnapshot;
+    estimate = historical
+      ? resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: { unitAmount: { toString: () => historical.unitAmount }, durationMonths: historical.durationMonths, activeFlag: true }, transaction: payment, requiresClassification: true })
+      : resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true });
+  }
+  catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: null, grantedUnits: null, durationMonths: null, reason }; }
+  const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === payment.eventCode?.id && subscription.activeFlag);
+  const reason = matching.length === 0 ? "No active subscription for this Event Code"
+    : matching.length > 1 ? "Multiple active subscriptions — choose one"
+      : "Allocation pending synchronization";
+  return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: estimate?.unitAmount ?? null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
+}
+
 export async function getSponsorship(memberId: string) {
   const result = await repository.loadMemberSponsorship(memberId);
   if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
+  const balanceBySubscription = new Map(result.balances.map(row => [row.subscriptionId, row._sum.amountDelta?.toString() ?? "0.00"]));
   const subscriptions = result.subscriptions.map(item => ({
     subscriptionId: item.id, event: { eventCodeId: item.eventCode.id, code: item.eventCode.code, eventName: item.eventCode.eventName }, referenceNo: item.referenceNo,
     displayName: item.displayName, startDate: dateOnly(item.startDate), validUntil: dateOnly(item.validUntil), activeFlag: item.activeFlag, remark: item.remark,
-    status: sponsorshipStatus(item), coverage: item.coverages.map(coverage => ({ coverageId: coverage.id, source: coverage.coverageSource, status: coverage.coverageStatus,
+    status: sponsorshipStatus(item),
+    timeRule: item.eventCode.timeRule ? { unitAmount: item.eventCode.timeRule.unitAmount.toString(), durationMonths: item.eventCode.timeRule.durationMonths } : null,
+    carryBalance: balanceBySubscription.get(item.id) ?? "0.00",
+    balanceHistory: item.balanceLedger.map(row => ({ ledgerId: row.id, transactionId: row.bankTransactionId, referenceNo: row.bankTransaction?.referenceNo ?? null,
+      type: row.entryType, status: row.entryStatus, amountDelta: row.amountDelta.toString(), effectiveDate: dateOnly(row.effectiveDate),
+      unitAmount: row.unitAmountSnapshot?.toString() ?? null, durationMonths: row.durationMonthsSnapshot, voidReason: row.voidReason })),
+    coverage: item.coverages.map(coverage => ({ coverageId: coverage.id, source: coverage.coverageSource, status: coverage.coverageStatus,
       transactionId: coverage.bankTransactionId, transactionDate: dateOnly(coverage.bankTransaction?.transactionDate ?? null), referenceNo: coverage.bankTransaction?.referenceNo ?? null,
       amountApplied: coverage.amountApplied?.toString() ?? null, unitAmount: coverage.unitAmountSnapshot?.toString() ?? null,
       durationMonths: coverage.durationMonthsSnapshot, grantedUnits: coverage.grantedUnits, coverageFrom: dateOnly(coverage.coverageFrom), coverageTo: dateOnly(coverage.coverageTo),
       remark: coverage.remark, voidReason: coverage.voidReason }))
   }));
-  return { subscriptions, eventOptions: result.eventOptions.map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })), pendingPayments: result.pending.map(payment => {
-    let estimate: ReturnType<typeof resolveTimeBasedUnits> = null;
-    try { estimate = resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true }); }
-    catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, grantedUnits: null, durationMonths: null, reason }; }
-    const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === payment.eventCode?.id && subscription.activeFlag);
-    const reason = matching.length === 0 ? "No active subscription for this Event Code"
-      : matching.length > 1 ? "Multiple active subscriptions — choose one"
-        : "Allocation pending synchronization";
-    return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
-  }) };
+  return { subscriptions, eventOptions: result.eventOptions.map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })),
+    pendingPayments: result.pending.map(payment => pendingTimeBasedPaymentPreview(payment, subscriptions)) };
 }
 
 export async function createSubscription(memberId: string, input: SubscriptionCreateInput, userId: string) {
   await memberTransaction(async tx => {
-    const [member, event] = await Promise.all([tx.member.findUnique({ where: { id: memberId }, select: { activeFlag: true } }), tx.eventCode.findUnique({ where: { id: input.eventCodeId }, select: { eventType: true, activeFlag: true } })]);
+    const [member, event] = await Promise.all([tx.member.findUnique({ where: { id: memberId }, select: { activeFlag: true } }), tx.eventCode.findUnique({ where: { id: input.eventCodeId }, select: { eventType: true, activeFlag: true, timeRule: { select: { activeFlag: true } } } })]);
     if (!member?.activeFlag) throw new HttpError(400, "Active Member is required for a sponsorship subscription");
     if (!event || event.eventType !== "TIME_BASED" || !event.activeFlag) throw new HttpError(400, "Choose an active TIME_BASED Event Code");
+    if (!event.timeRule?.activeFlag) throw new HttpError(400, "Configure an active Time Rule before adding a subscription");
     await tx.memberEventSubscription.create({ data: { memberId, eventCodeId: input.eventCodeId, referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, createdById: userId, updatedById: userId } });
     if (input.activeFlag) await synchronizePendingTimeBasedForMember(tx, memberId, userId, input.eventCodeId);
   });
   return getSponsorship(memberId);
 }
 
-export async function updateSubscription(memberId: string, subscriptionId: string, input: SubscriptionUpdateInput, userId: string) {
-  await memberTransaction(async tx => {
-    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { memberId: true } });
+export async function updateSubscriptionRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, input: SubscriptionUpdateInput, userId: string) {
+    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { memberId: true, eventCodeId: true, startDate: true, activeFlag: true } });
     if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
+    if (dateOnly(sub.startDate) !== input.startDate) {
+      const [coverage, payment] = await Promise.all([
+        tx.memberEventCoverage.findFirst({ where: { subscriptionId }, select: { id: true } }),
+        tx.memberEventBalanceLedger.findFirst({ where: { subscriptionId, entryType: "PAYMENT" }, select: { id: true } })
+      ]);
+      if (coverage || payment) throw new HttpError(409, "Start date cannot change after coverage or payment history exists. Other subscription details can still be edited.");
+    }
     await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, updatedById: userId } });
-  });
+    if (sub.activeFlag !== input.activeFlag) await synchronizePendingTimeBasedForMember(tx, memberId, userId, sub.eventCodeId);
+}
+
+export async function updateSubscription(memberId: string, subscriptionId: string, input: SubscriptionUpdateInput, userId: string) {
+  await memberTransaction(tx => updateSubscriptionRecord(tx, memberId, subscriptionId, input, userId));
   return getSponsorship(memberId);
 }
 
@@ -116,14 +153,18 @@ export async function allocateSubscription(memberId: string, subscriptionId: str
   return getSponsorship(memberId);
 }
 
-export async function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
-  await memberTransaction(async tx => {
+export async function addOpeningCoverageRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
     const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true } });
     if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
     const from = new Date(`${input.coverageFrom}T00:00:00.000Z`); const to = new Date(`${input.coverageTo}T00:00:00.000Z`);
+    const overlap = await tx.memberEventCoverage.findFirst({ where: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE", coverageFrom: { lte: to }, coverageTo: { gte: from } }, select: { id: true } });
+    if (overlap) throw new HttpError(409, "Opening coverage overlaps an existing active Opening period for this subscription.");
     await tx.memberEventCoverage.create({ data: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE", coverageFrom: from, coverageTo: to, remark: input.remark, createdById: userId } });
     await rebuildTimeBasedSubscription(tx, subscriptionId, userId, "Coverage chain rebuilt after opening coverage was recorded");
-  });
+}
+
+export async function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
+  await memberTransaction(tx => addOpeningCoverageRecord(tx, memberId, subscriptionId, input, userId));
   return getSponsorship(memberId);
 }
 

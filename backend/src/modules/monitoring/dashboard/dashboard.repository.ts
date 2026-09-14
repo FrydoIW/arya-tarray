@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 import { officialDonationTransactionWhere } from "../../member/member-donation.rules.js";
+import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
+import { centsToDecimal } from "../../member/data/member-donation.domain.js";
 
 export type DashboardPeriodRange = {
   periodStart: Date;
@@ -219,14 +221,27 @@ export function loadDashboardViewer(userId: string) {
   });
 }
 
-export async function loadDashboardTimeBasedSummary(today: Date, expiringUntil: Date) {
+export async function loadDashboardTimeBasedSummary(today: Date, expiringUntil: Date, client: Pick<typeof prisma, "memberEventSubscription"> = prisma) {
   const base = { activeFlag: true } as const;
   const [activeSubscriptions, expiringSoon, expiredSubscriptions] = await Promise.all([
-    prisma.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
-    prisma.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today, lte: expiringUntil }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
-    prisma.memberEventSubscription.count({ where: { ...base, validUntil: { lt: today } } })
+    client.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
+    client.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today, lte: expiringUntil }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
+    client.memberEventSubscription.count({ where: { ...base, validUntil: { lt: today } } })
   ]);
   return { activeSubscriptions, expiringSoon, expiredSubscriptions };
+}
+
+export function summarizeTimeBasedCarry(groups: Array<{ _sum: { amountDelta: { toString(): string } | null } }>) {
+  const balances = groups.map(row => row._sum.amountDelta ? decimalStringToCents(row._sum.amountDelta.toString()) : 0n);
+  const positive = balances.filter(value => value > 0n);
+  return { outstandingCarryBalance: centsToDecimal(positive.reduce((sum, value) => sum + value, 0n)),
+    subscriptionsWithCarryBalance: positive.length };
+}
+
+export async function loadDashboardTimeBasedCarry(client: Pick<typeof prisma, "memberEventBalanceLedger"> = prisma) {
+  const groups = await client.memberEventBalanceLedger.groupBy({ by: ["subscriptionId"],
+    where: { entryStatus: "ACTIVE" }, _sum: { amountDelta: true } });
+  return summarizeTimeBasedCarry(groups);
 }
 
 const officialMemberDonationWhere = (range: DashboardPeriodRange): Prisma.BankTransactionWhereInput => ({

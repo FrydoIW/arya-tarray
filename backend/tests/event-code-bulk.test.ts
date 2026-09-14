@@ -28,11 +28,12 @@ test("Event Code template provides a styled input sheet and clear instructions",
 
   assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Event Codes", "Instructions"]);
   const sheet = workbook.getWorksheet("Event Codes")!;
-  assert.deepEqual(Array.from(sheet.getRow(1).values).slice(1), ["Event Code", "Event Name", "Category", "Description", "Status"]);
+  assert.deepEqual(Array.from(sheet.getRow(1).values).slice(1), ["Event Code", "Event Name", "Category", "Description", "Status", "Type"]);
   assert.equal(sheet.views[0]?.ySplit, 1);
   assert.ok(sheet.autoFilter);
   assert.equal(sheet.getCell("E2").dataValidation.type, "list");
-  assert.match(workbook.getWorksheet("Instructions")!.getCell("B11").text, /Execute/);
+  assert.equal(sheet.getCell("F2").dataValidation.type, "list");
+  assert.match(workbook.getWorksheet("Instructions")!.getCell("B12").text, /Execute/);
 });
 
 test("Event Code bulk parser preserves text codes and pads numeric codes to three digits", async () => {
@@ -49,11 +50,24 @@ test("Event Code bulk parser preserves text codes and pads numeric codes to thre
     eventName: row.eventName,
     category: row.category,
     description: row.description,
+    eventType: row.eventType,
     activeFlag: row.activeFlag
   })), [
-    { code: "001", eventName: "Dana Harian", category: "DONASI", description: null, activeFlag: true },
-    { code: "010", eventName: "Dana Bulanan", category: null, description: "Keterangan", activeFlag: false }
+    { code: "001", eventName: "Dana Harian", category: "DONASI", description: null, eventType: "STANDARD", activeFlag: true },
+    { code: "010", eventName: "Dana Bulanan", category: null, description: "Keterangan", eventType: "STANDARD", activeFlag: false }
   ]);
+});
+
+test("Event Code bulk Type stages all supported values and keeps blank legacy Type as STANDARD", async () => {
+  const preview = await parseEventCodeBulkWorkbook(await buildWorkbook([
+    ["101", "Regular", null, null, "Active", ""],
+    ["102", "Fundraiser", null, null, "Active", "CAMPAIGN"],
+    ["103", "Rupang", null, null, "Active", "TIME_BASED"],
+    ["104", "Unknown", null, null, "Active", "OTHER"]
+  ], ["Event Code", "Event Name", "Category", "Description", "Status", "Type"]), { existingCodes: [], stagedCodes: [] });
+  assert.deepEqual(preview.rows.map(row => row.eventType), ["STANDARD", "CAMPAIGN", "TIME_BASED", "OTHER"]);
+  assert.equal(preview.invalidCount, 1);
+  assert.match(preview.rows[3].errors.join(" "), /Type must be STANDARD/);
 });
 
 test("Event Code bulk parser reports all row conflicts without staging partial data", async () => {

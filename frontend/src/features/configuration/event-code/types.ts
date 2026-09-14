@@ -76,6 +76,7 @@ export type EventCodeBulkPreviewRow = {
   eventName: string;
   category: string | null;
   description: string | null;
+  eventType: string;
   status: string;
   activeFlag: boolean | null;
   errors: string[];

@@ -122,21 +122,35 @@ export function findMemberDetail(memberId: string) {
   } });
 }
 
+export function pendingTimeBasedPaymentsWhere(memberId: string): Prisma.BankTransactionWhereInput {
+  return { status: "FINALIZED", reconciliationExcludedAt: null, originalAmount: { gt: 0 },
+    eventCode: { is: { eventType: "TIME_BASED" } },
+    memberIdentity: { is: { memberId, verificationStatus: "VERIFIED" } },
+    memberEventBalanceLedger: { none: { entryType: "PAYMENT", entryStatus: "ACTIVE" } } };
+}
+
 export function loadMemberSponsorship(memberId: string) {
   return prisma.$transaction(async tx => {
     const [member, subscriptions, pending, eventOptions] = await Promise.all([
       tx.member.findUnique({ where: { id: memberId }, select: { id: true } }),
       tx.memberEventSubscription.findMany({ where: { memberId }, include: {
-        eventCode: { select: { id: true, code: true, eventName: true, eventType: true } },
-        coverages: { include: { bankTransaction: { select: { id: true, transactionDate: true, referenceNo: true, originalAmount: true, baseAmount: true } } }, orderBy: [{ coverageFrom: "desc" }, { id: "desc" }] }
+        eventCode: { select: { id: true, code: true, eventName: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
+        coverages: { include: { bankTransaction: { select: { id: true, transactionDate: true, referenceNo: true, originalAmount: true, baseAmount: true } } }, orderBy: [{ coverageFrom: "desc" }, { id: "desc" }] },
+        balanceLedger: { select: { id: true, bankTransactionId: true, entryType: true, entryStatus: true, amountDelta: true, effectiveDate: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, voidReason: true, createdAt: true, bankTransaction: { select: { referenceNo: true } } }, orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }, { id: "desc" }], take: 24 }
       }, orderBy: [{ activeFlag: "desc" }, { validUntil: "asc" }, { id: "asc" }] }),
-      tx.bankTransaction.findMany({ where: { status: "FINALIZED", reconciliationExcludedAt: null, originalAmount: { gt: 0 }, eventCode: { is: { eventType: "TIME_BASED" } }, memberIdentity: { is: { memberId, verificationStatus: "VERIFIED" } }, memberEventCoverages: { none: { coverageStatus: "ACTIVE" } } }, select: {
+      tx.bankTransaction.findMany({ where: pendingTimeBasedPaymentsWhere(memberId), select: {
         id: true, transactionDate: true, referenceNo: true, originalAmount: true, baseAmount: true,
+        memberEventCoverages: { where: { coverageSource: "TRANSACTION" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { coverageStatus: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true } } } },
+        memberEventBalanceLedger: { where: { entryType: "PAYMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { entryType: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, subscription: { select: { eventCodeId: true } } } },
         eventCode: { select: { id: true, code: true, eventName: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }
       }, orderBy: [{ transactionDate: "desc" }, { id: "desc" }] }),
-      tx.eventCode.findMany({ where: { eventType: "TIME_BASED", activeFlag: true }, select: { id: true, code: true, eventName: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] })
+      tx.eventCode.findMany({ where: { eventType: "TIME_BASED", activeFlag: true, timeRule: { is: { activeFlag: true } } }, select: { id: true, code: true, eventName: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] })
     ]);
-    return { member, subscriptions, pending, eventOptions };
+    const balances = subscriptions.length ? await tx.memberEventBalanceLedger.groupBy({
+      by: ["subscriptionId"], where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryStatus: "ACTIVE" },
+      _sum: { amountDelta: true }
+    }) : [];
+    return { member, subscriptions, pending, eventOptions, balances };
   });
 }
 

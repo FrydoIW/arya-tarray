@@ -10,6 +10,7 @@ import {
   loadTransactionInquiryMemberOption,
   loadTransactionInquiryMemberOptions,
   loadTransactionInquiryDetailRecord,
+  loadTimeBasedCarryAfterPayment,
   loadTransactionInquiryReportRecords,
   loadTransactionInquiryWorkspaceRecords,
   type TransactionInquiryFilter
@@ -183,14 +184,37 @@ export async function getTransactionInquiryDetail(transactionId: string) {
   const campaignIds = [...new Set(transaction.history.filter((item) => item.fieldName === "event_campaign_id").flatMap((item) => [item.oldValue, item.newValue]).filter((value): value is string => Boolean(value)))];
   const campaignLabels = new Map((await loadCampaignLabels(campaignIds)).map((item) => [item.id, item.campaignName]));
   const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
-  let sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: Date; coverageTo: Date } | null } | null = null;
+  let sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; principalAmount: string; paymentCredited: string | null; paymentOnlyRemainder: string; carryBalanceAfterPayment: string | null; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: Date | null; coverageTo: Date | null } | null } | null = null;
   const coverage = transaction.memberEventCoverages.find(item => item.subscription.memberId === member?.id) ?? null;
-  if (coverage?.unitAmountSnapshot && coverage.durationMonthsSnapshot && coverage.grantedUnits) {
-    sponsorship = { unitAmount: coverage.unitAmountSnapshot.toString(), durationMonths: coverage.durationMonthsSnapshot, grantedMonths: coverage.durationMonthsSnapshot * coverage.grantedUnits, allocation: { referenceNo: coverage.subscription.referenceNo, displayName: coverage.subscription.displayName, coverageFrom: coverage.coverageFrom, coverageTo: coverage.coverageTo } };
-  } else try {
-    const units = resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
-    if (units) {
-      sponsorship = { unitAmount: units.unitAmount, durationMonths: units.durationMonths, grantedMonths: units.durationMonths * units.grantedUnits, allocation: coverage ? { referenceNo: coverage.subscription.referenceNo, displayName: coverage.subscription.displayName, coverageFrom: coverage.coverageFrom, coverageTo: coverage.coverageTo } : null };
+  const currentPayment = transaction.memberEventBalanceLedger.find(row => row.entryStatus === "ACTIVE" && row.subscription.memberId === member?.id) ?? null;
+  const carryAfterPayment = currentPayment && transaction.transactionDate
+    ? await loadTimeBasedCarryAfterPayment(currentPayment.subscription.id, transaction.transactionDate, transaction.id) : null;
+  const historicalPayment = transaction.memberEventBalanceLedger.find(row => row.subscription.eventCodeId === transaction.eventCodeId
+    && decimalToCents(row.amountDelta) === decimalToCents(transaction.baseAmount)) ?? null;
+  try {
+    const rule = currentPayment?.unitAmountSnapshot && currentPayment.durationMonthsSnapshot ? {
+      unitAmount: currentPayment.unitAmountSnapshot.toString(), durationMonths: currentPayment.durationMonthsSnapshot
+    } : historicalPayment?.unitAmountSnapshot && historicalPayment.durationMonthsSnapshot ? {
+      unitAmount: historicalPayment.unitAmountSnapshot.toString(), durationMonths: historicalPayment.durationMonthsSnapshot
+    } : coverage?.unitAmountSnapshot && coverage.durationMonthsSnapshot ? {
+      unitAmount: coverage.unitAmountSnapshot.toString(), durationMonths: coverage.durationMonthsSnapshot
+    } : null;
+    const resolved = rule ?? resolveTimeBasedUnits({ eventCode: transaction.eventCode,
+      rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
+    if (resolved) {
+      const principal = decimalToCents(transaction.baseAmount ?? transaction.originalAmount);
+      const unit = decimalToCents(resolved.unitAmount);
+      sponsorship = {
+        unitAmount: resolved.unitAmount, durationMonths: resolved.durationMonths,
+        grantedMonths: coverage?.grantedUnits && coverage.durationMonthsSnapshot
+          ? coverage.grantedUnits * coverage.durationMonthsSnapshot : currentPayment ? 0 : Number(principal / unit) * resolved.durationMonths,
+        principalAmount: centsToDecimal(principal), paymentCredited: currentPayment?.amountDelta.toString() ?? null,
+        paymentOnlyRemainder: centsToDecimal(principal % unit),
+        carryBalanceAfterPayment: carryAfterPayment?.toString() ?? null,
+        allocation: currentPayment ? { referenceNo: currentPayment.subscription.referenceNo,
+          displayName: currentPayment.subscription.displayName, coverageFrom: coverage?.coverageFrom ?? null,
+          coverageTo: coverage?.coverageTo ?? null } : null
+      };
     }
   } catch { sponsorship = null; }
 

@@ -133,7 +133,7 @@ export type TransactionInquiryDetail = {
     eventCampaign: TransactionInquiryCampaign | null;
     memberIdentity: TransactionInquiryMemberIdentity | null;
     member: TransactionInquiryMember | null;
-    sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: string; coverageTo: string } | null } | null;
+    sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; principalAmount: string; paymentCredited: string | null; paymentOnlyRemainder: string; carryBalanceAfterPayment: string | null; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: string | null; coverageTo: string | null } | null } | null;
   };
   history: Array<{
     id: string;

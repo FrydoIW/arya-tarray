@@ -5,7 +5,7 @@ import { timeRuleValueSchema } from "../src/modules/configuration/event-code/eve
 import { assertEventTypeTransition } from "../src/modules/configuration/event-code/event-code.service.js";
 import { sponsorshipStatus } from "../src/modules/member/data/member-data.service.js";
 import { resolveTimeBasedUnits } from "../src/modules/reconciliation/time-based-classification.js";
-import { addCalendarMonthsInclusive, historicalCoverageEntitlement, isCurrentTimeBasedAllocation, resolveCoverageStart, selectHistoricalCoverageEntitlement } from "../src/modules/member/time-based/member-time-based.service.js";
+import { addCalendarMonthsInclusive, calculateCarryGrant, historicalCoverageEntitlement, isCurrentTimeBasedAllocation, resolveCoverageStart, selectHistoricalCoverageEntitlement } from "../src/modules/member/time-based/member-time-based.service.js";
 
 const event = { id: "rupang", eventType: "TIME_BASED" };
 const rule = { unitAmount: { toString: () => "50000.00" }, durationMonths: 1, activeFlag: true };
@@ -17,15 +17,26 @@ test("Time Rule validates positive whole-month configuration", () => {
   assert.equal(timeRuleValueSchema.safeParse({ unitAmount: "50000", durationMonths: 1.5, activeFlag: true, remark: null }).success, false);
 });
 
-test("exact Time-Based units use principal amount and reject remainders", () => {
+test("Time-Based units use positive principal and allow partial payment", () => {
   assert.deepEqual(resolveTimeBasedUnits({ eventCode: event, rule, transaction: payment("200000.00"), requiresClassification: true }), { grantedUnits: 4, unitAmount: "50000.00", durationMonths: 1, amountApplied: "200000.00" });
-  assert.throws(() => resolveTimeBasedUnits({ eventCode: event, rule, transaction: payment("75000.00"), requiresClassification: true }), /exact multiple/);
+  assert.equal(resolveTimeBasedUnits({ eventCode: event, rule, transaction: payment("75000.00"), requiresClassification: true })?.grantedUnits, 1);
+  assert.equal(resolveTimeBasedUnits({ eventCode: event, rule, transaction: payment("25000.00"), requiresClassification: true })?.grantedUnits, 0);
+  assert.equal(resolveTimeBasedUnits({ eventCode: event, rule, transaction: { originalAmount: { toString: () => "1000000" }, baseAmount: { toString: () => "25000" } }, requiresClassification: true })?.grantedUnits, 0);
+  assert.throws(() => resolveTimeBasedUnits({ eventCode: event, rule, transaction: { originalAmount: { toString: () => "1000000" }, baseAmount: null }, requiresClassification: true }), /base amount/);
+  assert.throws(() => resolveTimeBasedUnits({ eventCode: event, rule, transaction: payment("0"), requiresClassification: true }), /positive/);
+  assert.deepEqual(calculateCarryGrant(2500000n, 7500000n, 5000000n), { grantedUnits: 2, amountConsumed: 10000000n, carryBalance: 0n });
 });
 
 test("calendar coverage is inclusive and retains the day-of-month boundary", () => {
   assert.equal(addCalendarMonthsInclusive(new Date("2026-09-13T00:00:00Z"), 1).toISOString().slice(0, 10), "2026-10-12");
   assert.equal(addCalendarMonthsInclusive(new Date("2026-09-13T00:00:00Z"), 4).toISOString().slice(0, 10), "2027-01-12");
   assert.equal(addCalendarMonthsInclusive(new Date("2026-01-31T00:00:00Z"), 1).toISOString().slice(0, 10), "2026-02-27");
+  const from = new Date("2026-01-31T00:00:00Z");
+  const first = addCalendarMonthsInclusive(from, 1);
+  const second = addCalendarMonthsInclusive(new Date(first.getTime() + 86_400_000), 1);
+  assert.equal(addCalendarMonthsInclusive(from, 2).toISOString().slice(0, 10), "2026-03-27");
+  assert.equal(addCalendarMonthsInclusive(from, 2).getTime(), second.getTime());
+  assert.equal(addCalendarMonthsInclusive(new Date("2024-01-31T00:00:00Z"), 2).toISOString().slice(0, 10), "2024-03-28");
 });
 
 test("expired subscription with an old start date restarts coverage at payment date", () => {
@@ -47,9 +58,11 @@ test("VOIDED coverage preserves the historical snapshot for unchanged reallocati
   const oldSnapshot = historicalCoverageEntitlement({ eventCodeId: "event-a", subscriptionEventCodeId: "event-a", unitAmount: { toString: () => "50000.00" }, durationMonths: 1, grantedUnits: 4, amountApplied: { toString: () => "200000.00" } });
   assert.deepEqual(oldSnapshot, { unitAmount: "50000.00", durationMonths: 1, grantedUnits: 4, amountApplied: "200000.00" });
   const voidedCoverage = { coverageStatus: "VOIDED", subscriptionEventCodeId: "event-a", unitAmount: { toString: () => "50000.00" }, durationMonths: 1, grantedUnits: 4, amountApplied: { toString: () => "200000.00" } };
-  assert.deepEqual(selectHistoricalCoverageEntitlement({ eventCodeId: "event-a", recalculate: false, coverages: [voidedCoverage] }), oldSnapshot);
-  assert.equal(selectHistoricalCoverageEntitlement({ eventCodeId: "event-b", recalculate: false, coverages: [voidedCoverage] }), null);
-  assert.equal(selectHistoricalCoverageEntitlement({ eventCodeId: "event-a", recalculate: true, coverages: [voidedCoverage] }), null);
+  const principalAmount = { toString: () => "200000.00" };
+  assert.deepEqual(selectHistoricalCoverageEntitlement({ eventCodeId: "event-a", principalAmount, recalculate: false, coverages: [voidedCoverage] }), oldSnapshot);
+  assert.equal(selectHistoricalCoverageEntitlement({ eventCodeId: "event-b", principalAmount, recalculate: false, coverages: [voidedCoverage] }), null);
+  assert.equal(selectHistoricalCoverageEntitlement({ eventCodeId: "event-a", principalAmount, recalculate: true, coverages: [voidedCoverage] }), null);
+  assert.equal(selectHistoricalCoverageEntitlement({ eventCodeId: "event-a", principalAmount: { toString: () => "180000.00" }, recalculate: false, coverages: [voidedCoverage] }), null);
 });
 
 test("Event Type transition blocks historical transactions while allowing a clean Event Code", () => {
@@ -64,13 +77,7 @@ test("subscription without coverage is PENDING instead of funded ACTIVE", () => 
   assert.equal(sponsorshipStatus({ activeFlag: true, startDate: null, validUntil: new Date("2099-12-31T00:00:00Z") }), "ACTIVE");
 });
 
-test("coverage service preserves snapshots, starts from validity, and prevents duplicate active entitlement", () => {
-  const source = readFileSync(new URL("../src/modules/member/time-based/member-time-based.service.ts", import.meta.url), "utf8");
-  assert.match(source, /if \(sameOfficialAllocation && !options\?\.recalculate\) return/);
-  assert.match(source, /isCurrentTimeBasedAllocation/);
-  assert.match(source, /reconcileTimeBasedCoverageForIdentity/);
-  assert.match(source, /bankTransactionId: payment\.id[\s\S]*coverageStatus: "ACTIVE"/);
-  assert.match(source, /This payment is already allocated to active coverage/);
+test("Opening coverage and subscription resync remain connected", () => {
   const memberData = readFileSync(new URL("../src/modules/member/data/member-data.service.ts", import.meta.url), "utf8");
   assert.match(memberData, /coverageSource: "OPENING"/);
   assert.match(memberData, /rebuildTimeBasedSubscription/);
@@ -92,7 +99,7 @@ test("rate guard, manual adjustment restriction, and subscription resync protect
   const editIncome = readFileSync(new URL("../src/modules/reconciliation/edit-income/edit-income.repository.ts", import.meta.url), "utf8");
   const memberData = readFileSync(new URL("../src/modules/member/data/member-data.service.ts", import.meta.url), "utf8");
   assert.match(rules, /Resolve or allocate pending TIME_BASED payments/);
-  assert.match(rules, /status: "FINALIZED"[\s\S]*memberEventCoverages/);
+  assert.match(rules, /status: "FINALIZED"[\s\S]*memberEventBalanceLedger/);
   assert.match(editIncome, /TIME_BASED Event Codes are not available for manual adjustments/);
   assert.match(memberData, /synchronizePendingTimeBasedForMember\(tx, memberId, userId, input\.eventCodeId\)/);
 });

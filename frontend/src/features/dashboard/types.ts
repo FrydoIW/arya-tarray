@@ -38,7 +38,7 @@ export interface DashboardSummary {
     totalOutgoing: DashboardMoneyMetricValue;
     completeTransactions: DashboardMetricValue;
   };
-  sponsorshipSummary: { activeSubscriptions: number; expiringSoon: number; expiredSubscriptions: number };
+  sponsorshipSummary: { activeSubscriptions: number; expiringSoon: number; expiredSubscriptions: number; outstandingCarryBalance: string; subscriptionsWithCarryBalance: number };
   trend: Array<{
     month: string;
     label: string;

@@ -297,6 +297,7 @@ export function useEventCodes() {
   return {
     items: filteredItems,
     allItems: workingItems,
+    persistedItems: serverItems,
     summary,
     dirty,
     search,

@@ -81,7 +81,7 @@ export function EventCodeScreen() {
               }}
               disabled={eventCodes.loading || eventCodes.saving}
             >
-              {eventCodes.saving ? "Executing..." : "Execute"}
+              {eventCodes.saving ? "Executing..." : "Execute Event Codes"}
             </Button>
           </>
         )}
@@ -113,8 +113,8 @@ export function EventCodeScreen() {
         totalCount={eventCodes.allItems.length}
         onAdd={addRow}
       />
-      <EventCampaignSection eventCodes={eventCodes.allItems} />
-      <EventTimeRuleSection eventCodes={eventCodes.allItems} />
+      <EventCampaignSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
+      <EventTimeRuleSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
       <BulkUploadEventCodesModal
         open={bulkOpen}
         stagedCodes={eventCodes.allItems.filter((item) => item.isDraft).map((item) => item.code)}
@@ -124,9 +124,9 @@ export function EventCodeScreen() {
       />
       <ConfirmDialog
         open={executeOpen}
-        title="Confirm Execute"
-        message="Are you sure you want to execute these changes?"
-        confirmLabel="Execute"
+        title="Confirm Event Code Execute"
+        message="Save the staged Event Code changes? Campaigns and Time Rules remain separate."
+        confirmLabel="Execute Event Codes"
         loading={eventCodes.saving}
         onCancel={() => setExecuteOpen(false)}
         onConfirm={async () => {

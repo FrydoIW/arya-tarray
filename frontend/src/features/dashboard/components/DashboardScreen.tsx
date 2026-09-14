@@ -3,7 +3,7 @@
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { ChartNoAxesCombined } from "lucide-react";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import { DashboardMetrics } from "./DashboardMetrics";
 import { RecentActivities } from "./RecentActivities";
 import { StatementStatus } from "./StatementStatus";
@@ -99,6 +99,8 @@ export function DashboardScreen() {
           <div className="metric-card"><span>Active subscriptions</span><strong>{(data?.sponsorshipSummary?.activeSubscriptions ?? 0).toLocaleString("id-ID")}</strong><small>Currently valid</small></div>
           <div className="metric-card"><span>Expiring soon</span><strong>{(data?.sponsorshipSummary?.expiringSoon ?? 0).toLocaleString("id-ID")}</strong><small>Within 30 calendar days</small></div>
           <div className="metric-card"><span>Expired</span><strong>{(data?.sponsorshipSummary?.expiredSubscriptions ?? 0).toLocaleString("id-ID")}</strong><small>Active records past validity</small></div>
+          <div className="metric-card"><span>Outstanding carry</span><strong>{formatMoney(data?.sponsorshipSummary?.outstandingCarryBalance ?? "0")}</strong><small>Allocated TIME_BASED balance</small></div>
+          <div className="metric-card"><span>Subscriptions with carry</span><strong>{(data?.sponsorshipSummary?.subscriptionsWithCarryBalance ?? 0).toLocaleString("id-ID")}</strong><small>Positive active balance</small></div>
         </div>
       </section>
 

@@ -9,6 +9,11 @@ function map(row: Awaited<ReturnType<typeof listTimeRules>>[number]) {
   return { ...row, unitAmount: row.unitAmount.toString() };
 }
 
+export function assertNoOutstandingTimeBasedCarry(balances: Array<{ _sum: { amountDelta: { isZero(): boolean } | null } }>) {
+  if (balances.some(row => row._sum.amountDelta && !row._sum.amountDelta.isZero()))
+    throw new HttpError(409, "Resolve outstanding TIME_BASED carry balances before changing this Time Rule.");
+}
+
 export async function listTimeRules() {
   return prisma.eventTimeRule.findMany({ select, orderBy: { eventCode: { code: "asc" } } });
 }
@@ -28,12 +33,17 @@ export async function executeTimeRuleChange(input: TimeRuleExecuteInput, userId:
         reconciliationExcludedAt: null,
         OR: [
           { status: "CHECK" },
-          { status: "FINALIZED", originalAmount: { gt: 0 }, memberEventCoverages: { none: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" } } }
+          { status: "FINALIZED", originalAmount: { gt: 0 }, memberEventBalanceLedger: { none: { entryType: "PAYMENT", entryStatus: "ACTIVE" } } }
         ]
       },
       select: { id: true }
     });
     if (unresolved) throw new HttpError(409, "Resolve or allocate pending TIME_BASED payments before changing this Time Rule. Existing unresolved official or pending approval transactions have no protected rule snapshot.");
+    const balances = await tx.memberEventBalanceLedger.groupBy({
+      by: ["subscriptionId"], where: { entryStatus: "ACTIVE", subscription: { eventCodeId: event.id } },
+      _sum: { amountDelta: true }
+    });
+    assertNoOutstandingTimeBasedCarry(balances);
     await tx.eventTimeRule.upsert({
       where: { eventCodeId: input.eventCodeId },
       create: { eventCodeId: input.eventCodeId, unitAmount: new Prisma.Decimal(input.input.unitAmount), durationMonths: input.input.durationMonths, activeFlag: input.input.activeFlag, remark: input.input.remark, createdById: userId, updatedById: userId },

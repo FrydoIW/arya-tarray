@@ -168,7 +168,7 @@ export function EventCodeTable({
     <CollapsibleSection
       className={styles.tablePanel}
       title="Event Code Master"
-      description="Review current values in Inquiry, or use Edit Event Codes to stage changes. Nothing is saved until Execute."
+      description="Review current values in Inquiry, or use Edit Event Codes to stage changes. Execute Event Codes saves this section."
       summary={`${totalCount} event codes`}
       defaultExpanded={false}
       actions={<div className={styles.tableToolbar}>

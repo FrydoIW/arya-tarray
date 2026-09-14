@@ -92,6 +92,7 @@ export function BulkUploadEventCodesModal({
       code: row.code,
       eventName: row.eventName,
       category: row.category,
+      eventType: row.eventType as EventCodeInput["eventType"],
       description: row.description,
       activeFlag: row.activeFlag
     }]);
@@ -107,7 +108,7 @@ export function BulkUploadEventCodesModal({
     <Modal
       open={open}
       title="Bulk Upload Event Codes"
-      description="Upload the completed Event Code template. Rows are staged first and saved only after Execute."
+      description="Upload the completed Event Code template. Rows are staged first and saved only after Execute Event Codes."
       onClose={() => { if (!processing) onClose(); }}
     >
       <div className={styles.bulkModalBody}>
@@ -159,7 +160,7 @@ export function BulkUploadEventCodesModal({
             )}
             <div className={styles.previewTableWrap}>
               <table className={styles.previewTable}>
-                <thead><tr><th>Row</th><th>Event Code</th><th>Event Name</th><th>Category</th><th>Status</th><th>Result</th></tr></thead>
+                <thead><tr><th>Row</th><th>Event Code</th><th>Event Name</th><th>Category</th><th>Status</th><th>Type</th><th>Result</th></tr></thead>
                 <tbody>
                   {preview.rows.map((row) => (
                     <tr key={row.rowNumber}>
@@ -168,6 +169,7 @@ export function BulkUploadEventCodesModal({
                       <td>{row.eventName || "—"}</td>
                       <td>{row.category || "—"}</td>
                       <td>{row.status || "—"}</td>
+                      <td>{row.eventType}</td>
                       <td>{row.errors.length > 0
                         ? <ul className={styles.previewErrors}>{row.errors.map((message) => <li key={message}>{message}</li>)}</ul>
                         : <span className={styles.readyBadge}>Ready</span>}</td>

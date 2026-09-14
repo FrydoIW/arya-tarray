@@ -71,7 +71,15 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
             <div><span>Campaign</span><strong>{transaction.eventCampaign?.campaignName ?? "—"}</strong><small>Official Campaign assignment</small></div>
           </div>
         </section>
-        {transaction.sponsorship ? <section className={styles.detailSection}><h3>Rupang sponsorship</h3><div className={styles.detailGrid}><DetailItem label="Current rule" value={`${formatMoney(transaction.sponsorship.unitAmount)} = ${transaction.sponsorship.durationMonths} month`} /><DetailItem label="Estimated entitlement" value={`+${transaction.sponsorship.grantedMonths} months`} /><DetailItem label="Allocation" value={transaction.sponsorship.allocation ? transaction.sponsorship.allocation.referenceNo || transaction.sponsorship.allocation.displayName || "Allocated" : "Pending allocation"} /><DetailItem label="Coverage period" value={transaction.sponsorship.allocation ? `${formatDate(transaction.sponsorship.allocation.coverageFrom)} – ${formatDate(transaction.sponsorship.allocation.coverageTo)}` : "—"} /></div></section> : null}
+        {transaction.sponsorship ? <section className={styles.detailSection}><h3>Rupang sponsorship</h3><div className={styles.detailGrid}>
+          <DetailItem label="Rule snapshot / rate" value={`${formatMoney(transaction.sponsorship.unitAmount)} = ${transaction.sponsorship.durationMonths} month`} />
+          <DetailItem label="Principal (base amount)" value={formatMoney(transaction.sponsorship.principalAmount)} />
+          <DetailItem label="Payment credited to subscription" value={transaction.sponsorship.paymentCredited ? formatMoney(transaction.sponsorship.paymentCredited) : "Pending allocation"} />
+          <DetailItem label="Allocation" value={transaction.sponsorship.allocation ? transaction.sponsorship.allocation.referenceNo || transaction.sponsorship.allocation.displayName || "Allocated" : "Pending allocation"} />
+          <DetailItem label={transaction.sponsorship.allocation ? "Coverage generated after this payment" : "Months from payment alone"} value={`${transaction.sponsorship.grantedMonths} months`} />
+          <DetailItem label="Coverage period" value={transaction.sponsorship.allocation?.coverageFrom && transaction.sponsorship.allocation.coverageTo ? `${formatDate(transaction.sponsorship.allocation.coverageFrom)} – ${formatDate(transaction.sponsorship.allocation.coverageTo)}` : "No coverage generated"} />
+          <DetailItem label="Subscription carry balance after processing" value={transaction.sponsorship.carryBalanceAfterPayment !== null ? formatMoney(transaction.sponsorship.carryBalanceAfterPayment) : "—"} />
+        </div></section> : null}
         <section className={styles.detailSection}>
           <h3>Transaction History</h3>
           {detail.history.length === 0 ? <div className={styles.emptyHistory}>No manual changes have been recorded for this transaction.</div> : (
