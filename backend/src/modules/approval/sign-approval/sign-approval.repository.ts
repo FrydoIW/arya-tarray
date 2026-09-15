@@ -3,6 +3,7 @@ import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js";
+import { assertCorrectionApprovalCampaignValid } from "../../reconciliation/correction-approval-campaign.js";
 import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-time-based.service.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 
@@ -372,7 +373,10 @@ export async function decideSignApprovalAtomic(input: {
                     eventCodeId: true,
                     eventCampaignId: true,
                     remark: true,
-                    reconciliationExcludedAt: true
+                    reconciliationExcludedAt: true,
+                    transactionDate: true,
+                    transactionType: true,
+                    originalAmount: true
                   }
                 }
               },
@@ -411,6 +415,13 @@ export async function decideSignApprovalAtomic(input: {
 
     if (correctionProposal) {
       if (input.decision === "APPROVED") {
+        // A proposal only stages intent: the Event Code or its Campaign may have
+        // been reconfigured between Execute and Sign Approval. Revalidate the
+        // values that are about to become official against the CURRENT persisted
+        // configuration before the first BankTransaction mutation, so a stale
+        // proposal aborts the whole decision transaction with no partial writes.
+        await assertCorrectionApprovalCampaignValid(tx, correctionProposal.items);
+
         for (const item of correctionProposal.items) {
           if (item.action === "MODIFIED") {
             if (!item.bankTransaction || item.bankTransaction.eventCodeId !== item.beforeEventCodeId

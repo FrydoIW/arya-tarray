@@ -16,6 +16,7 @@ import "./core-flow-hardening.test.js";
 import "./bank-account-opening-balance.test.js";
 import "./edit-income-correction.test.js";
 import "./event-campaign.test.js";
+import "./correction-approval-campaign.test.js";
 import "./time-based.test.js";
 import "./time-based-flow.test.js";
 
