@@ -19,6 +19,21 @@ const memberListSelect = {
   registeredAt: true, _count: { select: { identities: true } }
 } as const;
 
+export function memberCarryFilter(programBalance: string, positiveSubscriptionIds: string[]): Prisma.MemberWhereInput {
+  if (programBalance === "ALL") return {};
+  const condition = { id: { in: positiveSubscriptionIds } };
+  return { eventSubscriptions: programBalance === "HAS_CARRY" ? { some: condition } : { none: condition } };
+}
+
+export async function loadMemberCarryFilter(tx: Pick<Prisma.TransactionClient, "memberEventBalanceLedger">, programBalance: string) {
+  if (programBalance === "ALL") return {};
+  const groups = await tx.memberEventBalanceLedger.groupBy({
+    by: ["subscriptionId"], where: { entryStatus: "ACTIVE", subscription: { eventCode: { eventType: "TIME_BASED" } } },
+    _sum: { amountDelta: true }, having: { amountDelta: { _sum: { gt: 0 } } }
+  });
+  return memberCarryFilter(programBalance, groups.map(row => row.subscriptionId));
+}
+
 export async function workspaceRecords(query: MemberDataWorkspaceQuery) {
   const where: Prisma.MemberWhereInput = {
     ...(query.status === "ACTIVE" ? { activeFlag: true } : query.status === "INACTIVE" ? { activeFlag: false } : {}),
@@ -32,6 +47,7 @@ export async function workspaceRecords(query: MemberDataWorkspaceQuery) {
     ] } : {})
   };
   return prisma.$transaction(async tx => {
+    where.AND = [await loadMemberCarryFilter(tx, query.programBalance)];
     const [total, active, inactive, manual, statement, cities] = await Promise.all([
       tx.member.count({ where }), tx.member.count({ where: { activeFlag: true } }),
       tx.member.count({ where: { activeFlag: false } }), tx.member.count({ where: { registrationSource: "MANUAL" } }),

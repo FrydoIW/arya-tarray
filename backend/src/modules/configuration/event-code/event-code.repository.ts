@@ -75,15 +75,15 @@ export async function applyEventCodeChangesAtomic(data: {
     const requestedTypes = new Map(data.updates.map((item) => [item.id, item.input.eventType]));
     const currentTypes = await tx.eventCode.findMany({
       where: { id: { in: [...requestedTypes.keys()] } },
-      select: { id: true, eventType: true, code: true, _count: { select: { transactions: true, memberSubscriptions: true } } }
+      select: { id: true, eventType: true, code: true, timeRule: { select: { eventCodeId: true } }, _count: { select: { transactions: true, memberSubscriptions: true } } }
     });
     for (const current of currentTypes) {
       const nextType = requestedTypes.get(current.id)!;
       if (current.eventType !== "TIME_BASED" && nextType === "TIME_BASED" && current._count.transactions > 0) {
         throw new HttpError(409, `Event Code ${current.code} with transaction history cannot become TIME_BASED. Create a new Event Code instead.`);
       }
-      if (current.eventType === "TIME_BASED" && nextType !== "TIME_BASED" && (current._count.transactions > 0 || current._count.memberSubscriptions > 0)) {
-        throw new HttpError(409, `TIME_BASED Event Code ${current.code} with transaction or subscription history must remain TIME_BASED. Deactivate it instead.`);
+      if (current.eventType === "TIME_BASED" && nextType !== "TIME_BASED" && (current._count.transactions > 0 || current._count.memberSubscriptions > 0 || current.timeRule)) {
+        throw new HttpError(409, `TIME_BASED Event Code ${current.code} with a Time Rule, transaction or subscription history must remain TIME_BASED. Deactivate it instead.`);
       }
     }
     const nonCampaignIds = data.updates.filter((item) => item.input.eventType !== "CAMPAIGN").map((item) => item.id);
@@ -93,8 +93,8 @@ export async function applyEventCodeChangesAtomic(data: {
     }
     const nonTimeBasedIds = data.updates.filter((item) => item.input.eventType !== "TIME_BASED").map((item) => item.id);
     if (nonTimeBasedIds.length) {
-      const used = await tx.eventCode.findFirst({ where: { id: { in: nonTimeBasedIds }, memberSubscriptions: { some: {} } }, select: { code: true } });
-      if (used) throw new HttpError(409, `Event Code ${used.code} has Time-Based subscription history. Deactivate it instead.`);
+      const used = await tx.eventCode.findFirst({ where: { id: { in: nonTimeBasedIds }, OR: [{ memberSubscriptions: { some: {} } }, { timeRule: { isNot: null } }] }, select: { code: true } });
+      if (used) throw new HttpError(409, `Event Code ${used.code} has a Time Rule or Time-Based subscription history. Deactivate it instead.`);
     }
     if (data.deletes.length > 0) {
       await tx.eventCode.deleteMany({

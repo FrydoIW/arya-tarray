@@ -69,7 +69,7 @@ export function EventCodeScreen() {
               variant="secondary"
               icon={<RotateCcw size={16} />}
               onClick={eventCodes.clearChanges}
-              disabled={eventCodes.loading || eventCodes.saving}
+              disabled={!eventCodes.canClear}
             >
               Clear
             </Button>
@@ -79,7 +79,8 @@ export function EventCodeScreen() {
               onClick={() => {
                 if (eventCodes.prepareExecute()) setExecuteOpen(true);
               }}
-              disabled={eventCodes.loading || eventCodes.saving}
+              disabled={!eventCodes.canExecute}
+              title={eventCodes.dirty ? eventCodes.validationError || undefined : "Stage changes first"}
             >
               {eventCodes.saving ? "Executing..." : "Execute Event Codes"}
             </Button>
@@ -101,6 +102,7 @@ export function EventCodeScreen() {
         mode={eventCodes.mode}
         loading={eventCodes.loading}
         disabled={eventCodes.saving}
+        reloadDisabled={!eventCodes.canReload}
         templateDownloading={templateDownloading}
         onSearchChange={eventCodes.setSearch}
         onStatusFilterChange={eventCodes.setStatusFilter}

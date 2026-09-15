@@ -20,3 +20,4 @@ import "./time-based.test.js";
 import "./time-based-flow.test.js";
 
 import "./v5-final-hardening.test.js";
+import "./targeted-hardening.test.js";

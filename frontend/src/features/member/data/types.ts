@@ -2,7 +2,7 @@ export type MemberStatusFilter = "ACTIVE" | "INACTIVE" | "ALL";
 export type RegistrationSource = "MANUAL" | "STATEMENT";
 export type PeriodMode = "MONTH" | "DAY";
 export type MemberDataQuery = { search: string; status: MemberStatusFilter; city: string; registrationSource: RegistrationSource | "ALL";
-  page: number; pageSize: number };
+  programBalance: "ALL" | "HAS_CARRY" | "NO_CARRY"; page: number; pageSize: number };
 export type MemberRow = {
   memberId: string; memberCode: string; memberName: string; initialName: string | null;
   birthDate: string | null; age: number | null; phone: string | null; email: string | null;

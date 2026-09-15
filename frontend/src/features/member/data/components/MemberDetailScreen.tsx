@@ -98,7 +98,7 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
       <DataTable rows={member.identities} columns={columns} rowKey={row => row.memberIdentityId} minWidth={canMutate ? "1250px" : "1020px"} emptyState={{ title: "Belum ada identitas", description: "Tambahkan identitas belum terverifikasi ketika tersedia." }} />
     </section> : tab === "ownership-history" ? <div id="member-panel-ownership-history" role="tabpanel" aria-labelledby="member-tab-ownership-history" tabIndex={0}><MemberIdentityHistory memberId={memberId} /></div>
       : tab === "donations" ? <div id="member-panel-donations" role="tabpanel" aria-labelledby="member-tab-donations" tabIndex={0}><MemberDonationHistory memberId={memberId} /></div>
-      : <div id="member-panel-sponsorship" role="tabpanel" aria-labelledby="member-tab-sponsorship" tabIndex={0}><MemberSponsorship memberId={memberId} canMutate={canMutate} /></div>}
+      : <div id="member-panel-sponsorship" role="tabpanel" aria-labelledby="member-tab-sponsorship" tabIndex={0}><MemberSponsorship memberId={memberId} memberActive={member.activeFlag} canMutate={canMutate} /></div>}
     {canMutate && action?.kind === "edit-profile" ? <MemberProfileModal member={member} busy={state.busy} error={state.error} onClose={close} onSubmit={state.updateProfile} /> : null}
     {canMutate && action?.kind === "add" ? <AddIdentityModal memberId={memberId} busy={state.busy} error={state.error} onClose={close} onSubmit={state.attach} /> : null}
     {canMutate && action?.kind === "edit-identity" ? <EditIdentityModal identity={action.identity} busy={state.busy} error={state.error} onClose={close} onSubmit={input => state.updateIdentity(action.identity.memberIdentityId, input)} /> : null}

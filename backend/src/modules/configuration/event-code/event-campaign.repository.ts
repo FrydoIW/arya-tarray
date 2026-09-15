@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
+import { assertCampaignParentActive, assertCampaignPeriodContainsTransactions } from "./event-campaign.rules.js";
 
 export const campaignSelect = {
   id: true,
@@ -26,15 +27,15 @@ export function officialCampaignAmountWhere(ids: string[]): Prisma.BankTransacti
   };
 }
 
-export async function listCampaignRecords(options: { activeRelevantFrom?: Date; take?: number } = {}) {
-  const campaigns = await prisma.eventCampaign.findMany({
-    where: options.activeRelevantFrom ? { activeFlag: true, OR: [{ endDate: null }, { endDate: { gte: options.activeRelevantFrom } }] } : undefined,
+export async function listCampaignRecords(options: { activeRelevantFrom?: Date; take?: number } = {}, client: Pick<typeof prisma, "eventCampaign" | "bankTransaction"> = prisma) {
+  const campaigns = await client.eventCampaign.findMany({
+    where: options.activeRelevantFrom ? { activeFlag: true, eventCode: { activeFlag: true }, OR: [{ endDate: null }, { endDate: { gte: options.activeRelevantFrom } }] } : undefined,
     select: campaignSelect,
     orderBy: [{ activeFlag: "desc" }, { startDate: "desc" }, { createdAt: "desc" }],
     take: options.take
   });
   const ids = campaigns.map((item) => item.id);
-  const totals = ids.length ? await prisma.bankTransaction.groupBy({
+  const totals = ids.length ? await client.bankTransaction.groupBy({
     by: ["eventCampaignId"],
     where: officialCampaignAmountWhere(ids),
     _sum: { originalAmount: true }
@@ -50,7 +51,7 @@ export async function applyCampaignChangesAtomic(input: {
   return prisma.$transaction(async (tx) => {
     const updatedIds = input.updates.map((item) => item.id);
     if (new Set(updatedIds).size !== updatedIds.length) throw new HttpError(400, "Duplicate Campaign update");
-    const existing = updatedIds.length ? await tx.eventCampaign.findMany({ where: { id: { in: updatedIds } }, select: { id: true, eventCodeId: true } }) : [];
+    const existing = updatedIds.length ? await tx.eventCampaign.findMany({ where: { id: { in: updatedIds } }, select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } }) : [];
     if (existing.length !== updatedIds.length) throw new HttpError(404, "One or more Campaigns no longer exist");
     const existingById = new Map(existing.map((item) => [item.id, item.eventCodeId]));
     if (input.updates.some((item) => existingById.get(item.id) !== item.input.eventCodeId)) {
@@ -63,7 +64,21 @@ export async function applyCampaignChangesAtomic(input: {
     if (input.creates.some((item) => !activeEventIds.has(item.eventCodeId))) {
       throw new HttpError(400, "New Campaigns require an active Event Code");
     }
+    const dateChangedIds = input.updates.filter(update => {
+      const before = existing.find(row => row.id === update.id)!;
+      return (before.startDate?.toISOString().slice(0, 10) ?? null) !== update.input.startDate
+        || (before.endDate?.toISOString().slice(0, 10) ?? null) !== update.input.endDate;
+    }).map(row => row.id);
+    const linkedBounds = dateChangedIds.length ? await tx.bankTransaction.groupBy({
+      by: ["eventCampaignId"], where: { eventCampaignId: { in: dateChangedIds } },
+      _min: { transactionDate: true }, _max: { transactionDate: true }, _count: { _all: true, transactionDate: true }
+    }) : [];
     for (const update of input.updates) {
+      const before = existing.find(row => row.id === update.id)!;
+      assertCampaignParentActive(activeEventIds.has(update.input.eventCodeId), !before.activeFlag && update.input.activeFlag);
+      const bounds = linkedBounds.find(row => row.eventCampaignId === update.id);
+      if (bounds) assertCampaignPeriodContainsTransactions(update.input, { earliest: bounds._min.transactionDate,
+        latest: bounds._max.transactionDate, missingDates: bounds._count._all - bounds._count.transactionDate });
       await tx.eventCampaign.update({
         where: { id: update.id },
         data: {

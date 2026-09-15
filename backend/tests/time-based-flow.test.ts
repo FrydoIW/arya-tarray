@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
-import { addOpeningCoverageRecord, pendingTimeBasedPaymentPreview, updateSubscriptionRecord } from "../src/modules/member/data/member-data.service.js";
+import { addOpeningCoverageRecord, pendingTimeBasedPaymentPreview, updateSubscriptionRecord, voidOpeningCoverageRecord, retryAllocationRecord } from "../src/modules/member/data/member-data.service.js";
 import { manuallyAllocateTimeBasedPayment, reconcileTimeBasedCoverageForIdentity, rebuildTimeBasedSubscription, selectHistoricalPaymentSnapshot, synchronizeTimeBasedTransaction } from "../src/modules/member/time-based/member-time-based.service.js";
 import { assertNoOutstandingTimeBasedCarry } from "../src/modules/configuration/event-code/event-time-rule.service.js";
 import { loadDashboardTimeBasedCarry, loadDashboardTimeBasedSummary, summarizeTimeBasedCarry } from "../src/modules/monitoring/dashboard/dashboard.repository.js";
@@ -36,7 +36,9 @@ function fixture() {
   let sequence = 0;
   const id = () => String(++sequence).padStart(5, "0");
   const matches = (row: Record<string, unknown>, where: Record<string, unknown>) =>
-    Object.entries(where).every(([key, value]) => key === "id" && typeof value === "object" && value !== null && "in" in value
+    Object.entries(where).every(([key, value]) => key === "subscription"
+      ? subs.some(sub => sub.id === row.subscriptionId && sub.memberId === (value as { memberId: string }).memberId)
+      : key === "id" && typeof value === "object" && value !== null && "in" in value
       ? (value.in as string[]).includes(String(row.id))
       : typeof value === "string" ? row[key] === value : true);
   const decorateEntry = (row: Entry) => ({ ...row, subscription: subs.find(sub => sub.id === row.subscriptionId)! });
@@ -63,6 +65,7 @@ function fixture() {
       }
     },
     memberEventBalanceLedger: {
+      aggregate: async ({ where }: { where: Record<string, unknown> }) => ({ _sum: { amountDelta: entries.filter(row => matches(row, where)).reduce((sum, row) => sum.plus(row.amountDelta), d("0")) } }),
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
         entries.filter(row => matches(row, where)).slice().reverse().map(decorateEntry),
       findFirst: async ({ where }: { where: Record<string, unknown> }) =>
@@ -170,12 +173,13 @@ test("deactivating a competing subscription resolves a partial pending payment",
   assert.equal(f.activeCoverage().length, 0);
 });
 
-test("deactivation never transfers an already allocated partial payment", async () => {
+test("deactivation with carry is rejected and never transfers an allocated partial payment", async () => {
   const f = fixture(); f.payments.push(payment("p1", "25000"));
   await f.sync("p1");
   f.subs.push({ ...f.subs[0], id: "sub-b", validUntil: null });
-  await updateSubscriptionRecord(f.tx, "member-a", "sub-a",
-    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin");
+  await assert.rejects(() => updateSubscriptionRecord(f.tx, "member-a", "sub-a",
+    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin"), /carry/);
+  assert.equal(f.subs[0].activeFlag, true);
   assert.equal(f.balance("sub-a"), "25000.00");
   assert.equal(f.balance("sub-b"), "0.00");
   assert.equal(f.active().filter(row => row.entryType === "PAYMENT").length, 1);
@@ -315,10 +319,10 @@ test("Dashboard carry query filters VOIDED rows before grouped aggregation", asy
   let where: unknown;
   const client = { memberEventBalanceLedger: { groupBy: async (input: { where: unknown }) => {
     where = input.where;
-    return [{ _sum: { amountDelta: d("25000") } }];
-  } } };
+    return [{ subscriptionId: "sub-a", _sum: { amountDelta: d("25000") } }];
+  } }, memberEventSubscription: { findMany: async () => [{ id: "sub-a", eventCode: { id: "rupang", code: "091", eventName: "Rupang" } }] } };
   assert.deepEqual(await loadDashboardTimeBasedCarry(client as never),
-    { outstandingCarryBalance: "25000.00", subscriptionsWithCarryBalance: 1 });
+    { outstandingCarryBalance: "25000.00", subscriptionsWithCarryBalance: 1, carryByEvent: [{ eventCodeId: "rupang", code: "091", eventName: "Rupang", amount: "25000.00" }] });
   assert.deepEqual(where, { entryStatus: "ACTIVE" });
 });
 
@@ -340,4 +344,77 @@ test("Dashboard Time-Based counts exclude unfunded validUntil NULL", async () =>
       && (!where.validUntil.lte || validUntil <= where.validUntil.lte) && (!where.validUntil.lt || validUntil < where.validUntil.lt)).length } };
   assert.deepEqual(await loadDashboardTimeBasedSummary(today, day("2026-10-14"), client as never),
     { activeSubscriptions: 1, expiringSoon: 1, expiredSubscriptions: 1 });
+});
+
+test("zero-carry subscription may deactivate after full payment without losing history", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "50000")); await f.sync("p1");
+  const before = f.entries.length;
+  await updateSubscriptionRecord(f.tx, "member-a", "sub-a",
+    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin");
+  assert.equal(f.subs[0].activeFlag, false);
+  assert.equal(f.balance(), "0.00");
+  assert.equal(f.entries.length, before);
+});
+
+test("Opening void records reason, preserves history and rebuilds payment coverage and validUntil", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "50000", "2026-02-01"));
+  await addOpeningCoverageRecord(f.tx, "member-a", "sub-a", { coverageFrom: "2026-01-01", coverageTo: "2026-03-31", remark: "Legacy opening" }, "admin");
+  await f.sync("p1");
+  assert.equal(f.activeCoverage()[0].coverageFrom.toISOString().slice(0, 10), "2026-04-01");
+  const opening = f.coverages.find(row => row.coverageSource === "OPENING")!;
+  const oldCoverage = f.activeCoverage()[0];
+  await voidOpeningCoverageRecord(f.tx, "member-a", "sub-a", opening.id, "Wrong legacy interval", "admin");
+  assert.equal(opening.coverageStatus, "VOIDED");
+  assert.equal(opening.voidReason, "Wrong legacy interval");
+  assert.equal(oldCoverage.coverageStatus, "VOIDED");
+  assert.equal(f.activeCoverage()[0].coverageFrom.toISOString().slice(0, 10), "2026-02-01");
+  assert.equal(f.subs[0].validUntil?.toISOString().slice(0, 10), "2026-02-28");
+  assert.equal(f.active().filter(row => row.entryType === "PAYMENT").length, 1);
+  assert.equal(f.balance(), "0.00");
+  await assert.rejects(() => voidOpeningCoverageRecord(f.tx, "member-a", "sub-a", opening.id, "Repeated request", "admin"), /no longer available/);
+});
+
+test("Opening void rejects missing reason, wrong owner and transaction coverage", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "50000")); await f.sync("p1");
+  await addOpeningCoverageRecord(f.tx, "member-a", "sub-a", { coverageFrom: "2025-01-01", coverageTo: "2025-02-28", remark: "Legacy" }, "admin");
+  const opening = f.coverages.find(row => row.coverageSource === "OPENING")!;
+  await assert.rejects(() => voidOpeningCoverageRecord(f.tx, "member-a", "sub-a", opening.id, " ", "admin"), /reason/);
+  await assert.rejects(() => voidOpeningCoverageRecord(f.tx, "member-b", "sub-a", opening.id, "Wrong owner", "admin"), /no longer available/);
+  await assert.rejects(() => voidOpeningCoverageRecord(f.tx, "member-a", "sub-a", f.activeCoverage()[0].id, "Wrong source", "admin"), /no longer available/);
+  assert.equal(opening.coverageStatus, "ACTIVE");
+});
+
+test("voiding sole Opening resets validUntil without generating cash entries", async () => {
+  const f = fixture();
+  await addOpeningCoverageRecord(f.tx, "member-a", "sub-a", { coverageFrom: "2026-01-01", coverageTo: "2026-03-31", remark: "Legacy" }, "admin");
+  await voidOpeningCoverageRecord(f.tx, "member-a", "sub-a", f.coverages[0].id, "Incorrect opening", "admin");
+  assert.equal(f.subs[0].validUntil, null);
+  assert.equal(f.entries.length, 0);
+});
+
+test("Retry Allocation uses unique-subscription carry engine and is idempotent", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "25000"), payment("p2", "25000", "2026-02-01"));
+  await retryAllocationRecord(f.tx, "member-a", "sub-a", "p1", "admin");
+  assert.equal(f.balance(), "25000.00");
+  await retryAllocationRecord(f.tx, "member-a", "sub-a", "p2", "admin");
+  const entries = f.entries.length;
+  await retryAllocationRecord(f.tx, "member-a", "sub-a", "p1", "admin");
+  await retryAllocationRecord(f.tx, "member-a", "sub-a", "p2", "admin");
+  assert.equal(f.entries.length, entries);
+  assert.equal(f.active().filter(row => row.entryType === "PAYMENT").length, 2);
+  assert.equal(f.balance(), "0.00");
+  assert.equal(f.activeCoverage()[0].grantedUnits, 1);
+});
+
+test("Retry rejects zero/multiple subscriptions and ineligible ownership or lifecycle", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "25000"));
+  f.subs[0].activeFlag = false;
+  await assert.rejects(() => retryAllocationRecord(f.tx, "member-a", "sub-a", "p1", "admin"), /exactly one/);
+  f.subs[0].activeFlag = true; f.subs.push({ ...f.subs[0], id: "sub-b" });
+  await assert.rejects(() => retryAllocationRecord(f.tx, "member-a", "sub-a", "p1", "admin"), /exactly one/);
+  f.subs.pop();
+  await assert.rejects(() => retryAllocationRecord(f.tx, "member-b", "sub-a", "p1", "admin"), /official/);
+  f.payments[0].status = "CHECK";
+  await assert.rejects(() => retryAllocationRecord(f.tx, "member-a", "sub-a", "p1", "admin"), /official/);
+  assert.equal(f.entries.length, 0);
 });

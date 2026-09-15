@@ -4,24 +4,28 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate, formatMoney } from "@/lib/format";
+import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import * as api from "../api/member-data.api";
 import type { OpeningCoverageInput, SponsorshipWorkspace, SubscriptionInput } from "../types";
 import styles from "../styles/member-data.module.css";
 
-type FormMode = "create" | "edit" | "opening" | null;
+type FormMode = "create" | "edit" | "opening" | "void-opening" | null;
 const emptySubscription: SubscriptionInput = { eventCodeId: "", referenceNo: null, displayName: null, startDate: null, activeFlag: true, remark: null };
 
-export function MemberSponsorship({ memberId, canMutate }: { memberId: string; canMutate: boolean }) {
+export function MemberSponsorship({ memberId, memberActive, canMutate }: { memberId: string; memberActive: boolean; canMutate: boolean }) {
   const [data, setData] = useState<SponsorshipWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<FormMode>(null);
   const [subscriptionId, setSubscriptionId] = useState("");
+  const [coverageId, setCoverageId] = useState("");
+  const [voidReason, setVoidReason] = useState("");
   const [form, setForm] = useState<SubscriptionInput>(emptySubscription);
   const [opening, setOpening] = useState<OpeningCoverageInput>({ coverageFrom: "", coverageTo: "", remark: "" });
   const editedSubscription = data?.subscriptions.find(item => item.subscriptionId === subscriptionId);
   const startLocked = mode === "edit" && Boolean(editedSubscription?.coverage.length || editedSubscription?.balanceHistory.length);
+  const carryLocked = mode === "edit" && editedSubscription?.activeFlag && Number(editedSubscription.carryBalance) !== 0;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,7 +38,11 @@ export function MemberSponsorship({ memberId, canMutate }: { memberId: string; c
   async function perform(action: () => Promise<SponsorshipWorkspace>) {
     setBusy(true);
     setError("");
-    try { setData(await action()); setMode(null); }
+    try {
+      setData(await action()); setMode(null);
+      invalidateWorkspaceCache("member/data/workspace");
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+    }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Sponsorship action failed."); }
     finally { setBusy(false); }
   }
@@ -50,12 +58,13 @@ export function MemberSponsorship({ memberId, canMutate }: { memberId: string; c
   return <section className={styles.detailPanel}>
     <div className={styles.sectionHead}>
       <div><h2>Rupang &amp; Program</h2><p>Subscription and coverage ledger. Payment allocation never changes financial approval.</p></div>
-      {canMutate ? <Button size="sm" disabled={loading || !data?.eventOptions.length} onClick={() => {
+      {canMutate ? <Button size="sm" disabled={loading || busy || !memberActive || !data?.eventOptions.length} onClick={() => {
         setForm({ ...emptySubscription, eventCodeId: data?.eventOptions[0]?.eventCodeId ?? "" });
         setMode("create");
       }}>Add subscription</Button> : null}
     </div>
-    {canMutate && !loading && data && data.eventOptions.length === 0 ? <p className={styles.optionState}>Configure an active Time-Based Event Code and Time Rule first.</p> : null}
+    {canMutate && !memberActive ? <p className={styles.optionState}>Activate this Member before adding a subscription.</p>
+      : canMutate && !loading && data && data.eventOptions.length === 0 ? <p className={styles.optionState}>Configure an active Time-Based Event Code and Time Rule first.</p> : null}
     {error ? <div className="ui-alert ui-alert-error">{error}</div> : null}
     {loading ? <p className={styles.optionState}>Loading sponsorship…</p> : <div className={styles.sponsorshipStack}>
       {data?.subscriptions.length ? data.subscriptions.map(sub => <article className={styles.sponsorshipCard} key={sub.subscriptionId}>
@@ -67,15 +76,19 @@ export function MemberSponsorship({ memberId, canMutate }: { memberId: string; c
           <span>Carry balance <b>{formatMoney(sub.carryBalance)}</b></span>
         </div>
         {canMutate ? <div className={styles.compactActions}>
-          <Button size="sm" variant="ghost" onClick={() => edit(sub.subscriptionId)}>Edit</Button>
-          <Button size="sm" variant="ghost" onClick={() => { setSubscriptionId(sub.subscriptionId); setOpening({ coverageFrom: "", coverageTo: "", remark: "" }); setMode("opening"); }}>Opening coverage</Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => edit(sub.subscriptionId)}>Edit</Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setSubscriptionId(sub.subscriptionId); setOpening({ coverageFrom: "", coverageTo: "", remark: "" }); setMode("opening"); }}>Opening coverage</Button>
         </div> : null}
         <div className={styles.coverageList}>{sub.coverage.length ? sub.coverage.map(coverage => <div key={coverage.coverageId}>
           <strong>{coverage.source === "OPENING" ? "Opening coverage" : `+${(coverage.grantedUnits ?? 0) * (coverage.durationMonths ?? 0)} months`}</strong>
           <span>{formatDate(coverage.coverageFrom)} → {formatDate(coverage.coverageTo)}</span>
           <small>{coverage.amountApplied ? formatMoney(coverage.amountApplied) : "No transaction"} · {coverage.status}{coverage.voidReason ? ` · ${coverage.voidReason}` : ""}</small>
+          {canMutate && coverage.source === "OPENING" && coverage.status === "ACTIVE" ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => {
+            setSubscriptionId(sub.subscriptionId); setCoverageId(coverage.coverageId); setVoidReason(""); setMode("void-opening");
+          }}>Void opening</Button> : null}
         </div>) : <small>No coverage recorded.</small>}</div>
         {sub.balanceHistory.length ? <div className={styles.coverageList} aria-label="Balance history">
+          <small>Balance history · Latest 24 entries</small>
           {sub.balanceHistory.map(entry => <div key={entry.ledgerId}>
             <strong>{entry.type === "PAYMENT" ? "Payment" : "Coverage use"} · {entry.amountDelta.startsWith("-") ? "-" : "+"}{formatMoney(entry.amountDelta.replace("-", ""))}</strong>
             <span>{entry.effectiveDate ? formatDate(entry.effectiveDate) : "—"}{entry.referenceNo ? ` · ${entry.referenceNo}` : ""}</span>
@@ -94,7 +107,10 @@ export function MemberSponsorship({ memberId, canMutate }: { memberId: string; c
                 : "Rule needs attention"}</small>
               <em>{compatible.length === 0 ? "No compatible active subscription. Create a subscription first." : payment.reason}</em>
             </div>
-            {canMutate && compatible.length > 1 ? <select aria-label="Allocate payment" defaultValue="" disabled={busy} onChange={event => {
+            {canMutate && compatible.length === 1 ? <Button size="sm" variant="secondary" disabled={busy || payment.grantedUnits === null} onClick={() => {
+              void perform(() => api.retryAllocation(memberId, compatible[0].subscriptionId, payment.transactionId));
+            }}>Retry Allocation</Button> : null}
+            {canMutate && compatible.length > 1 ? <select aria-label="Allocate payment" defaultValue="" disabled={busy || payment.grantedUnits === null} onChange={event => {
               if (event.target.value) void perform(() => api.allocateSponsorshipPayment(memberId, event.target.value, payment.transactionId));
             }}><option value="">Allocate to…</option>{compatible.map(sub => <option key={sub.subscriptionId} value={sub.subscriptionId}>{sub.referenceNo || sub.displayName || sub.subscriptionId}</option>)}</select> : null}
           </div>;
@@ -110,6 +126,7 @@ export function MemberSponsorship({ memberId, canMutate }: { memberId: string; c
         else void perform(() => api.updateSubscription(memberId, subscriptionId, { referenceNo: form.referenceNo, displayName: form.displayName,
           startDate: form.startDate, activeFlag: form.activeFlag, remark: form.remark }));
       }}>
+        {error ? <div className="ui-alert ui-alert-error">{error}</div> : null}
         <div className={styles.formGrid}>
           <label className={styles.field}>Program<select value={form.eventCodeId} disabled={busy || mode === "edit"} onChange={event => setForm(value => ({ ...value, eventCodeId: event.target.value }))}>
             {mode === "edit" && editedSubscription && !data?.eventOptions.some(item => item.eventCodeId === editedSubscription.event.eventCodeId)
@@ -121,7 +138,8 @@ export function MemberSponsorship({ memberId, canMutate }: { memberId: string; c
           <label className={styles.field}>Start date<input type="date" value={form.startDate ?? ""} disabled={busy || startLocked} onChange={event => setForm(value => ({ ...value, startDate: event.target.value || null }))} />
             {startLocked ? <small>Start date is locked after coverage or payment history exists.</small> : null}</label>
         </div>
-        <label className={styles.toggle}><input type="checkbox" checked={form.activeFlag} onChange={event => setForm(value => ({ ...value, activeFlag: event.target.checked }))} /><span>Active subscription</span></label>
+        <label className={styles.toggle}><input type="checkbox" checked={form.activeFlag} disabled={busy || Boolean(carryLocked)} onChange={event => setForm(value => ({ ...value, activeFlag: event.target.checked }))} /><span>Active subscription</span></label>
+        {carryLocked ? <small>Resolve the remaining {formatMoney(editedSubscription!.carryBalance)} carry before deactivating.</small> : null}
         <label className={styles.field}>Remark<textarea value={form.remark ?? ""} onChange={event => setForm(value => ({ ...value, remark: event.target.value || null }))} /></label>
         <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Cancel</Button><Button type="submit" disabled={busy || !form.eventCodeId}>{busy ? "Saving…" : "Save"}</Button></div>
       </form>
@@ -129,12 +147,26 @@ export function MemberSponsorship({ memberId, canMutate }: { memberId: string; c
 
     <Modal open={mode === "opening"} title="Add opening coverage" description="For known legacy coverage without a BankTransaction." onClose={() => !busy && setMode(null)}>
       <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); void perform(() => api.addOpeningCoverage(memberId, subscriptionId, opening)); }}>
+        {error ? <div className="ui-alert ui-alert-error">{error}</div> : null}
         <div className={styles.formGrid}>
           <label className={styles.field}>Coverage from<input required type="date" value={opening.coverageFrom} onChange={event => setOpening(value => ({ ...value, coverageFrom: event.target.value }))} /></label>
           <label className={styles.field}>Coverage to<input required type="date" value={opening.coverageTo} onChange={event => setOpening(value => ({ ...value, coverageTo: event.target.value }))} /></label>
         </div>
         <label className={styles.field}>Reason<textarea required minLength={3} value={opening.remark} onChange={event => setOpening(value => ({ ...value, remark: event.target.value }))} /></label>
         <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Cancel</Button><Button type="submit" disabled={busy}>Add coverage</Button></div>
+      </form>
+    </Modal>
+    <Modal open={mode === "void-opening"} title="Void opening coverage?"
+      description="The opening stays in audit history. Payment coverage and valid until will be rebuilt. You can then add a corrected opening."
+      onClose={() => !busy && setMode(null)}>
+      <form className={styles.modalBody} onSubmit={event => {
+        event.preventDefault();
+        if (voidReason.trim().length >= 3) void perform(() => api.voidOpeningCoverage(memberId, subscriptionId, coverageId, voidReason.trim()));
+      }}>
+        {error ? <div className="ui-alert ui-alert-error">{error}</div> : null}
+        <label className={styles.field}>Reason<textarea required minLength={3} maxLength={1000} disabled={busy} value={voidReason} onChange={event => setVoidReason(event.target.value)} /></label>
+        <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Cancel</Button>
+          <Button type="submit" disabled={busy || voidReason.trim().length < 3}>{busy ? "Voiding…" : "Confirm void opening"}</Button></div>
       </form>
     </Modal>
   </section>;

@@ -38,7 +38,7 @@ export interface DashboardSummary {
     totalOutgoing: DashboardMoneyMetricValue;
     completeTransactions: DashboardMetricValue;
   };
-  sponsorshipSummary: { activeSubscriptions: number; expiringSoon: number; expiredSubscriptions: number; outstandingCarryBalance: string; subscriptionsWithCarryBalance: number };
+  sponsorshipSummary: { activeSubscriptions: number; expiringSoon: number; expiredSubscriptions: number; outstandingCarryBalance: string; subscriptionsWithCarryBalance: number; carryByEvent: Array<{ eventCodeId: string; code: string; eventName: string; amount: string }> };
   trend: Array<{
     month: string;
     label: string;

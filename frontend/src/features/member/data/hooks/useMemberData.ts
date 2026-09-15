@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { isAbortError } from "@/lib/api";
 import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
 import * as api from "../api/member-data.api";
@@ -9,8 +10,11 @@ const empty: MemberWorkspace = { summary: { total: 0, active: 0, inactive: 0, ma
 const MEMBER_DATA_WORKSPACE_PREFIX = "member/data/workspace";
 function memberDataKey(query: MemberDataQuery) { return workspaceCacheKey(MEMBER_DATA_WORKSPACE_PREFIX, query); }
 export function useMemberData() {
-  const initialQuery: MemberDataQuery = { search: "", status: "ACTIVE", city: "", registrationSource: "ALL",
-    page: 1, pageSize: 25 };
+  const searchParams = useSearchParams();
+  const carryParam = searchParams.get("programBalance");
+  const initialBalance = carryParam === "HAS_CARRY" || carryParam === "NO_CARRY" ? carryParam : "ALL";
+  const initialQuery: MemberDataQuery = { search: "", status: initialBalance === "HAS_CARRY" ? "ALL" : "ACTIVE", city: "", registrationSource: "ALL",
+    programBalance: initialBalance, page: 1, pageSize: 25 };
   const initialWorkspace = getWorkspaceCache<MemberWorkspace>(memberDataKey(initialQuery))?.value ?? empty;
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [query, setQuery] = useState<MemberDataQuery>(initialQuery);
@@ -18,6 +22,7 @@ export function useMemberData() {
   const [loading, setLoading] = useState(initialWorkspace === empty);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  useEffect(() => { setQuery(current => ({ ...current, programBalance: initialBalance, status: initialBalance === "HAS_CARRY" ? "ALL" : current.status, page: 1 })); }, [initialBalance]);
   useEffect(() => { const timer = setTimeout(() => setQuery(current => ({ ...current, search: search.trim(), page: 1 })), 350); return () => clearTimeout(timer); }, [search]);
   useEffect(() => {
     const controller = new AbortController();

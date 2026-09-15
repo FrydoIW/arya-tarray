@@ -6,51 +6,7 @@ import { EVENT_TYPES } from "@/lib/event-type";
 import { executeEventCodeChanges, getEventCodes } from "../api/event-code.api";
 import type { EventCode, EventCodeInput, EventCodeMode, EventCodeStatusFilter } from "../types";
 
-function normalizeInput(item: EventCode): EventCodeInput {
-  return {
-    code: item.code.trim(),
-    eventName: item.eventName.trim(),
-    category: item.category?.trim() || null,
-    eventType: item.eventType,
-    description: item.description?.trim() || null,
-    activeFlag: item.activeFlag
-  };
-}
-
-function sameInput(a: EventCodeInput, b: EventCodeInput) {
-  return a.code === b.code
-    && a.eventName === b.eventName
-    && a.category === b.category
-    && a.eventType === b.eventType
-    && a.description === b.description
-    && a.activeFlag === b.activeFlag;
-}
-
-function validateRows(rows: EventCode[]) {
-  const usedCodes = new Set<string>();
-
-  for (const [index, row] of rows.entries()) {
-    const code = row.code.trim();
-    const eventName = row.eventName.trim();
-    const category = row.category?.trim() ?? "";
-
-    if (!/^\d{3}$/.test(code)) {
-      return `Row ${index + 1}: Event Code harus tepat 3 digit.`;
-    }
-    if (!eventName) {
-      return `Row ${index + 1}: Event Name wajib diisi.`;
-    }
-    if (category.length > 50) {
-      return `Row ${index + 1}: Category maksimal 50 karakter.`;
-    }
-    if (usedCodes.has(code)) {
-      return `Event Code ${code} muncul lebih dari satu kali.`;
-    }
-    usedCodes.add(code);
-  }
-
-  return "";
-}
+import { normalizeInput, sameInput, validateRows, eventCodeActionState } from "../utils/event-code-actions";
 
 export function useEventCodes() {
   const [serverItems, setServerItems] = useState<EventCode[]>([]);
@@ -124,7 +80,10 @@ export function useEventCodes() {
   }, [deletedIds.length, serverItems, workingItems]);
 
 
+  const actions = eventCodeActionState(dirty, workingItems, loading || saving);
+
   async function reloadFromDatabase() {
+    if (!actions.canReload) return false;
     setMessage("");
     const success = await load();
     if (success) {
@@ -300,6 +259,7 @@ export function useEventCodes() {
     persistedItems: serverItems,
     summary,
     dirty,
+    ...actions,
     search,
     setSearch,
     statusFilter,

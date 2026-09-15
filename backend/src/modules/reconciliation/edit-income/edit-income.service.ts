@@ -8,6 +8,7 @@ import {
   loadEditIncomeWorkspaceRecords
 } from "./edit-income.repository.js";
 import { storedTransactionRequiresClassification } from "../reconciliation-classification.js";
+import { timeBasedPaymentPreview } from "../../member/time-based/time-based-preview.js";
 
 function decimalToString(value: { toString(): string }) {
   return value.toString();
@@ -128,6 +129,7 @@ export async function getEditIncomeDetail(statementId: string) {
       eventCodeId: transaction.eventCodeId,
       eventCampaignId: transaction.eventCampaignId,
       baseAmount: transaction.baseAmount ? decimalToString(transaction.baseAmount) : null,
+      sponsorship: timeBasedPaymentPreview(transaction),
       remark: transaction.remark,
       sourceType: transaction.sourceType,
       correctionReason: transaction.correctionReason,

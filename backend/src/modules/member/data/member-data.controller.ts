@@ -55,3 +55,11 @@ export async function allocateSubscription(req: Request, res: Response) {
 export async function openingCoverage(req: Request, res: Response) {
   const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params); res.json(await service.addOpeningCoverage(memberId, subscriptionId, schema.openingCoverageSchema.parse(req.body), req.auth!.userId));
 }
+export async function voidOpeningCoverage(req: Request, res: Response) {
+  const { memberId, subscriptionId, coverageId } = schema.openingCoverageParamsSchema.parse(req.params);
+  res.json(await service.voidOpeningCoverage(memberId, subscriptionId, coverageId, schema.voidOpeningCoverageSchema.parse(req.body).reason, req.auth!.userId));
+}
+export async function retryAllocation(req: Request, res: Response) {
+  const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params);
+  res.json(await service.retryAllocation(memberId, subscriptionId, schema.allocationSchema.parse(req.body).transactionId, req.auth!.userId));
+}

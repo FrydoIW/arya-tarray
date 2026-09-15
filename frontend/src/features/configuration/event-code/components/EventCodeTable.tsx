@@ -19,6 +19,7 @@ type EventCodeTableProps = {
   mode: EventCodeMode;
   loading: boolean;
   disabled: boolean;
+  reloadDisabled: boolean;
   templateDownloading: boolean;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: EventCodeStatusFilter) => void;
@@ -39,6 +40,7 @@ export function EventCodeTable({
   mode,
   loading,
   disabled,
+  reloadDisabled,
   templateDownloading,
   onSearchChange,
   onStatusFilterChange,
@@ -243,8 +245,8 @@ export function EventCodeTable({
             size="sm"
             icon={<RefreshCw size={16} />}
             onClick={onReload}
-            disabled={loading || disabled}
-            title="Reload latest data from database. Unsaved changes will be discarded."
+            disabled={reloadDisabled}
+            title={reloadDisabled ? "Execute or clear staged changes before reloading." : "Reload latest data from database."}
           >
             Reload
           </Button>

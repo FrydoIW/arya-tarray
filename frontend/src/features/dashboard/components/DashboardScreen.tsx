@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { ChartNoAxesCombined } from "lucide-react";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
@@ -94,7 +95,7 @@ export function DashboardScreen() {
       </section>
 
       <section className="ui-card dashboard-panel" aria-label="Rupang sponsorship monitoring">
-        <div className="dashboard-panel-header"><div><h2>Rupang sponsorship</h2><p>Current Time-Based coverage across all programs</p></div></div>
+        <div className="dashboard-panel-header"><div><h2>Rupang sponsorship</h2><p>Current Time-Based coverage across all programs</p></div>{canViewMemberData ? <Link href="/member/data?programBalance=HAS_CARRY">View Members with carry →</Link> : null}</div>
         <div className="dashboard-member-metrics">
           <div className="metric-card"><span>Active subscriptions</span><strong>{(data?.sponsorshipSummary?.activeSubscriptions ?? 0).toLocaleString("id-ID")}</strong><small>Currently valid</small></div>
           <div className="metric-card"><span>Expiring soon</span><strong>{(data?.sponsorshipSummary?.expiringSoon ?? 0).toLocaleString("id-ID")}</strong><small>Within 30 calendar days</small></div>
@@ -102,6 +103,9 @@ export function DashboardScreen() {
           <div className="metric-card"><span>Outstanding carry</span><strong>{formatMoney(data?.sponsorshipSummary?.outstandingCarryBalance ?? "0")}</strong><small>Allocated TIME_BASED balance</small></div>
           <div className="metric-card"><span>Subscriptions with carry</span><strong>{(data?.sponsorshipSummary?.subscriptionsWithCarryBalance ?? 0).toLocaleString("id-ID")}</strong><small>Positive active balance</small></div>
         </div>
+        {data?.sponsorshipSummary?.carryByEvent?.length ? <div className="dashboard-member-metrics" aria-label="Top programs by outstanding carry">
+          {data.sponsorshipSummary.carryByEvent.map(event => <div className="metric-card" key={event.eventCodeId}><span>{event.code} · {event.eventName}</span><strong>{formatMoney(event.amount)}</strong><small>Outstanding carry</small></div>)}
+        </div> : null}
       </section>
 
       <MemberDashboardSection

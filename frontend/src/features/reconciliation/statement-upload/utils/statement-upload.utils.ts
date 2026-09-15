@@ -1,4 +1,5 @@
-import { BUSINESS_TIME_ZONE, businessMonthValue } from "@/lib/business-time";
+import { BUSINESS_TIME_ZONE, businessMonthValue } from "../../../../lib/business-time";
+import { paymentOnlyTimePreview } from "../../../../lib/time-based-preview";
 import type {
   DraftRowStatus,
   DraftTransaction,
@@ -35,7 +36,10 @@ export function requiresEventClassification(transaction: DraftTransaction) {
 export function getDraftRowStatus(transaction: DraftTransaction, eventCodes: EventCodeOption[] = []): DraftRowStatus {
   if (!requiresEventClassification(transaction)) return "NOT_APPLICABLE";
   if (!transaction.eventCodeId) return "NEEDS_REVIEW";
-  if (getEventCode(eventCodes, transaction.eventCodeId)?.eventType === "CAMPAIGN" && !transaction.eventCampaignId) return "NEEDS_REVIEW";
+  const event = getEventCode(eventCodes, transaction.eventCodeId);
+  if (event?.eventType === "CAMPAIGN" && !transaction.eventCampaignId) return "NEEDS_REVIEW";
+  if (event?.eventType === "TIME_BASED" && (!event.timeRule?.activeFlag
+    || !paymentOnlyTimePreview(transaction.baseAmount ?? "", event.timeRule.unitAmount, event.timeRule.durationMonths))) return "NEEDS_REVIEW";
   if (transaction.suggestedEventCodeId && transaction.eventCodeId === transaction.suggestedEventCodeId) {
     return "MATCHED";
   }

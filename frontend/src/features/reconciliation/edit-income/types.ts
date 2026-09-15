@@ -1,4 +1,5 @@
 import type { EventType } from "@/lib/event-type";
+import type { TimeBasedPaymentPreview } from "@/lib/time-based-preview";
 
 export type EditIncomeDisplayStatus = "COMPLETE" | "PENDING_REAPPROVAL";
 export type EditIncomePeriodMode = "MONTH" | "DAY";
@@ -72,6 +73,7 @@ export type EditIncomeTransaction = {
   eventCodeId: string | null;
   eventCampaignId: string | null;
   baseAmount: string | null;
+  sponsorship?: TimeBasedPaymentPreview | null;
   remark: string | null;
   requiresClassification: boolean;
   sourceType: "BANK" | "MANUAL" | string;

@@ -23,12 +23,12 @@ type EventCodeRecord = {
   } | null;
 };
 
-export function assertEventTypeTransition(input: { currentType: string; nextType: string; transactionCount: number; subscriptionCount: number }) {
+export function assertEventTypeTransition(input: { currentType: string; nextType: string; transactionCount: number; subscriptionCount: number; hasTimeRule?: boolean }) {
   if (input.currentType !== "TIME_BASED" && input.nextType === "TIME_BASED" && input.transactionCount > 0) {
     throw new HttpError(409, "Event Code with transaction history cannot become TIME_BASED. Create a new Event Code instead.");
   }
-  if (input.currentType === "TIME_BASED" && input.nextType !== "TIME_BASED" && (input.transactionCount > 0 || input.subscriptionCount > 0)) {
-    throw new HttpError(409, "TIME_BASED Event Code with transaction or subscription history must remain TIME_BASED. Deactivate it instead.");
+  if (input.currentType === "TIME_BASED" && input.nextType !== "TIME_BASED" && (input.transactionCount > 0 || input.subscriptionCount > 0 || input.hasTimeRule)) {
+    throw new HttpError(409, "TIME_BASED Event Code with a Time Rule, transaction or subscription history must remain TIME_BASED. Deactivate it instead.");
   }
 }
 
@@ -135,8 +135,8 @@ export async function executeEventCodeChanges(input: EventCodeExecuteInput, user
   );
   if (changedAwayFromTimeBased.length > 0) {
     const usage = await findEventCodeUsage(changedAwayFromTimeBased.map((item) => item.id));
-    if (usage.some((item) => item._count.memberSubscriptions > 0)) {
-      throw new HttpError(409, "Event Code with Time-Based subscription history must remain TIME_BASED. Deactivate it instead.");
+    if (usage.some((item) => item._count.memberSubscriptions > 0 || item.timeRule)) {
+      throw new HttpError(409, "Event Code with a Time Rule or Time-Based subscription history must remain TIME_BASED. Deactivate it instead.");
     }
   }
   const typeChanges = input.updates.filter(update => existingById.get(update.id)?.eventType !== update.input.eventType);
@@ -144,7 +144,7 @@ export async function executeEventCodeChanges(input: EventCodeExecuteInput, user
     const usage = new Map((await findEventCodeUsage(typeChanges.map(item => item.id))).map(item => [item.id, item]));
     for (const change of typeChanges) {
       const current = existingById.get(change.id)!; const row = usage.get(change.id)!;
-      assertEventTypeTransition({ currentType: current.eventType, nextType: change.input.eventType, transactionCount: row._count.transactions, subscriptionCount: row._count.memberSubscriptions });
+      assertEventTypeTransition({ currentType: current.eventType, nextType: change.input.eventType, transactionCount: row._count.transactions, subscriptionCount: row._count.memberSubscriptions, hasTimeRule: Boolean(row.timeRule) });
     }
   }
 

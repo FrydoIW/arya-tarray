@@ -93,6 +93,9 @@ export function MemberDataScreen() {
       <Select aria-label="Filter sumber registrasi" value={state.query.registrationSource} onChange={event => state.updateQuery({ registrationSource: event.target.value as typeof state.query.registrationSource })}>
         <option value="ALL">Semua sumber</option><option value="MANUAL">Manual</option><option value="STATEMENT">Statement</option>
       </Select>
+      <Select aria-label="Program Balance" value={state.query.programBalance} onChange={event => state.updateQuery({ programBalance: event.target.value as typeof state.query.programBalance })}>
+        <option value="ALL">Program Balance: All</option><option value="HAS_CARRY">Has Carry</option><option value="NO_CARRY">No Carry</option>
+      </Select>
       <Button variant="outline" icon={<RefreshCw size={15} />} onClick={state.reload} disabled={state.loading}>Muat ulang</Button>
     </div>}>
       <DataTable rows={state.workspace.rows} columns={columns} rowKey={row => row.memberId} loading={state.loading}

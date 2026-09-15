@@ -4,7 +4,7 @@ import { deriveAge, detachedIdentityData, mayAttachIdentity, mayDetachIdentity, 
 import { identityMetadataSchema, memberDataWorkspaceQuerySchema, memberLifecycleSchema, memberProfileSchema } from "../src/modules/member/data/member-data.schema.js";
 
 test("member workspace defaults and pagination inputs remain server-side", () => {
-  assert.deepEqual(memberDataWorkspaceQuerySchema.parse({}), { search: "", status: "ACTIVE", city: "", registrationSource: "ALL", page: 1, pageSize: 25 });
+  assert.deepEqual(memberDataWorkspaceQuerySchema.parse({}), { search: "", status: "ACTIVE", city: "", registrationSource: "ALL", programBalance: "ALL", page: 1, pageSize: 25 });
   assert.equal(memberDataWorkspaceQuerySchema.safeParse({ page: 0 }).success, false);
   assert.equal(memberDataWorkspaceQuerySchema.safeParse({ pageSize: 101 }).success, false);
 });

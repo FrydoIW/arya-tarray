@@ -56,7 +56,7 @@ export function TransactionPreview({ items, totalTransactions }: TransactionPrev
       key: "sponsorship",
       header: "Rupang",
       minWidth: "175px",
-      render: (row) => row.sponsorship ? <div className={styles.eventCell}><strong>{row.sponsorship.grantedMonths} months from payment alone</strong><small>{formatMoney(row.sponsorship.principalAmount)} · {formatMoney(row.sponsorship.unitAmount)} / {row.sponsorship.durationMonths} month · {formatMoney(row.sponsorship.paymentOnlyRemainder)} remainder</small></div> : "—"
+      render: (row) => row.sponsorship ? <div className={styles.eventCell}><strong>{row.sponsorship.grantedMonths} months {row.sponsorship.allocated ? "granted" : "from payment alone"}</strong><small>{row.sponsorship.historical ? "Applied rate" : "Current rate"}: {formatMoney(row.sponsorship.unitAmount)} / {row.sponsorship.durationMonths} month · {formatMoney(row.sponsorship.principalAmount)} payment{!row.sponsorship.allocated ? ` · ${formatMoney(row.sponsorship.paymentOnlyRemainder)} remainder` : ""}</small></div> : "—"
     },
     {
       key: "status",

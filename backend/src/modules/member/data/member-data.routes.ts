@@ -23,6 +23,8 @@ memberDataRouter.post("/:memberId/subscriptions", requireMemberMutationAccess, a
 memberDataRouter.patch("/:memberId/subscriptions/:subscriptionId", requireMemberMutationAccess, asyncHandler(controller.updateSubscription));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/allocate", requireMemberMutationAccess, asyncHandler(controller.allocateSubscription));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage", requireMemberMutationAccess, asyncHandler(controller.openingCoverage));
+memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage/:coverageId/void", requireMemberMutationAccess, asyncHandler(controller.voidOpeningCoverage));
+memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/retry-allocation", requireMemberMutationAccess, asyncHandler(controller.retryAllocation));
 
 memberDataRouter.use(privateErrorHandler(
   "member-data",

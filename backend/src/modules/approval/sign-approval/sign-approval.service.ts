@@ -1,5 +1,5 @@
 import { HttpError } from "../../../lib/http.js";
-import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
+import { timeBasedPaymentPreview } from "../../member/time-based/time-based-preview.js";
 import type { ApproveDecisionInput, RejectDecisionInput } from "./sign-approval.schema.js";
 import {
   decideSignApprovalAtomic,
@@ -195,17 +195,7 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
           }
         : null,
       campaign: transaction.eventCampaign,
-      sponsorship: (() => {
-        try {
-          const units = resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
-          if (!units) return null;
-          const principal = decimalToCents(transaction.baseAmount ?? transaction.originalAmount);
-          const unit = decimalToCents({ toString: () => units.unitAmount });
-          return { unitAmount: units.unitAmount, durationMonths: units.durationMonths,
-            grantedMonths: units.durationMonths * units.grantedUnits, principalAmount: centsToDecimal(principal),
-            paymentOnlyRemainder: centsToDecimal(principal % unit) };
-        } catch { return null; }
-      })(),
+      sponsorship: timeBasedPaymentPreview(transaction),
       status: transaction.status
     })),
     history: approval.history.map((item) => ({

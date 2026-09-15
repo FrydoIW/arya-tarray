@@ -4,6 +4,7 @@ import { prisma } from "../../../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js";
 import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-time-based.service.js";
+import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
 const ALREADY_DECIDED_MESSAGE = "This approval request has already been decided. Reload the approval queue.";
@@ -192,7 +193,7 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                 }
               },
               eventCampaign: { select: { id: true, campaignName: true } },
-              memberEventCoverages: { where: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" }, select: { unitAmountSnapshot: true, durationMonthsSnapshot: true, grantedUnits: true }, take: 1 }
+              ...timeBasedHistoryInclude
             },
             orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }],
             take: 10

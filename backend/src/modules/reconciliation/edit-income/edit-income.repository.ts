@@ -4,6 +4,7 @@ import { prisma } from "../../../lib/prisma.js";
 import { storedTransactionRequiresClassification } from "../reconciliation-classification.js";
 import { assertCampaignClassification } from "../campaign-classification.js";
 import { resolveTimeBasedUnits } from "../time-based-classification.js";
+import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../reconciliation-approval.js";
 
 const bankAccountSelect = {
@@ -90,7 +91,8 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
           include: {
             suggestedEventCode: { select: eventCodeSelect },
             eventCode: { select: eventCodeSelect },
-            eventCampaign: { select: { id: true, campaignName: true } }
+            eventCampaign: { select: { id: true, campaignName: true } },
+            ...timeBasedHistoryInclude
           },
           orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }]
         },

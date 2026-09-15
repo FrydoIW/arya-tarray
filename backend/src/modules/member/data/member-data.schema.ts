@@ -9,6 +9,7 @@ export const memberDataWorkspaceQuerySchema = z.object({
   status: z.enum(["ACTIVE", "INACTIVE", "ALL"]).default("ACTIVE"),
   city: z.string().trim().max(100).default(""),
   registrationSource: z.enum(["MANUAL", "STATEMENT", "ALL"]).default("ALL"),
+  programBalance: z.enum(["ALL", "HAS_CARRY", "NO_CARRY"]).default("ALL"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25)
 });
@@ -73,6 +74,8 @@ export const subscriptionUpdateSchema = z.object({
 });
 export const subscriptionParamsSchema = z.object({ memberId: z.string().uuid(), subscriptionId: z.string().uuid() });
 export const allocationSchema = z.object({ transactionId: z.string().uuid() });
+export const openingCoverageParamsSchema = subscriptionParamsSchema.extend({ coverageId: z.string().uuid() });
+export const voidOpeningCoverageSchema = z.object({ reason: correctionReason });
 export const openingCoverageSchema = z.object({
   coverageFrom: z.string().refine(isValidPeriodDate, "Coverage start must use YYYY-MM-DD format"),
   coverageTo: z.string().refine(isValidPeriodDate, "Coverage end must use YYYY-MM-DD format"),

@@ -3,7 +3,7 @@ import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib
 import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
-import { manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
+import { manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../time-based/member-time-based.service.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { deriveAge } from "./member-data.domain.js";
@@ -132,6 +132,10 @@ export async function createSubscription(memberId: string, input: SubscriptionCr
 export async function updateSubscriptionRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, input: SubscriptionUpdateInput, userId: string) {
     const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { memberId: true, eventCodeId: true, startDate: true, activeFlag: true } });
     if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
+    if (sub.activeFlag && !input.activeFlag) {
+      const balance = await tx.memberEventBalanceLedger.aggregate({ where: { subscriptionId, entryStatus: "ACTIVE" }, _sum: { amountDelta: true } });
+      assertSubscriptionCanDeactivate(balance._sum.amountDelta?.toString() ?? "0");
+    }
     if (dateOnly(sub.startDate) !== input.startDate) {
       const [coverage, payment] = await Promise.all([
         tx.memberEventCoverage.findFirst({ where: { subscriptionId }, select: { id: true } }),
@@ -165,6 +169,47 @@ export async function addOpeningCoverageRecord(tx: Prisma.TransactionClient, mem
 
 export async function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
   await memberTransaction(tx => addOpeningCoverageRecord(tx, memberId, subscriptionId, input, userId));
+  return getSponsorship(memberId);
+}
+
+export function assertSubscriptionCanDeactivate(amount: string) {
+  if (decimalStringToCents(amount) !== 0n)
+    throw new HttpError(409, `Resolve the remaining Rp${Number(amount).toLocaleString("id-ID")} carry balance before deactivating this subscription.`);
+}
+
+export async function voidOpeningCoverageRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, coverageId: string, reason: string, userId: string) {
+  if (reason.trim().length < 3 || reason.trim().length > 1000) throw new HttpError(400, "A reason of 3–1000 characters is required.");
+  const changed = await tx.memberEventCoverage.updateMany({
+    where: { id: coverageId, subscriptionId, subscription: { memberId }, coverageSource: "OPENING", coverageStatus: "ACTIVE" },
+    data: { coverageStatus: "VOIDED", voidedAt: new Date(), voidedById: userId, voidReason: reason.trim() }
+  });
+  if (changed.count !== 1) throw new HttpError(409, "This active Opening coverage is no longer available. Reload the subscription.");
+  await rebuildTimeBasedSubscription(tx, subscriptionId, userId, "Coverage chain rebuilt after Opening coverage was voided");
+}
+
+export async function voidOpeningCoverage(memberId: string, subscriptionId: string, coverageId: string, reason: string, userId: string) {
+  await memberTransaction(tx => voidOpeningCoverageRecord(tx, memberId, subscriptionId, coverageId, reason, userId));
+  return getSponsorship(memberId);
+}
+
+export async function retryAllocationRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, transactionId: string, userId: string) {
+  const payment = await tx.bankTransaction.findUnique({ where: { id: transactionId },
+      select: { status: true, originalAmount: true, baseAmount: true, transactionDate: true, reconciliationExcludedAt: true, eventCodeId: true, eventCode: { select: { eventType: true } },
+      memberIdentity: { select: { memberId: true, verificationStatus: true } } } });
+  if (!payment || payment.status !== "FINALIZED" || !payment.transactionDate || !payment.baseAmount || !payment.baseAmount.gt(0) || !payment.originalAmount.gt(0)
+    || payment.reconciliationExcludedAt || payment.eventCode?.eventType !== "TIME_BASED"
+    || payment.memberIdentity?.memberId !== memberId || payment.memberIdentity.verificationStatus !== "VERIFIED")
+    throw new HttpError(400, "Only an official TIME_BASED payment resolved to this Member can be retried.");
+  const compatible = await tx.memberEventSubscription.findMany({ where: { memberId, eventCodeId: payment.eventCodeId!, activeFlag: true }, select: { id: true } });
+  if (compatible.length !== 1 || compatible[0].id !== subscriptionId)
+    throw new HttpError(409, "Retry requires exactly one compatible active subscription. Reload the pending payments.");
+  // The shared engine checks existing PAYMENT proof and makes repeated retries a no-op.
+  const result = await synchronizeTimeBasedTransaction(tx, transactionId, userId);
+  if (result.state !== "ALLOCATED" || result.subscriptionId !== subscriptionId) throw new HttpError(409, "Payment allocation changed. Reload the pending payments.");
+}
+
+export async function retryAllocation(memberId: string, subscriptionId: string, transactionId: string, userId: string) {
+  await memberTransaction(tx => retryAllocationRecord(tx, memberId, subscriptionId, transactionId, userId));
   return getSponsorship(memberId);
 }
 

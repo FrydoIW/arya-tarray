@@ -8,7 +8,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
-import { paymentOnlyTimePreview } from "@/lib/time-based-preview";
+import { compatibleHistoricalTimePreview, paymentOnlyTimePreview } from "@/lib/time-based-preview";
 import type { CorrectionDirectionFilter, CorrectionRowStatus, CorrectionRowStatusFilter, EditIncomeDetail, EditIncomeMode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
 import { getCorrectionRowStatus, getEventCode, getEventCodeLabel } from "../utils/edit-income.utils";
 import { AddAdjustmentModal, ExcludeTransactionModal } from "./CorrectionModals";
@@ -126,6 +126,10 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       render: (row) => {
         const event = getEventCode(detail.eventCodes, row.eventCodeId);
         if (event?.eventType === "TIME_BASED") {
+          const historical = compatibleHistoricalTimePreview(row.sponsorship, row.eventCodeId, row.baseAmount);
+          if (historical) return <span className={styles.finalEvent}>
+            Applied rate: {formatMoney(historical.unitAmount)} / {historical.durationMonths} month · {historical.grantedMonths} months {historical.allocated ? "granted" : "from payment alone"} · {formatMoney(historical.principalAmount)} payment
+          </span>;
           const rule = event.timeRule;
           if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>Rule needed</span>;
           const preview = paymentOnlyTimePreview(row.baseAmount, rule.unitAmount, rule.durationMonths);
