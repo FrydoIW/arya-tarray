@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Plus, ShieldMinus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { MoneyInput } from "@/components/ui/MoneyInput";
+import { formatMoney } from "@/lib/format";
 import type { EditIncomeCampaign, EditIncomeEventCode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
 import styles from "../styles/edit-income.module.css";
 
@@ -75,7 +77,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
         <div className={styles.formGrid}>
           <label className={styles.field}><span>Direction</span><select value={direction} disabled={props.disabled} onChange={(event) => { setDirection(event.target.value as "INCOMING" | "OUTGOING"); setEventCodeId(""); }}><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></select></label>
           <label className={styles.field}><span>Date</span><input type="date" value={transactionDate} disabled={props.disabled} onChange={(event) => setTransactionDate(event.target.value)} /></label>
-          <label className={styles.field}><span>Amount</span><input inputMode="decimal" value={amount} disabled={props.disabled} placeholder="500000" onChange={(event) => setAmount(event.target.value)} /></label>
+          <label className={styles.field}><span>Amount</span><MoneyInput value={amount} disabled={props.disabled} placeholder="500000" onValueChange={setAmount} /></label>
           <label className={styles.field}><span>Final Event</span><select value={eventCodeId} disabled={props.disabled || direction === "OUTGOING"} onChange={(event) => { setEventCodeId(event.target.value); setEventCampaignId(""); }}><option value="">{direction === "OUTGOING" ? "Not applicable" : "Select Event..."}</option>{props.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</select></label>
           {direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" && <label className={styles.field}><span>Campaign</span><select value={eventCampaignId} disabled={props.disabled} onChange={(event) => setEventCampaignId(event.target.value)}><option value="">Select Campaign...</option>{props.campaigns.filter((item) => item.eventCodeId === eventCodeId && item.activeFlag && (!item.startDate || transactionDate >= item.startDate) && (!item.endDate || transactionDate <= item.endDate)).map((item) => <option key={item.id} value={item.id}>{item.campaignName}</option>)}</select></label>}
         </div>
@@ -109,7 +111,7 @@ export function ExcludeTransactionModal(props: {
     <Modal open={Boolean(props.transaction)} title="Exclude from reconciliation" description="The imported bank transaction remains preserved as raw statement evidence." onClose={props.onClose}>
       <div className={styles.modalBody}>
         {error ? <div className="ui-alert ui-alert-error">{error}</div> : null}
-        <div className={styles.excludeEvidence}><strong>{props.transaction?.description || "Bank transaction"}</strong><span>{props.transaction?.originalAmount}</span></div>
+        <div className={styles.excludeEvidence}><strong>{props.transaction?.description || "Bank transaction"}</strong><span>{props.transaction ? formatMoney(props.transaction.originalAmount) : ""}</span></div>
         <label className={styles.field}><span>Correction Reason</span><textarea autoFocus value={reason} maxLength={1000} disabled={props.disabled} placeholder="Duplicate import, imported incorrectly, or another operator reason" onChange={(event) => setReason(event.target.value)} /></label>
       </div>
       <div className={styles.modalFooter}><Button type="button" variant="secondary" disabled={props.disabled} onClick={props.onClose}>Cancel</Button><Button type="button" variant="danger" icon={<ShieldMinus size={15} />} disabled={props.disabled} onClick={submit}>Exclude</Button></div>

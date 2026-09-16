@@ -19,6 +19,7 @@ import "./event-campaign.test.js";
 import "./correction-approval-campaign.test.js";
 import "./time-based.test.js";
 import "./time-based-flow.test.js";
+import "./time-rule-bulk.test.js";
 
 import "./v5-final-hardening.test.js";
 import "./targeted-hardening.test.js";

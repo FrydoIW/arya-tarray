@@ -168,7 +168,7 @@ export function EventCodeTable({
 
   return (
     <CollapsibleSection
-      className={styles.tablePanel}
+      className={styles.sectionPanel}
       title="Event Code Master"
       description="Review current values in Inquiry, or use Edit Event Codes to stage changes. Execute Event Codes saves this section."
       summary={`${totalCount} event codes`}

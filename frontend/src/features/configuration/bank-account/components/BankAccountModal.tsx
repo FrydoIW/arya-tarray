@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { MoneyInput } from "@/components/ui/MoneyInput";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import type { BankAccount, SupportedBank } from "../types";
 import { canonicalAccountNo } from "../utils/bank-account-workspace.utils";
 import styles from "../styles/bank-account.module.css";
@@ -21,12 +22,7 @@ type BankAccountModalProps = {
 
 function formatAccountMoney(value: string | null, currencyCode: string) {
   if (value == null) return "Not configured";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: currencyCode,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(Number(value));
+  return formatCurrency(value, currencyCode);
 }
 
 export function BankAccountModal({
@@ -179,12 +175,11 @@ export function BankAccountModal({
             <label className={styles.field}>
               <span>Opening Balance</span>
               {baselineEditable ? (
-                <input
+                <MoneyInput
                   value={openingBalance}
                   disabled={disabled}
-                  inputMode="decimal"
                   placeholder="12500000"
-                  onChange={(event) => setOpeningBalance(event.target.value)}
+                  onValueChange={setOpeningBalance}
                 />
               ) : (
                 <div className={styles.readOnlyField}>

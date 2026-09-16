@@ -9,18 +9,13 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime } from "@/lib/format";
 import type { BankAccount, BankAccountStatusFilter } from "../types";
 import styles from "../styles/bank-account.module.css";
 
 function formatOpeningBalance(row: BankAccount) {
   if (row.openingBalance == null) return "Not configured";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: row.currencyCode,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(Number(row.openingBalance));
+  return formatCurrency(row.openingBalance, row.currencyCode);
 }
 
 type BankAccountTableProps = {

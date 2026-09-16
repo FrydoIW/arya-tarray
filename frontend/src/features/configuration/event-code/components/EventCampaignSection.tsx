@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import { executeCampaignChanges, getCampaigns } from "../api/event-code.api";
 import type { CampaignInput, EventCampaign, EventCode } from "../types";
@@ -89,15 +90,22 @@ export function EventCampaignSection({ eventCodes, masterDirty }: { eventCodes: 
     finally { setBusy(false); }
   }
 
-  return <CollapsibleSection title="Campaigns" description="Manage Campaign instances for persisted Campaign Event Codes. Execute Campaigns saves this section only." summary={`${server.length} campaigns`} defaultExpanded={false}>
-    <div className={styles.campaignActions}>
+  return <CollapsibleSection
+    className={styles.sectionPanel}
+    title="Campaigns"
+    description="Manage Campaign instances for persisted Campaign Event Codes. Execute Campaigns saves this section only."
+    summary={`${server.length} campaigns`}
+    defaultExpanded={false}
+    actions={<div className={styles.campaignActions}>
       <Button type="button" variant={mode === "INQUIRY" ? "primary" : "secondary"} size="sm" disabled={busy} onClick={() => { if (dirty) { setError("Clear unsaved Campaign changes first."); return; } setMode("INQUIRY"); }}>Inquiry</Button>
       <Button type="button" variant={mode === "EDIT" ? "primary" : "secondary"} size="sm" disabled={busy || masterDirty || campaignCodes.length === 0} onClick={() => setMode("EDIT")}>Edit Campaigns</Button>
       <Button type="button" variant="outline" size="sm" disabled={busy || masterDirty || mode !== "EDIT" || eligibleCodes.length === 0} onClick={() => setDrafts((current) => [...current, { id: crypto.randomUUID(), isNew: true, eventCodeId: eligibleCodes[0].id, campaignName: "", startDate: null, endDate: null, targetAmount: null, activeFlag: true, remark: null }])}>Add Campaign</Button>
       <Button type="button" variant="outline" size="sm" disabled={busy || !dirty} onClick={() => { setDrafts(server.map(toDraft)); setMode("INQUIRY"); setError(""); }}>Clear</Button>
       <Button type="button" size="sm" disabled={busy || masterDirty || mode !== "EDIT" || !dirty} onClick={prepare}>Execute Campaigns</Button>
       <Button type="button" variant="outline" size="sm" disabled={busy || dirty} onClick={() => void load()}>Reload</Button>
-    </div>
+    </div>}
+  >
+    <div className={styles.campaignBody}>
     {message && <div className="ui-alert ui-alert-success">{message}</div>}
     {error && <div className="ui-alert ui-alert-error">{error}</div>}
     {masterDirty ? <p>Execute Event Code changes first.</p> : null}
@@ -111,13 +119,14 @@ export function EventCampaignSection({ eventCodes, masterDirty }: { eventCodes: 
           <label>Name<input value={item.campaignName} disabled={mode !== "EDIT" || busy || masterDirty} maxLength={200} onChange={(event) => change(item.id, "campaignName", event.target.value)} /></label>
           <label>Start date<input type="date" value={item.startDate ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} onChange={(event) => change(item.id, "startDate", event.target.value || null)} /></label>
           <label>End date<input type="date" value={item.endDate ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} onChange={(event) => change(item.id, "endDate", event.target.value || null)} /></label>
-          <label>Target (IDR)<input type="number" min="0.01" step="0.01" value={item.targetAmount ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} onChange={(event) => change(item.id, "targetAmount", event.target.value || null)} /></label>
+          <label>Target (IDR)<MoneyInput value={item.targetAmount ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} onValueChange={(value) => change(item.id, "targetAmount", value || null)} /></label>
           <label>Status<select value={item.activeFlag ? "ACTIVE" : "CLOSED"} disabled={mode !== "EDIT" || busy || masterDirty} onChange={(event) => change(item.id, "activeFlag", event.target.value === "ACTIVE")}><option value="ACTIVE">Active</option><option value="CLOSED">Closed</option></select></label>
           <label className={styles.campaignRemark}>Remark<input value={item.remark ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} maxLength={1000} onChange={(event) => change(item.id, "remark", event.target.value || null)} /></label>
         </div>
         {saved && <div className={styles.campaignProgress}>Collected Rp{Number(saved.collectedAmount).toLocaleString("id-ID")} {saved.targetAmount ? ` / Rp${Number(saved.targetAmount).toLocaleString("id-ID")} (${Math.round(saved.progressPercent ?? 0)}%)` : ""}{saved.targetReached ? " · Target reached" : ""}</div>}
       </div>;
     })}</div>}
+    </div>
     <ConfirmDialog open={confirmOpen} title="Confirm Campaign Execute" message="Save the staged Campaign changes?" confirmLabel="Execute Campaigns" loading={busy} onCancel={() => setConfirmOpen(false)} onConfirm={execute} />
   </CollapsibleSection>;
 }

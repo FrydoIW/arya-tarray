@@ -57,7 +57,7 @@ export function executeCampaignChanges(payload: { creates: CampaignInput[]; upda
 }
 
 export function getTimeRules() { return apiFetch<EventTimeRule[]>("/configuration/event-codes/time-rules"); }
-export function executeTimeRuleChange(payload: { eventCodeId: string; input: TimeRuleInput }) {
+export function executeTimeRules(payload: { updates: Array<{ eventCodeId: string; input: TimeRuleInput }> }) {
   return apiFetch<EventTimeRule[]>("/configuration/event-codes/time-rules/execute", { method: "POST", body: JSON.stringify(payload) });
 }
 

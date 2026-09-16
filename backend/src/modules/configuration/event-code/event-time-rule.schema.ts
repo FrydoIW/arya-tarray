@@ -15,4 +15,11 @@ export const timeRuleExecuteSchema = z.object({
   input: timeRuleValueSchema
 });
 
+export const timeRuleBulkExecuteSchema = z.object({
+  updates: z.array(timeRuleExecuteSchema).min(1, "No Time Rule changes to Execute")
+}).refine(value => new Set(value.updates.map(item => item.eventCodeId)).size === value.updates.length, {
+  message: "Each Event Code can only have one staged Time Rule"
+});
+
 export type TimeRuleExecuteInput = z.infer<typeof timeRuleExecuteSchema>;
+export type TimeRuleBulkExecuteInput = z.infer<typeof timeRuleBulkExecuteSchema>;
