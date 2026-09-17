@@ -90,13 +90,13 @@ function formatDateTime(value: Date) {
   return formatBusinessDateTime(value, "en-GB");
 }
 
-function formatIdr(value: string) {
+export function formatIdr(value: string) {
   const cents = decimalToCents(value);
   const negative = cents < 0n;
   const absolute = negative ? -cents : cents;
-  const whole = (absolute / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  const fraction = (absolute % 100n).toString().padStart(2, "0");
-  return `${negative ? "-" : ""}IDR ${whole}.${fraction}`;
+  const whole = (absolute / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const fraction = (absolute % 100n).toString().padStart(2, "0").replace(/0+$/, "");
+  return `${negative ? "-" : ""}Rp${whole}${fraction ? `,${fraction}` : ""}`;
 }
 
 function mapTransaction(item: Awaited<ReturnType<typeof loadTransactionInquiryWorkspaceRecords>>["transactions"][number]) {
@@ -381,7 +381,8 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
         amount: formatIdr(absDecimal(transaction.originalAmount)),
         finalEvent: decimalToCents(transaction.originalAmount) < 0n
           ? "Outgoing"
-          : transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}${transaction.eventCampaign ? ` / ${transaction.eventCampaign.campaignName}` : ""}` : "N/A",
+          : transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}` : "N/A",
+        campaign: transaction.eventCampaign?.campaignName ?? "—",
         member: member ? `${member.memberCode} - ${member.memberName}${member.activeFlag ? "" : " (Inactive)"}` : "Belum Terhubung",
         status: statusLabel(transaction.status)
       };

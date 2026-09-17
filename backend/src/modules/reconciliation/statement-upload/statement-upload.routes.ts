@@ -5,7 +5,8 @@ import {
   executeStatementController,
   getStatementUploadWorkspaceController,
   updateFinalEventController,
-  uploadStatementController
+  uploadStatementController,
+  withdrawStatementController
 } from "./statement-upload.controller.js";
 
 export const statementUploadRouter = Router();
@@ -18,3 +19,4 @@ statementUploadRouter.patch(
   asyncHandler(updateFinalEventController)
 );
 statementUploadRouter.post("/:statementId/execute", asyncHandler(executeStatementController));
+statementUploadRouter.post("/:statementId/withdraw", asyncHandler(withdrawStatementController));

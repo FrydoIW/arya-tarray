@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { FileSpreadsheet, UploadCloud } from "lucide-react";
+import { FileSpreadsheet, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { Select } from "@/components/ui/Select";
@@ -15,10 +15,12 @@ type Props = {
   bankAccounts: BankAccountOption[];
   uploadDisabled: boolean;
   uploading: boolean;
+  withdrawDisabled: boolean;
   onFileSelected: (file: File, bankAccountId: string) => void;
+  onWithdraw: () => void;
 };
 
-export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, uploading, onFileSelected }: Props) {
+export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, uploading, withdrawDisabled, onFileSelected, onWithdraw }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [bankAccountId, setBankAccountId] = useState(statement?.bankAccountId ?? bankAccounts[0]?.id ?? "");
   const [dragging, setDragging] = useState(false);
@@ -47,6 +49,18 @@ export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, upload
       description="Upload a new BCA workbook or inspect the RAW statement selected from Draft Statements."
       summary={statement ? getStatementStatusLabel(statement.status) : "No draft selected"}
       defaultExpanded={false}
+      headerActions={statement?.status === "RAW" ? (
+        <Button
+          type="button"
+          variant="danger"
+          size="sm"
+          icon={<Trash2 size={15} />}
+          disabled={withdrawDisabled}
+          onClick={onWithdraw}
+        >
+          Withdraw Draft
+        </Button>
+      ) : undefined}
     >
       <div className={styles.workspaceCard}>
       {!statement ? (

@@ -330,6 +330,78 @@
   box-shadow: var(--shadow-sm);
 }
 
+.uploadResultGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+
+.uploadResultGrid > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 12px 13px;
+  background: #f8fafc;
+  border: 1px solid #e8ecf1;
+  border-radius: 8px;
+}
+
+.uploadResultGrid span {
+  color: #667085;
+  font-size: 11px;
+}
+
+.uploadResultGrid strong {
+  color: #1d2939;
+  font-size: 17px;
+}
+
+.withdrawBody {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 6px;
+}
+
+.withdrawFile {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.withdrawField {
+  display: grid;
+  gap: 6px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.withdrawField textarea {
+  min-height: 96px;
+  padding: 10px 11px;
+  color: #20314d;
+  background: #fff;
+  border: 1px solid #d9e0eb;
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.withdrawField textarea:focus {
+  outline: 0;
+  border-color: #9fc9ef;
+  box-shadow: 0 0 0 3px rgba(47,128,237,.09);
+}
+
+.withdrawActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px 18px;
+}
+
 .tableHeader {
   min-height: 74px;
   display: flex;
@@ -375,8 +447,34 @@
 }
 
 .descriptionCell small {
+  overflow: hidden;
   color: #8d98ab;
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entitlementCell {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.entitlementCell small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entitlementCell strong {
+  overflow: hidden;
+  color: #2c3a55;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .suffixChip,
@@ -401,16 +499,24 @@
 }
 
 .suggestedEvent {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
   padding: 4px 7px;
   color: #177745;
   background: #edf9f1;
   border-radius: 5px;
   font-weight: 700;
+  text-overflow: ellipsis;
 }
 
 .finalEvent {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
   color: #35435e;
   font-weight: 690;
+  text-overflow: ellipsis;
 }
 
 .noMatch,

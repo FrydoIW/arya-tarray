@@ -12,7 +12,7 @@ const bankAccountInclude = {
   },
   _count: {
     select: {
-      statements: true
+      statements: { where: { status: { not: "WITHDRAWN" } } }
     }
   }
 } as const;
@@ -42,6 +42,7 @@ async function loadBankBalanceMovements(client: Prisma.TransactionClient | typeo
     FROM arya_bank_account ba
     LEFT JOIN arya_bank_statement_upload bs
       ON bs.bank_account_id = ba.bank_account_id
+      AND bs.status <> 'WITHDRAWN'
     LEFT JOIN arya_bank_transaction bt
       ON bt.statement_upload_id = bs.statement_upload_id
       AND bt.transaction_date > ba.opening_balance_date
@@ -100,7 +101,7 @@ export async function applyBankAccountChangesAtomic(data: BankAccountAtomicInput
           where: {
             id: update.id,
             openingBalanceLockedAt: null,
-            statements: { none: {} }
+            statements: { none: { status: { not: "WITHDRAWN" } } }
           },
           data: updateData
         });

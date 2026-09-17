@@ -238,7 +238,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       change.action !== "EXCLUDED" && change.eventCampaignId ? [change.eventCampaignId] : []
     ))];
     const [selectedEvents, selectedCampaigns] = await Promise.all([
-      tx.eventCode.findMany({ where: { id: { in: selectedEventIds } }, select: { id: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }),
+      tx.eventCode.findMany({ where: { id: { in: selectedEventIds } }, select: { id: true, eventType: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }),
       tx.eventCampaign.findMany({ where: { id: { in: selectedCampaignIds } }, select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } })
     ]);
     const selectedEventById = new Map(selectedEvents.map((event) => [event.id, event]));

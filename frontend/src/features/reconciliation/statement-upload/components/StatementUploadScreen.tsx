@@ -11,11 +11,14 @@ import { DraftTransactionReview } from "./DraftTransactionReview";
 import { DraftStatements } from "./DraftStatements";
 import { DraftWorkspace } from "./DraftWorkspace";
 import { StatementUploadSummary } from "./StatementUploadSummary";
+import { UploadResultReport } from "./UploadResultReport";
+import { WithdrawDraftModal } from "./WithdrawDraftModal";
 import styles from "../styles/statement-upload.module.css";
 
 export function StatementUploadScreen() {
   const workspace = useStatementUploadWorkspace();
   const [executeOpen, setExecuteOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
 
   return (
     <div className={`${styles.page} page-stack`}>
@@ -53,6 +56,7 @@ export function StatementUploadScreen() {
       {workspace.error ? <div className="ui-alert ui-alert-error">{workspace.error}</div> : null}
 
       <StatementUploadSummary summary={workspace.workspace.summary} />
+      <UploadResultReport result={workspace.uploadResult} />
       <DraftStatements
         rows={workspace.workspace.drafts}
         selectedStatementId={workspace.selectedStatementId}
@@ -65,7 +69,9 @@ export function StatementUploadScreen() {
         bankAccounts={workspace.workspace.bankAccounts}
         uploadDisabled={!workspace.canUpload}
         uploading={workspace.uploading}
+        withdrawDisabled={!workspace.canEditDraft || workspace.busy}
         onFileSelected={(file, bankAccountId) => void workspace.upload(file, bankAccountId)}
+        onWithdraw={() => setWithdrawOpen(true)}
       />
       <DraftTransactionReview
         rows={workspace.filteredTransactions}
@@ -86,6 +92,7 @@ export function StatementUploadScreen() {
         onPageSizeChange={workspace.setPageSize}
         onReload={() => void workspace.refresh()}
         onFinalEventChange={(transactionId, eventCodeId, eventCampaignId) => void workspace.updateFinalEvent(transactionId, eventCodeId, eventCampaignId)}
+        onRemarkChange={(transactionId, remark) => void workspace.updateRemark(transactionId, remark)}
       />
       <DraftReviewSummary
         resolved={workspace.resolvedTransactions}
@@ -104,6 +111,18 @@ export function StatementUploadScreen() {
         onConfirm={async () => {
           await workspace.execute();
           setExecuteOpen(false);
+        }}
+      />
+      <WithdrawDraftModal
+        open={withdrawOpen}
+        fileName={workspace.workspace.statement?.fileName ?? null}
+        loading={workspace.withdrawing}
+        onCancel={() => setWithdrawOpen(false)}
+        onConfirm={async (reason) => {
+          const statementId = workspace.workspace.statement?.id;
+          if (!statementId) return;
+          const ok = await workspace.withdraw(statementId, reason);
+          if (ok) setWithdrawOpen(false);
         }}
       />
     </div>

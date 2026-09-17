@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, CircleMinus, RotateCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
@@ -44,6 +44,7 @@ type Props = {
   onPageSizeChange: (pageSize: number) => void;
   onReload: () => void;
   onFinalEventChange: (transactionId: string, eventCodeId: string | null, eventCampaignId?: string | null) => void;
+  onRemarkChange: (transactionId: string, remark: string | null) => void;
 };
 
 function RowStatus({ status, outgoing }: { status: DraftRowStatus; outgoing: boolean }) {
@@ -54,6 +55,31 @@ function RowStatus({ status, outgoing }: { status: DraftRowStatus; outgoing: boo
       : <CheckCircle2 size={12} />;
 
   return <span className={`${styles.rowStatus} ${styles[`row${status}`]}`}>{icon}{outgoing ? "Outgoing" : getDraftRowStatusLabel(status)}</span>;
+}
+
+function RemarkCell({ row, disabled, onCommit }: { row: DraftTransaction; disabled: boolean; onCommit: (remark: string | null) => void }) {
+  const [value, setValue] = useState(row.remark ?? "");
+  useEffect(() => { setValue(row.remark ?? ""); }, [row.remark]);
+
+  function commit() {
+    const next = value.trim();
+    if (next === (row.remark ?? "")) return;
+    onCommit(next || null);
+  }
+
+  return (
+    <input
+      className="ui-table-input"
+      value={value}
+      disabled={disabled}
+      maxLength={1000}
+      placeholder="Operator note"
+      aria-label={`Remark row ${row.rowNo}`}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+    />
+  );
 }
 
 export function DraftTransactionReview({
@@ -74,7 +100,8 @@ export function DraftTransactionReview({
   onPageChange,
   onPageSizeChange,
   onReload,
-  onFinalEventChange
+  onFinalEventChange,
+  onRemarkChange
 }: Props) {
   const columns = useMemo<DataTableColumn<DraftTransaction>[]>(() => [
     {
@@ -89,7 +116,7 @@ export function DraftTransactionReview({
       header: "Description",
       minWidth: "260px",
       render: (row) => (
-        <div className={styles.descriptionCell}>
+        <div className={styles.descriptionCell} title={row.description}>
           <strong>{row.description}</strong>
           <small>{[row.transactionType, row.referenceNo, row.senderName].filter(Boolean).join(" · ") || "-"}</small>
         </div>
@@ -118,19 +145,19 @@ export function DraftTransactionReview({
     {
       key: "suggestedEventCodeId",
       header: "Suggested Event",
-      minWidth: "185px",
+      minWidth: "160px",
       render: (row) => {
         if (!requiresEventClassification(row)) return <span className={styles.notApplicableText}>{row.direction === "DB" ? "Outgoing" : "Not applicable"}</span>;
         const suggested = getEventCode(eventCodes, row.suggestedEventCodeId);
         return suggested
-          ? <span className={styles.suggestedEvent}>{getEventCodeLabel(suggested)}</span>
+          ? <span className={styles.suggestedEvent} title={getEventCodeLabel(suggested)}>{getEventCodeLabel(suggested)}</span>
           : <span className={styles.noMatch}>No Match</span>;
       }
     },
     {
       key: "eventCodeId",
       header: "Final Event",
-      minWidth: "205px",
+      minWidth: "190px",
       editable: (row) => !disabled && requiresEventClassification(row),
       getValue: (row) => row.eventCodeId ?? "",
       renderEditor: ({ row, value, onChange }) => (
@@ -150,13 +177,14 @@ export function DraftTransactionReview({
       render: (row) => {
         if (!requiresEventClassification(row)) return <span className={styles.notApplicableText}>{row.direction === "DB" ? "Outgoing" : "Not required"}</span>;
         const finalEvent = getEventCode(eventCodes, row.eventCodeId);
-        return <span className={finalEvent ? styles.finalEvent : styles.noMatch}>{finalEvent ? getEventCodeLabel(finalEvent) : "Select Event..."}</span>;
+        const label = finalEvent ? getEventCodeLabel(finalEvent) : "Select Event...";
+        return <span className={finalEvent ? styles.finalEvent : styles.noMatch} title={finalEvent ? label : undefined}>{label}</span>;
       }
     },
     {
       key: "program",
-      header: "Program",
-      minWidth: "215px",
+      header: "Program / Entitlement",
+      minWidth: "190px",
       render: (row) => {
         const event = getEventCode(eventCodes, row.eventCodeId);
         if (event?.eventType === "TIME_BASED") {
@@ -164,7 +192,10 @@ export function DraftTransactionReview({
           if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>Rule needed</span>;
           const preview = paymentOnlyTimePreview(row.baseAmount, rule.unitAmount, rule.durationMonths);
           return preview
-            ? <span className={styles.finalEvent}>{formatMoney(rule.unitAmount)} / {rule.durationMonths} month · payment alone: {preview.months} month + {formatMoney(preview.remainder)} carry</span>
+            ? <span className={styles.entitlementCell}>
+                <small>Rule: {formatMoney(rule.unitAmount)} / {rule.durationMonths} bln</small>
+                <strong>Preview: {preview.months} bln · Carry {formatMoney(preview.remainder)}</strong>
+              </span>
             : <span className={styles.noMatch}>Positive principal required</span>;
         }
         if (event?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>—</span>;
@@ -174,6 +205,12 @@ export function DraftTransactionReview({
           {eligible.map((item) => <option key={item.id} value={item.id}>{item.campaignName}{!item.activeFlag ? " (historical)" : ""}</option>)}
         </Select>;
       }
+    },
+    {
+      key: "remark",
+      header: "Remark",
+      minWidth: "180px",
+      render: (row) => <RemarkCell row={row} disabled={disabled} onCommit={(remark) => onRemarkChange(row.id, remark)} />
     },
     {
       key: "finalEventCode",
@@ -198,11 +235,11 @@ export function DraftTransactionReview({
     {
       key: "status",
       header: "Status",
-      minWidth: "135px",
+      minWidth: "120px",
       sticky: "right",
       render: (row) => <RowStatus status={getDraftRowStatus(row, eventCodes)} outgoing={row.direction === "DB"} />
     }
-  ], [disabled, eventCodes, campaigns, onFinalEventChange]);
+  ], [disabled, eventCodes, campaigns, onFinalEventChange, onRemarkChange]);
 
   return (
     <CollapsibleSection

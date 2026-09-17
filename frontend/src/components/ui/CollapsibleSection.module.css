@@ -9,19 +9,15 @@
   min-height: 66px;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-3);
   padding: var(--space-3) 14px;
-  border: 0;
-  border-bottom: 1px solid transparent;
   background: var(--paper);
+  border-bottom: 1px solid transparent;
   color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease;
 }
 
-.header[aria-expanded="true"] {
+.headerExpanded {
   border-bottom-color: #eef1f5;
 }
 
@@ -29,7 +25,23 @@
   background: var(--primary-faint);
 }
 
-.header:focus-visible {
+.headerToggle {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headerToggle:focus-visible {
   position: relative;
   z-index: 1;
   outline: 2px solid var(--primary);
@@ -58,20 +70,44 @@
   line-height: var(--line-height-body);
 }
 
-.meta {
-  display: flex;
+.summary {
   flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-3);
   color: var(--muted);
   font-size: var(--font-size-helper);
+  white-space: nowrap;
+}
+
+.headerActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chevronButton {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.chevronButton:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 .chevron {
   transition: transform 140ms ease;
 }
 
-.header[aria-expanded="true"] .chevron {
+.chevronExpanded {
   transform: rotate(180deg);
 }
 
@@ -97,11 +133,23 @@
     padding-inline: var(--space-3);
   }
 
+  .headerWithActions {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  .headerWithActions .headerToggle {
+    flex-basis: 100%;
+  }
+
+  .headerWithActions .headerActions {
+    margin-left: auto;
+  }
+
   .actions {
     justify-content: stretch;
     padding-inline: var(--space-3);
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -89,7 +89,7 @@ test("balance repository isolates accounts, uses strict after-baseline dates, an
   assert.match(repository, /bt\.status = 'FINALIZED' AND bt\.reconciliation_excluded_at IS NULL AND bt\.original_amount < 0/);
   assert.match(repository, /bt\.status IN \('RAW', 'CHECK'\)/);
   assert.match(repository, /GROUP BY ba\.bank_account_id/);
-  assert.match(repository, /statements: \{ none: \{\} \}/);
+  assert.match(repository, /statements: \{ none: \{ status: \{ not: "WITHDRAWN" \} \} \}/);
 });
 
 test("successful RAW persistence sets the backend-controlled lock in the same transaction", () => {

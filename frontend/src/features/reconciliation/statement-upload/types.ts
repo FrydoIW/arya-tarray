@@ -95,11 +95,48 @@ export type StatementUploadWorkspace = {
   bankAccounts: BankAccountOption[];
 };
 
+export type UploadDuplicateDetail = {
+  matchedStatementUploadId: string;
+  matchedStatementFileName: string | null;
+  matchedBankTransactionId: string;
+  sourceTransactionNo: number;
+  sourceWorksheetRow: number | null;
+  sourceSheetName: string | null;
+  transactionDate: string | null;
+  transactionType: string | null;
+  referenceNo: string | null;
+  senderName: string | null;
+  description: string | null;
+  originalAmount: string;
+  signatureHash: string;
+};
+
+export type UploadAttemptResult = {
+  attemptId: string;
+  sourceTransactions: number;
+  importedTransactions: number;
+  duplicateTransactions: number;
+  sourceTotalCredit: string;
+  sourceTotalDebit: string;
+  duplicates: UploadDuplicateDetail[];
+};
+
+export type StatementUploadResponse = StatementUploadWorkspace & { uploadResult: UploadAttemptResult };
+
+export type WithdrawStatementResponse = StatementUploadWorkspace & {
+  withdrawal: {
+    statementId: string;
+    remainingStatementCount: number;
+    openingBalanceUnlocked: boolean;
+  };
+};
+
 export type UpdateFinalEventInput = {
   statementId: string;
   transactionId: string;
   eventCodeId: string | null;
   eventCampaignId: string | null;
+  remark?: string | null;
 };
 
 export type UpdateFinalEventResponse = {

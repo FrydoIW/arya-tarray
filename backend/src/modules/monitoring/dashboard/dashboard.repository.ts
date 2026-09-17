@@ -12,6 +12,7 @@ export type DashboardPeriodRange = {
 function transactionPeriodWhere(range: DashboardPeriodRange): Prisma.BankTransactionWhereInput {
   return {
     reconciliationExcludedAt: null,
+    statementUpload: { is: { status: { not: "WITHDRAWN" } } },
     transactionDate: {
       gte: range.periodStart,
       lt: range.periodEnd
@@ -21,6 +22,7 @@ function transactionPeriodWhere(range: DashboardPeriodRange): Prisma.BankTransac
 
 function statementPeriodWhere(range: DashboardPeriodRange): Prisma.BankStatementUploadWhereInput {
   return {
+    status: { not: "WITHDRAWN" },
     AND: [
       { periodFrom: { lt: range.periodEnd } },
       { periodTo: { gte: range.periodStart } }
@@ -145,6 +147,7 @@ export async function loadTopFinalEvents(range: DashboardPeriodRange) {
 export async function loadDashboardRecentActivityCandidates() {
   const [statementUploads, approvalHistory, transactionHistory] = await Promise.all([
     prisma.bankStatementUpload.findMany({
+      where: { status: { not: "WITHDRAWN" } },
       select: {
         id: true,
         fileName: true,
@@ -183,7 +186,10 @@ export async function loadDashboardRecentActivityCandidates() {
       take: 10
     }),
     prisma.bankTransactionHistory.findMany({
-      where: { fieldName: { in: ["event_code_id", "remark"] } },
+      where: {
+        fieldName: { in: ["event_code_id", "remark"] },
+        transaction: { is: { statementUpload: { is: { status: { not: "WITHDRAWN" } } } } }
+      },
       select: {
         id: true,
         fieldName: true,

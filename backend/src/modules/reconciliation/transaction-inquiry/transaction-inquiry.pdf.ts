@@ -12,6 +12,7 @@ type PdfReportTransaction = {
   type: string;
   amount: string;
   finalEvent: string;
+  campaign: string;
   member: string;
   status: string;
 };
@@ -47,8 +48,15 @@ const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
 const MARGIN = 36;
 
-function ascii(value: string) {
+export function sanitizeReportDisplayText(value: string) {
   return value
+    .replace(/[\u0000-\u001F\u007F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function ascii(value: string) {
+  return sanitizeReportDisplayText(value)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[–—]/g, "-")
@@ -207,33 +215,43 @@ function drawClassification(page: PdfPage, rows: PdfReportEventSummary[], top: n
   return headerTop + 22 + rows.length * 22;
 }
 
+const DETAIL_COLUMNS = [
+  { start: 36, width: 52, header: "Date" },
+  { start: 88, width: 166, header: "Description" },
+  { start: 254, width: 64, header: "Reference" },
+  { start: 318, width: 38, header: "Type" },
+  { start: 356, width: 74, header: "Amount (IDR)" },
+  { start: 430, width: 90, header: "Member" },
+  { start: 520, width: 114, header: "Final Event" },
+  { start: 634, width: 104, header: "Program" },
+  { start: 738, width: 68, header: "Status" }
+] as const;
+
+const AMOUNT_COLUMN_INDEX = 4;
+
 function transactionHeader(page: PdfPage, top: number) {
   sectionTitle(page, top, "Transaction Detail");
   const headerTop = top + 18;
   page.rect(MARGIN, headerTop, PAGE_WIDTH - MARGIN * 2, 22, 0.96);
-  const headers = [
-    [MARGIN + 5, "Date"],
-    [MARGIN + 70, "Description"],
-    [MARGIN + 255, "Reference"],
-    [MARGIN + 345, "Type"],
-    [MARGIN + 390, "Amount (IDR)"],
-    [MARGIN + 490, "Member"],
-    [MARGIN + 595, "Final Event"],
-    [MARGIN + 710, "Status"]
-  ] as const;
-  headers.forEach(([x, label]) => page.text(x, headerTop + 14, label, 6.5, true));
+  DETAIL_COLUMNS.forEach((column, index) => {
+    const x = index === AMOUNT_COLUMN_INDEX
+      ? column.start + column.width - 4 - estimateWidth(column.header, 6.5)
+      : column.start + 4;
+    page.text(x, headerTop + 14, column.header, 6.5, true);
+  });
   return headerTop + 22;
 }
 
 function drawTransactionRow(page: PdfPage, row: PdfReportTransaction, top: number) {
-  page.text(MARGIN + 5, top + 14, truncate(row.date, 58, 6.5), 6.5);
-  page.text(MARGIN + 70, top + 14, truncate(row.description, 180, 6.5), 6.5);
-  page.text(MARGIN + 255, top + 14, truncate(row.referenceNo, 85, 6.5), 6.5);
-  page.text(MARGIN + 345, top + 14, truncate(row.type, 40, 6.5), 6.5);
-  page.text(MARGIN + 390, top + 14, truncate(row.amount, 95, 6.5), 6.5);
-  page.text(MARGIN + 490, top + 14, truncate(row.member, 100, 6.5), 6.5);
-  page.text(MARGIN + 595, top + 14, truncate(row.finalEvent, 110, 6.5), 6.5);
-  page.text(MARGIN + 710, top + 14, truncate(row.status, 90, 6.5), 6.5);
+  const values = [row.date, row.description, row.referenceNo, row.type, row.amount, row.member, row.finalEvent, row.campaign, row.status];
+  DETAIL_COLUMNS.forEach((column, index) => {
+    const maxWidth = column.width - 8;
+    const value = truncate(values[index], maxWidth, 6.5);
+    const x = index === AMOUNT_COLUMN_INDEX
+      ? column.start + column.width - 4 - estimateWidth(value, 6.5)
+      : column.start + 4;
+    page.text(x, top + 14, value, 6.5);
+  });
   page.line(MARGIN, top + 22, PAGE_WIDTH - MARGIN, top + 22, 0.2);
 }
 

@@ -23,4 +23,9 @@ export const statementParamsSchema = z.object({
   statementId: z.string().uuid()
 });
 
+export const withdrawStatementSchema = z.object({
+  reason: z.string().trim().min(1, "Withdrawal reason is required").max(1000)
+});
+
 export type UpdateFinalEventInput = z.infer<typeof updateFinalEventSchema>;
+export type WithdrawStatementInput = z.infer<typeof withdrawStatementSchema>;

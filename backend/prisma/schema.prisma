@@ -170,6 +170,8 @@ model User {
   uploadedStatements     BankStatementUpload[]          @relation("StatementUploadedBy")
   executedStatements     BankStatementUpload[]          @relation("StatementExecutedBy")
   finalizedStatements    BankStatementUpload[]          @relation("StatementFinalizedBy")
+  withdrawnStatements    BankStatementUpload[]          @relation("StatementWithdrawnBy")
+  statementUploadAttempts BankStatementUploadAttempt[]  @relation("StatementUploadAttemptUploadedBy")
   transactionHistory     BankTransactionHistory[]       @relation("TransactionHistoryChangedBy")
   submittedApprovals     ReconciliationApproval[]       @relation("ApprovalSubmittedBy")
   decidedApprovals       ReconciliationApproval[]       @relation("ApprovalDecidedBy")
@@ -431,6 +433,7 @@ model BankAccount {
   createdBy  User?                 @relation("BankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
   updatedBy  User?                 @relation("BankAccountUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
   statements BankStatementUpload[]
+  statementUploadAttempts BankStatementUploadAttempt[]
 
   @@unique([bankCode, accountNo], map: "uk_bank_account_bank_account_no")
   @@map("arya_bank_account")
@@ -454,6 +457,9 @@ model BankStatementUpload {
   finalizedAt      DateTime? @map("finalized_at") @db.DateTime(0)
   finalizedById    String?   @map("finalized_by") @db.Char(36)
   remark           String?   @db.VarChar(1000)
+  withdrawnAt      DateTime? @map("withdrawn_at") @db.DateTime(3)
+  withdrawnById    String?   @map("withdrawn_by") @db.Char(36)
+  withdrawalReason String?   @map("withdrawal_reason") @db.VarChar(1000)
   createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
 
@@ -461,11 +467,67 @@ model BankStatementUpload {
   uploadedBy  User        @relation("StatementUploadedBy", fields: [uploadedById], references: [id])
   executedBy  User?       @relation("StatementExecutedBy", fields: [executedById], references: [id])
   finalizedBy User?       @relation("StatementFinalizedBy", fields: [finalizedById], references: [id])
+  withdrawnBy User?       @relation("StatementWithdrawnBy", fields: [withdrawnById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_withdrawn_by")
   transactions BankTransaction[]
   approval     ReconciliationApproval?
   correctionProposals ReconciliationCorrectionProposal[]
+  uploadAttempt BankStatementUploadAttempt?
+  matchedStatementDuplicates BankStatementUploadDuplicate[]
 
+  @@index([bankAccountId, status], map: "idx_bank_statement_account_status")
+  @@index([withdrawnById], map: "idx_bank_statement_withdrawn_by")
   @@map("arya_bank_statement_upload")
+}
+
+model BankStatementUploadAttempt {
+  id                       String    @id @default(uuid()) @map("upload_attempt_id") @db.Char(36)
+  bankAccountId            String    @map("bank_account_id") @db.Char(36)
+  fileName                 String    @map("file_name") @db.VarChar(255)
+  sourceTotalTransaction   Int       @map("source_total_transaction")
+  sourceTotalCredit        Decimal   @map("source_total_credit") @db.Decimal(20, 2)
+  sourceTotalDebit         Decimal   @map("source_total_debit") @db.Decimal(20, 2)
+  importedTransactionCount Int       @map("imported_transaction_count")
+  duplicateTransactionCount Int      @map("duplicate_transaction_count")
+  uploadedAt               DateTime  @default(now()) @map("uploaded_at") @db.DateTime(3)
+  uploadedById             String    @map("uploaded_by") @db.Char(36)
+  statementUploadId        String?   @unique(map: "uk_bank_statement_attempt_statement") @map("statement_upload_id") @db.Char(36)
+
+  bankAccount     BankAccount                     @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_bank_account")
+  uploadedBy      User                            @relation("StatementUploadAttemptUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_uploaded_by")
+  statementUpload BankStatementUpload?            @relation(fields: [statementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_statement")
+  duplicates      BankStatementUploadDuplicate[]
+
+  @@index([bankAccountId, uploadedAt], map: "idx_bank_statement_attempt_account_uploaded")
+  @@index([uploadedById], map: "idx_bank_statement_attempt_uploaded_by")
+  @@map("arya_bank_statement_upload_attempt")
+}
+
+model BankStatementUploadDuplicate {
+  id                       String    @id @default(uuid()) @map("duplicate_id") @db.Char(36)
+  uploadAttemptId          String    @map("upload_attempt_id") @db.Char(36)
+  matchedStatementUploadId String    @map("matched_statement_upload_id") @db.Char(36)
+  matchedBankTransactionId String    @map("matched_bank_transaction_id") @db.Char(36)
+  sourceTransactionNo      Int       @map("source_transaction_no")
+  sourceWorksheetRow       Int?      @map("source_worksheet_row")
+  sourceSheetName          String?   @map("source_sheet_name") @db.VarChar(150)
+  transactionDate          DateTime? @map("transaction_date") @db.Date
+  transactionType          String?   @map("transaction_type") @db.VarChar(20)
+  referenceNo              String?   @map("reference_no") @db.VarChar(150)
+  senderName               String?   @map("sender_name") @db.VarChar(255)
+  sourceDescription        String?   @map("source_description") @db.Text
+  originalAmount           Decimal   @map("original_amount") @db.Decimal(20, 2)
+  signatureHash            String    @map("signature_hash") @db.Char(64)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  uploadAttempt          BankStatementUploadAttempt @relation(fields: [uploadAttemptId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_attempt")
+  matchedStatementUpload BankStatementUpload        @relation(fields: [matchedStatementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_matched_statement")
+  matchedBankTransaction BankTransaction            @relation(fields: [matchedBankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_matched_transaction")
+
+  @@index([uploadAttemptId], map: "idx_bank_statement_duplicate_attempt")
+  @@index([matchedStatementUploadId], map: "idx_bank_statement_duplicate_matched_statement")
+  @@index([matchedBankTransactionId], map: "idx_bank_statement_duplicate_matched_transaction")
+  @@index([signatureHash], map: "idx_bank_statement_duplicate_signature")
+  @@map("arya_bank_statement_upload_duplicate")
 }
 
 model BankTransaction {
@@ -508,6 +570,7 @@ model BankTransaction {
   correctionItems    ReconciliationCorrectionItem[]
   memberEventCoverages MemberEventCoverage[]
   memberEventBalanceLedger MemberEventBalanceLedger[]
+  matchedStatementUploadDuplicates BankStatementUploadDuplicate[]
 
   @@index([eventCampaignId], map: "idx_bank_transaction_event_campaign")
   @@index([manualAddedById], map: "idx_bank_transaction_manual_added_by")

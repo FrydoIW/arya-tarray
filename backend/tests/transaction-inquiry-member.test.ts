@@ -37,6 +37,7 @@ test("Member filter composes server-side with period, status, bank, Final Event,
   assert.deepEqual(where, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
     { reconciliationExcludedAt: null },
+    { statementUpload: { is: { status: { not: "WITHDRAWN" } } } },
     { status: "FINALIZED" },
     { statementUpload: { is: { bankAccountId: "bank-a" } } },
     { eventCodeId: "event-a" },
@@ -59,11 +60,13 @@ test("Member filtering preserves both Month and Day server-side ranges", () => {
   assert.deepEqual(monthWhere, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
     { reconciliationExcludedAt: null },
+    { statementUpload: { is: { status: { not: "WITHDRAWN" } } } },
     { memberIdentity: { is: { memberId: "member-a" } } }
   ] });
   assert.deepEqual(dayWhere, { AND: [
     { transactionDate: { gte: dayStart, lt: dayEnd } },
     { reconciliationExcludedAt: null },
+    { statementUpload: { is: { status: { not: "WITHDRAWN" } } } },
     { memberIdentity: { is: { memberId: "member-a" } } }
   ] });
 });
@@ -74,11 +77,13 @@ test("LINKED and UNLINKED filters use canonical relations rather than sender-nam
   assert.deepEqual(linked, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
     { reconciliationExcludedAt: null },
+    { statementUpload: { is: { status: { not: "WITHDRAWN" } } } },
     { memberIdentity: { is: { member: { isNot: null } } } }
   ] });
   assert.deepEqual(unlinked, { AND: [
     { transactionDate: { gte: periodStart, lt: periodEnd } },
     { reconciliationExcludedAt: null },
+    { statementUpload: { is: { status: { not: "WITHDRAWN" } } } },
     { OR: [{ memberIdentityId: null }, { memberIdentity: { is: { memberId: null } } }] }
   ] });
 });
@@ -100,7 +105,7 @@ test("PDF criteria and detail rows carry the selected Member filters and canonic
     searchLabel: null, generatedBy: "Operator", generatedAt: "05 Sep 2026",
     summary: { totalTransactions: 1, totalCredit: "IDR 100.00", totalDebit: "IDR 0.00", netMovement: "IDR 100.00", incomingTransactions: 1, outgoingTransactions: 0, completeTransactions: 1 },
     classifications: [],
-    transactions: [{ date: "05 Sep 2026", description: "Transfer", referenceNo: "REF-1", type: "Credit", amount: "IDR 100.00", finalEvent: "017 - Rupang", member: "MBR-A - Member A", status: "Complete" }],
+    transactions: [{ date: "05 Sep 2026", description: "Transfer", referenceNo: "REF-1", type: "Credit", amount: "IDR 100.00", finalEvent: "017 - Rupang", campaign: "—", member: "MBR-A - Member A", status: "Complete" }],
     includeFinancialSummary: true, includeClassificationSummary: false, includeTransactionDetail: true
   }).toString("latin1");
   assert.match(content, /Member: MBR-A - Member A/);

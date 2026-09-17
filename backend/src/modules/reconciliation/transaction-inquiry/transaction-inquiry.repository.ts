@@ -80,7 +80,8 @@ export function buildTransactionInquiryWhere(filter: TransactionInquiryFilter): 
     // Transaction Inquiry represents the current official reconciliation view.
     // Excluded rows remain in the database/audit trail but no longer contribute
     // to normal inquiry totals or generated reports after approval.
-    { reconciliationExcludedAt: null }
+    { reconciliationExcludedAt: null },
+    { statementUpload: { is: { status: { not: "WITHDRAWN" } } } }
   ];
   if (filter.status !== "ALL") conditions.push({ status: filter.status });
   if (filter.bankAccountId) conditions.push({ statementUpload: { is: { bankAccountId: filter.bankAccountId } } });

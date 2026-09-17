@@ -36,6 +36,39 @@ async function buildMergedCellFixture() {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+async function buildNullDateFixture() {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("BCA Sep 2026");
+  sheet.getCell("A1").value = "Informasi Rekening - Mutasi Rekening";
+  sheet.getCell("A2").value = "No. rekening";
+  sheet.getCell("B2").value = "084-9999127";
+  sheet.getCell("A3").value = "Periode";
+  sheet.getCell("B3").value = "01/09/2026 - 30/09/2026";
+  sheet.getCell("A4").value = "Tgl";
+  sheet.getCell("B4").value = "Keterangan";
+  sheet.getCell("C4").value = "Jumlah";
+
+  sheet.getCell("B5").value = "TRSF E-BANKING CR";
+  sheet.getCell("C5").value = "100,000.00 CR";
+
+  sheet.getCell("A6").value = "02/09";
+  sheet.getCell("B6").value = "TRSF E-BANKING CR";
+  sheet.getCell("C6").value = "200,000.00 CR";
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+test("BCA parser never yields a transaction without a transaction date", async () => {
+  const parsed = await parseBcaStatementWorkbook(await buildNullDateFixture());
+
+  assert.equal(parsed.transactions.length, 1);
+  assert.equal(parsed.transactions[0].sourceRowNo, 6);
+  assert.equal(parsed.transactions[0].transactionDate.toISOString().slice(0, 10), "2026-09-02");
+  assert.ok(parsed.transactions.every((item) =>
+    item.transactionDate instanceof Date && Number.isFinite(item.transactionDate.getTime())
+  ));
+});
+
 test("BCA parser ignores merged continuation rows as transaction starts", async () => {
   const parsed = await parseBcaStatementWorkbook(await buildMergedCellFixture());
 

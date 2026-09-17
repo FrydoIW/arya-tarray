@@ -7,9 +7,10 @@ import {
   executeStatementDraft,
   getStatementUploadWorkspace,
   uploadStatement,
-  updateDraftTransactionFinalEvent
+  updateDraftTransactionFinalEvent,
+  withdrawStatementDraft
 } from "../api/statement-upload.api";
-import type { DraftRowStatusFilter, StatementUploadWorkspace } from "../types";
+import type { DraftRowStatusFilter, StatementUploadWorkspace, UploadAttemptResult } from "../types";
 import { getDraftRowStatus, requiresEventClassification } from "../utils/statement-upload.utils";
 
 const EMPTY_WORKSPACE: StatementUploadWorkspace = {
@@ -34,6 +35,8 @@ export function useStatementUploadWorkspace() {
   const [loading, setLoading] = useState(initialWorkspace === EMPTY_WORKSPACE);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [uploadResult, setUploadResult] = useState<UploadAttemptResult | null>(null);
   const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -150,7 +153,11 @@ export function useStatementUploadWorkspace() {
     canEditDraft && workspace.statement?.id && workspace.transactions.length > 0 && needsReview === 0
   );
 
-  async function updateFinalEvent(transactionId: string, eventCodeId: string | null, eventCampaignId: string | null = null) {
+  async function saveTransaction(
+    transactionId: string,
+    payload: { eventCodeId: string | null; eventCampaignId: string | null; remark?: string | null },
+    successMessage: string
+  ) {
     if (!canEditDraft || savingTransactionId) return;
     setSavingTransactionId(transactionId);
     setError("");
@@ -158,7 +165,7 @@ export function useStatementUploadWorkspace() {
     try {
       const statementId = workspace.statement?.id;
       if (!statementId) return;
-      const result = await updateDraftTransactionFinalEvent({ statementId, transactionId, eventCodeId, eventCampaignId });
+      const result = await updateDraftTransactionFinalEvent({ statementId, transactionId, ...payload });
       const transactions = workspace.transactions.map((transaction) =>
         transaction.id === result.transaction.id ? result.transaction : transaction
       );
@@ -174,12 +181,26 @@ export function useStatementUploadWorkspace() {
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       setWorkspaceCache(statementWorkspaceKey(statementId), nextWorkspace);
       setWorkspace(nextWorkspace);
-      setMessage("Final Event saved.");
+      setMessage(successMessage);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to update Final Event.");
+      setError(caught instanceof Error ? caught.message : "Failed to update the draft transaction.");
     } finally {
       setSavingTransactionId(null);
     }
+  }
+
+  async function updateFinalEvent(transactionId: string, eventCodeId: string | null, eventCampaignId: string | null = null) {
+    await saveTransaction(transactionId, { eventCodeId, eventCampaignId }, "Final Event saved.");
+  }
+
+  async function updateRemark(transactionId: string, remark: string | null) {
+    const transaction = workspace.transactions.find((item) => item.id === transactionId);
+    if (!transaction) return;
+    await saveTransaction(transactionId, {
+      eventCodeId: transaction.eventCodeId ?? null,
+      eventCampaignId: transaction.eventCampaignId ?? null,
+      remark
+    }, "Remark saved.");
   }
 
   async function upload(file: File, bankAccountId: string) {
@@ -188,6 +209,7 @@ export function useStatementUploadWorkspace() {
     setUploading(true);
     setError("");
     setMessage("");
+    setUploadResult(null);
     try {
       const next = await uploadStatement({ file, bankAccountId });
       invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
@@ -195,15 +217,21 @@ export function useStatementUploadWorkspace() {
       invalidateWorkspaceCache("member/registration/workspace");
       invalidateWorkspaceCache("reconciliation/edit-income/workspace");
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
-      selectedStatementId.current = next.statement?.id;
-      if (next.statement?.id) setWorkspaceCache(statementWorkspaceKey(next.statement.id), next);
-      setWorkspace(next);
-      setSearchInput("");
-      setSearch("");
-      setStatusFilter("ALL");
-      setEventCodeFilter("ALL");
-      setPage(1);
-      setMessage(`${file.name} uploaded and parsed successfully. Draft data is now persisted.`);
+      if (next.statement?.id) {
+        selectedStatementId.current = next.statement.id;
+        setWorkspaceCache(statementWorkspaceKey(next.statement.id), next);
+        setWorkspace(next);
+        setSearchInput("");
+        setSearch("");
+        setStatusFilter("ALL");
+        setEventCodeFilter("ALL");
+        setPage(1);
+      }
+      setUploadResult(next.uploadResult);
+      const { importedTransactions, sourceTransactions, duplicateTransactions } = next.uploadResult;
+      setMessage(importedTransactions > 0
+        ? `${importedTransactions} of ${sourceTransactions} source transactions imported. ${duplicateTransactions} duplicate${duplicateTransactions === 1 ? "" : "s"} skipped.`
+        : `No new transactions were imported. ${duplicateTransactions} duplicate transaction${duplicateTransactions === 1 ? "" : "s"} were skipped.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to upload and parse the statement file.");
     } finally {
@@ -235,6 +263,32 @@ export function useStatementUploadWorkspace() {
     }
   }
 
+  async function withdraw(statementId: string, reason: string): Promise<boolean> {
+    if (busy || savingTransactionId) return false;
+    setBusy(true);
+    setWithdrawing(true);
+    setError("");
+    setMessage("");
+    try {
+      const next = await withdrawStatementDraft({ statementId, reason });
+      invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
+      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateWorkspaceCache("approval/sign-approval/workspace");
+      invalidateWorkspaceCache("reconciliation/edit-income/workspace");
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
+      if (selectedStatementId.current === statementId) selectedStatementId.current = undefined;
+      setWorkspace(next);
+      setMessage("Draft withdrawn. The upload audit record was preserved.");
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to withdraw the draft.");
+      return false;
+    } finally {
+      setWithdrawing(false);
+      setBusy(false);
+    }
+  }
+
   async function selectDraft(statementId: string) {
     if (busy || loading || statementId === selectedStatementId.current) return;
     setLoading(true);
@@ -259,6 +313,8 @@ export function useStatementUploadWorkspace() {
     loading,
     busy,
     uploading,
+    withdrawing,
+    uploadResult,
     savingTransactionId,
     error,
     message,
@@ -283,7 +339,9 @@ export function useStatementUploadWorkspace() {
     refresh,
     selectDraft,
     updateFinalEvent,
+    updateRemark,
     upload,
-    execute
+    execute,
+    withdraw
   };
 }

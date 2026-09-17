@@ -8,7 +8,7 @@ import {
   storedTransactionRequiresClassification
 } from "../reconciliation-classification.js";
 import { normalizeAccountNumber, parseBcaStatementWorkbook } from "./statement-upload.parser.js";
-import type { UpdateFinalEventInput } from "./statement-upload.schema.js";
+import type { UpdateFinalEventInput, WithdrawStatementInput } from "./statement-upload.schema.js";
 import {
   executeStatementAtomic,
   findActiveBankAccount,
@@ -16,7 +16,8 @@ import {
   loadRawStatementsForSummary,
   loadStatementUploadWorkspaceRecords,
   persistParsedStatement,
-  updateTransactionFinalEventAtomic
+  updateTransactionFinalEventAtomic,
+  withdrawStatementAtomic
 } from "./statement-upload.repository.js";
 
 const MAX_FILE_SIZE_MB = 50;
@@ -244,7 +245,9 @@ export async function uploadStatement(input: {
     );
 
     return {
-      rowNo: index + 1,
+      sourceTransactionNo: index + 1,
+      sourceWorksheetRow: transaction.sourceRowNo,
+      sourceSheetName: transaction.sourceSheetName,
       transactionDate: transaction.transactionDate,
       transactionType: transaction.transactionType,
       referenceNo: transaction.referenceNo,
@@ -265,7 +268,7 @@ export async function uploadStatement(input: {
   const totalCredit = centsToDecimalString(totalCreditCents);
   const totalDebit = centsToDecimalString(totalDebitCents);
 
-  const statement = await persistParsedStatement({
+  const result = await persistParsedStatement({
     bankAccountId: bankAccount.id,
     fileName: file.originalname,
     periodFrom: parsed.periodFrom,
@@ -277,7 +280,22 @@ export async function uploadStatement(input: {
     transactions
   });
 
-  return getStatementUploadWorkspace(statement.id);
+  const workspace = result.statementId
+    ? await getStatementUploadWorkspace(result.statementId)
+    : await getStatementUploadWorkspace();
+
+  return {
+    ...workspace,
+    uploadResult: {
+      attemptId: result.attemptId,
+      sourceTransactions: result.sourceTransactionCount,
+      importedTransactions: result.importedTransactionCount,
+      duplicateTransactions: result.duplicateTransactionCount,
+      sourceTotalCredit: result.sourceTotalCredit,
+      sourceTotalDebit: result.sourceTotalDebit,
+      duplicates: result.duplicates
+    }
+  };
 }
 
 export async function updateFinalEvent(
@@ -305,4 +323,17 @@ export async function updateFinalEvent(
 export async function executeStatement(statementId: string, userId: string) {
   await executeStatementAtomic({ statementId, userId });
   return getStatementUploadWorkspace();
+}
+
+export async function withdrawStatement(statementId: string, input: WithdrawStatementInput, userId: string) {
+  const result = await withdrawStatementAtomic({ statementId, reason: input.reason, userId });
+  const workspace = await getStatementUploadWorkspace();
+  return {
+    ...workspace,
+    withdrawal: {
+      statementId: result.statementId,
+      remainingStatementCount: result.remainingStatementCount,
+      openingBalanceUnlocked: result.openingBalanceUnlocked
+    }
+  };
 }

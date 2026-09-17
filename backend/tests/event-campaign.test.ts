@@ -6,7 +6,7 @@ import { officialCampaignAmountWhere } from "../src/modules/configuration/event-
 import { campaignDisplayStatus } from "../src/modules/configuration/event-code/event-campaign.service.js";
 import { campaignValueSchema } from "../src/modules/configuration/event-code/event-campaign.schema.js";
 
-const event = { id: "event-a", eventType: "CAMPAIGN" };
+const event = { id: "event-a", eventType: "CAMPAIGN", activeFlag: true };
 const september = { id: "campaign-september", eventCodeId: "event-a", activeFlag: true, startDate: new Date("2026-09-01T00:00:00Z"), endDate: new Date("2026-09-30T00:00:00Z") };
 const transactionDate = new Date("2026-09-15T00:00:00Z");
 const classify = (overrides: Partial<Parameters<typeof assertCampaignClassification>[0]> = {}) => assertCampaignClassification({
@@ -14,8 +14,8 @@ const classify = (overrides: Partial<Parameters<typeof assertCampaignClassificat
 });
 
 test("STANDARD needs no Campaign and rejects a Campaign assignment", () => {
-  assert.doesNotThrow(() => classify({ eventCode: { id: "standard", eventType: "STANDARD" }, campaignId: null, campaign: null }));
-  assert.throws(() => classify({ eventCode: { id: "standard", eventType: "STANDARD" } }), /Only CAMPAIGN/);
+  assert.doesNotThrow(() => classify({ eventCode: { id: "standard", eventType: "STANDARD", activeFlag: true }, campaignId: null, campaign: null }));
+  assert.throws(() => classify({ eventCode: { id: "standard", eventType: "STANDARD", activeFlag: true } }), /Only CAMPAIGN/);
   assert.doesNotThrow(() => classify({ requiresClassification: false, eventCode: null, campaignId: null }));
 });
 
@@ -31,6 +31,8 @@ test("Campaign eligibility uses transaction date and preserves unchanged histori
   assert.throws(() => classify({ transactionDate: new Date("2026-10-01T00:00:00Z") }), /not valid/);
   assert.throws(() => classify({ campaign: { ...september, activeFlag: false } }), /inactive/);
   assert.doesNotThrow(() => classify({ campaign: { ...september, activeFlag: false }, historicalCampaignId: september.id }));
+  assert.throws(() => classify({ eventCode: { ...event, activeFlag: false } }), /inactive or no longer available/);
+  assert.doesNotThrow(() => classify({ eventCode: { ...event, activeFlag: false }, campaign: { ...september, activeFlag: false }, historicalCampaignId: september.id }));
 });
 
 test("Campaign validation and derived status cover open dates and target", () => {
