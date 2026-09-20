@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import * as schema from "./member-data.schema.js";
 import * as service from "./member-data.service.js";
+import { createCarryTransfer as executeCarryTransfer, getCarryTransfers as loadCarryTransfers, reverseCarryTransfer as executeCarryTransferReversal } from "../time-based/member-carry-transfer.service.js";
 
 export async function workspace(req: Request, res: Response) { res.json(await service.getWorkspace(schema.memberDataWorkspaceQuerySchema.parse(req.query))); }
 export async function detail(req: Request, res: Response) { res.json(await service.getDetail(schema.memberDataParamsSchema.parse(req.params).memberId)); }
@@ -62,4 +63,16 @@ export async function voidOpeningCoverage(req: Request, res: Response) {
 export async function retryAllocation(req: Request, res: Response) {
   const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params);
   res.json(await service.retryAllocation(memberId, subscriptionId, schema.allocationSchema.parse(req.body).transactionId, req.auth!.userId));
+}
+export async function carryTransfers(req: Request, res: Response) {
+  const { memberId } = schema.memberDataParamsSchema.parse(req.params);
+  res.json(await loadCarryTransfers(memberId, schema.carryTransferHistoryQuerySchema.parse(req.query)));
+}
+export async function createCarryTransfer(req: Request, res: Response) {
+  const { memberId, sourceSubscriptionId } = schema.carryTransferParamsSchema.parse(req.params);
+  res.json(await executeCarryTransfer(memberId, sourceSubscriptionId, schema.carryTransferCreateSchema.parse(req.body), req.auth!.userId));
+}
+export async function reverseCarryTransfer(req: Request, res: Response) {
+  const { memberId, transferId } = schema.carryTransferReverseParamsSchema.parse(req.params);
+  res.json(await executeCarryTransferReversal(memberId, transferId, schema.carryTransferReverseSchema.parse(req.body), req.auth!.userId));
 }

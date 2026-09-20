@@ -1,8 +1,12 @@
 import { z } from "zod";
 import { isValidPeriodDate } from "../../../lib/period.js";
+import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { memberProfileFieldSchemas, optionalMemberText } from "../member-profile.schema.js";
 
 const correctionReason = z.string().trim().min(3, "Reason minimal 3 karakter").max(1000);
+const carryTransferIdempotencyKey = z.string().trim().min(1, "Idempotency key is required").max(100);
+const carryTransferAmount = z.string().trim().regex(/^\d{1,18}(\.\d{1,2})?$/, "Amount must be a decimal with at most 2 decimals")
+  .refine(value => !/^\d{1,18}(\.\d{1,2})?$/.test(value) || decimalStringToCents(value) > 0n, "Amount must be greater than zero");
 
 export const memberDataWorkspaceQuerySchema = z.object({
   search: z.string().trim().max(150).default(""),
@@ -82,6 +86,26 @@ export const openingCoverageSchema = z.object({
   remark: z.string().trim().min(3, "Opening coverage remark is required").max(1000)
 }).refine(value => value.coverageFrom <= value.coverageTo, { path: ["coverageTo"], message: "Coverage end must not precede start" });
 
+export const carryTransferParamsSchema = z.object({ memberId: z.string().uuid(), sourceSubscriptionId: z.string().uuid() });
+export const carryTransferCreateSchema = z.object({
+  destinationSubscriptionId: z.string().uuid(),
+  amount: carryTransferAmount,
+  reason: correctionReason,
+  idempotencyKey: carryTransferIdempotencyKey
+}).strict();
+export const carryTransferReverseParamsSchema = z.object({ memberId: z.string().uuid(), transferId: z.string().uuid() });
+export const carryTransferReverseSchema = z.object({
+  reason: correctionReason,
+  idempotencyKey: carryTransferIdempotencyKey
+}).strict();
+export const carryTransferHistoryQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25)
+});
+
+export type CarryTransferCreateInput = z.infer<typeof carryTransferCreateSchema>;
+export type CarryTransferReverseInput = z.infer<typeof carryTransferReverseSchema>;
+export type CarryTransferHistoryQuery = z.infer<typeof carryTransferHistoryQuerySchema>;
 export type MemberDataWorkspaceQuery = z.infer<typeof memberDataWorkspaceQuerySchema>;
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 export type IdentityMetadataInput = z.infer<typeof identityMetadataSchema>;

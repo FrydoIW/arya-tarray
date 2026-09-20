@@ -20,6 +20,7 @@ function payment(id: string, amount: string, date = "2026-01-31", memberId: stri
 type Sub = { id: string; memberId: string; eventCodeId: string; startDate: Date | null; validUntil: Date | null; activeFlag: boolean; referenceNo: string | null; displayName: string | null; remark: string | null };
 type Entry = { id: string; subscriptionId: string; bankTransactionId: string | null; coverageId: string | null;
   entryType: string; entryStatus: string; amountDelta: Prisma.Decimal; effectiveDate: Date;
+  postingSequence: bigint;
   unitAmountSnapshot: Prisma.Decimal | null; durationMonthsSnapshot: number | null; createdAt: Date;
   voidReason: string | null };
 type Coverage = { id: string; subscriptionId: string; bankTransactionId: string | null; coverageSource: string;
@@ -33,6 +34,7 @@ function fixture() {
     validUntil: null, activeFlag: true, referenceNo: "Rupang #17", displayName: null, remark: null }];
   const entries: Entry[] = [];
   const coverages: Coverage[] = [];
+  let activeTransferRelation = false;
   let sequence = 0;
   const id = () => String(++sequence).padStart(5, "0");
   const matches = (row: Record<string, unknown>, where: Record<string, unknown>) =>
@@ -65,7 +67,11 @@ function fixture() {
       }
     },
     memberEventBalanceLedger: {
-      aggregate: async ({ where }: { where: Record<string, unknown> }) => ({ _sum: { amountDelta: entries.filter(row => matches(row, where)).reduce((sum, row) => sum.plus(row.amountDelta), d("0")) } }),
+      aggregate: async ({ where }: { where: Record<string, unknown> }) => {
+        const selected = entries.filter(row => matches(row, where));
+        return { _sum: { amountDelta: selected.reduce((sum, row) => sum.plus(row.amountDelta), d("0")) },
+          _max: { postingSequence: selected.reduce<bigint | null>((max, row) => max === null || row.postingSequence > max ? row.postingSequence : max, null) } };
+      },
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
         entries.filter(row => matches(row, where)).slice().reverse().map(decorateEntry),
       findFirst: async ({ where }: { where: Record<string, unknown> }) =>
@@ -74,12 +80,15 @@ function fixture() {
         const rows = entries.filter(row => matches(row, where)); rows.forEach(row => Object.assign(row, data)); return { count: rows.length };
       },
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        const row = { id: id(), bankTransactionId: null, coverageId: null, unitAmountSnapshot: null,
+        const row = { id: id(), bankTransactionId: null, coverageId: null, postingSequence: 0n, unitAmountSnapshot: null,
           durationMonthsSnapshot: null, voidReason: null, ...data, amountDelta: d(String(data.amountDelta)),
           unitAmountSnapshot: data.unitAmountSnapshot ? d(String(data.unitAmountSnapshot)) : null,
           createdAt: new Date(2026, 0, sequence) } as Entry;
         entries.push(row); return decorateEntry(row);
       }
+    },
+    memberEventCarryTransfer: {
+      findFirst: async () => activeTransferRelation ? { id: "transfer-a" } : null
     },
     memberEventCoverage: {
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
@@ -111,7 +120,8 @@ function fixture() {
   const balance = (subId = "sub-a") => active().filter(row => row.subscriptionId === subId)
     .reduce((sum, row) => sum.plus(row.amountDelta), d("0")).toFixed(2);
   const activeCoverage = (subId = "sub-a") => coverages.filter(row => row.subscriptionId === subId && row.coverageStatus === "ACTIVE" && row.coverageSource === "TRANSACTION");
-  return { tx, payments, subs, entries, coverages, sync, active, balance, activeCoverage };
+  return { tx, payments, subs, entries, coverages, sync, active, balance, activeCoverage,
+    setActiveTransferRelation: (value: boolean) => { activeTransferRelation = value; } };
 }
 
 for (const [amount, months, carry] of [
@@ -236,6 +246,14 @@ test("repeated explicit rebuild preserves active ledger identity and VOIDED audi
   await rebuildTimeBasedSubscription(f.tx, "sub-a", "admin", "Recheck");
   await rebuildTimeBasedSubscription(f.tx, "sub-a", "admin", "Recheck");
   assert.deepEqual(f.entries.map(row => row.id), before);
+});
+
+test("broad rebuild refuses an active Carry Transfer relationship before it can void ledger rows", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "225000"));
+  await f.sync("p1"); const before = f.entries.map(row => ({ id: row.id, status: row.entryStatus }));
+  f.setActiveTransferRelation(true);
+  await assert.rejects(() => rebuildTimeBasedSubscription(f.tx, "sub-a", "admin", "Recheck"), /Carry Transfer dependencies/);
+  assert.deepEqual(f.entries.map(row => ({ id: row.id, status: row.entryStatus })), before);
 });
 
 test("Member move voids old economics and reuses VOIDED historical rate on new subscription", async () => {

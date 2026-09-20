@@ -16,7 +16,7 @@ import { AddIdentityModal, DetachIdentityModal, EditIdentityModal, MoveIdentityM
 import { MemberIdentityHistory } from "./MemberIdentityHistory";
 import { MemberProfileModal } from "./MemberProfileModal";
 import { MemberDonationHistory } from "./MemberDonationHistory";
-import { MemberSponsorship } from "./MemberSponsorship";
+import { ProgramAllocation } from "./ProgramAllocation";
 import styles from "../styles/member-data.module.css";
 
 type Action = { kind: "edit-profile" } | { kind: "add" } | { kind: "edit-identity" | "move" | "detach"; identity: Identity } | null;
@@ -80,7 +80,7 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
       <button type="button" id="member-tab-identities" role="tab" aria-selected={tab === "identities"} aria-controls="member-panel-identities" tabIndex={tab === "identities" ? 0 : -1} className={tab === "identities" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("identities")}>Identitas <span>{member.identities.length}</span></button>
       <button type="button" id="member-tab-ownership-history" role="tab" aria-selected={tab === "ownership-history"} aria-controls="member-panel-ownership-history" tabIndex={tab === "ownership-history" ? 0 : -1} className={tab === "ownership-history" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("ownership-history")}>Riwayat Kepemilikan</button>
       <button type="button" id="member-tab-donations" role="tab" aria-selected={tab === "donations"} aria-controls="member-panel-donations" tabIndex={tab === "donations" ? 0 : -1} className={tab === "donations" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("donations")}>Riwayat Donasi</button>
-      <button type="button" id="member-tab-sponsorship" role="tab" aria-selected={tab === "sponsorship"} aria-controls="member-panel-sponsorship" tabIndex={tab === "sponsorship" ? 0 : -1} className={tab === "sponsorship" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("sponsorship")}>Rupang &amp; Program</button>
+      <button type="button" id="member-tab-sponsorship" role="tab" aria-selected={tab === "sponsorship"} aria-controls="member-panel-sponsorship" tabIndex={tab === "sponsorship" ? 0 : -1} className={tab === "sponsorship" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("sponsorship")}>Program &amp; Allocation</button>
     </div>
     {tab === "profile" ? <section id="member-panel-profile" role="tabpanel" aria-labelledby="member-tab-profile" tabIndex={0} className={styles.detailPanel}>
       <div className={styles.sectionHead}><div><h2>Informasi profil</h2><p>Data kanonik donatur. Usia dihitung dari tanggal lahir.</p></div>{canMutate ? <Button icon={<Pencil size={15} />} onClick={() => { state.clearError(); setAction({ kind: "edit-profile" }); }}>Edit profil</Button> : null}</div>
@@ -98,7 +98,7 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
       <DataTable rows={member.identities} columns={columns} rowKey={row => row.memberIdentityId} minWidth={canMutate ? "1250px" : "1020px"} emptyState={{ title: "Belum ada identitas", description: "Tambahkan identitas belum terverifikasi ketika tersedia." }} />
     </section> : tab === "ownership-history" ? <div id="member-panel-ownership-history" role="tabpanel" aria-labelledby="member-tab-ownership-history" tabIndex={0}><MemberIdentityHistory memberId={memberId} /></div>
       : tab === "donations" ? <div id="member-panel-donations" role="tabpanel" aria-labelledby="member-tab-donations" tabIndex={0}><MemberDonationHistory memberId={memberId} /></div>
-      : <div id="member-panel-sponsorship" role="tabpanel" aria-labelledby="member-tab-sponsorship" tabIndex={0}><MemberSponsorship memberId={memberId} memberActive={member.activeFlag} canMutate={canMutate} /></div>}
+      : <div id="member-panel-sponsorship" role="tabpanel" aria-labelledby="member-tab-sponsorship" tabIndex={0}><ProgramAllocation memberId={memberId} memberActive={member.activeFlag} canMutate={canMutate} /></div>}
     {canMutate && action?.kind === "edit-profile" ? <MemberProfileModal member={member} busy={state.busy} error={state.error} onClose={close} onSubmit={state.updateProfile} /> : null}
     {canMutate && action?.kind === "add" ? <AddIdentityModal memberId={memberId} busy={state.busy} error={state.error} onClose={close} onSubmit={state.attach} /> : null}
     {canMutate && action?.kind === "edit-identity" ? <EditIdentityModal identity={action.identity} busy={state.busy} error={state.error} onClose={close} onSubmit={input => state.updateIdentity(action.identity.memberIdentityId, input)} /> : null}

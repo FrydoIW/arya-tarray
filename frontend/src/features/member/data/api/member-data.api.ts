@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import type { DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityMetadataInput, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace, OpeningCoverageInput, SponsorshipWorkspace, SubscriptionInput } from "../types";
+import type { CarryTransferHistory, CarryTransferInput, CarryTransferResult, CarryTransferReverseInput, CarryTransferReversalResult, DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityMetadataInput, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace, OpeningCoverageInput, SponsorshipWorkspace, SubscriptionInput } from "../types";
 
 const base = "/member/data";
 export function getWorkspace(query: MemberDataQuery, signal?: AbortSignal) {
@@ -22,6 +22,19 @@ export function allocateSponsorshipPayment(memberId: string, subscriptionId: str
 export function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/opening-coverage`, { method: "POST", body: JSON.stringify(input) }); }
 export function voidOpeningCoverage(memberId: string, subscriptionId: string, coverageId: string, reason: string) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/opening-coverage/${encodeURIComponent(coverageId)}/void`, { method: "POST", body: JSON.stringify({ reason }) }); }
 export function retryAllocation(memberId: string, subscriptionId: string, transactionId: string) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/retry-allocation`, { method: "POST", body: JSON.stringify({ transactionId }) }); }
+export function getCarryTransfers(memberId: string, page: number, pageSize: number, signal?: AbortSignal) {
+  return apiFetch<CarryTransferHistory>(`${base}/${encodeURIComponent(memberId)}/carry-transfers?` + new URLSearchParams({
+    page: String(page), pageSize: String(pageSize)
+  }), { signal });
+}
+export function createCarryTransfer(memberId: string, sourceSubscriptionId: string, input: CarryTransferInput) {
+  return apiFetch<CarryTransferResult>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(sourceSubscriptionId)}/carry-transfers`,
+    { method: "POST", body: JSON.stringify(input) });
+}
+export function reverseCarryTransfer(memberId: string, transferId: string, input: CarryTransferReverseInput) {
+  return apiFetch<CarryTransferReversalResult>(`${base}/${encodeURIComponent(memberId)}/carry-transfers/${encodeURIComponent(transferId)}/reverse`,
+    { method: "POST", body: JSON.stringify(input) });
+}
 export function getIdentityHistory(memberId: string, page: number, pageSize: number, signal?: AbortSignal) {
   return apiFetch<IdentityHistoryWorkspace>(`${base}/${encodeURIComponent(memberId)}/identity-history?` + new URLSearchParams({
     page: String(page), pageSize: String(pageSize)

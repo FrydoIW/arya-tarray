@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { HttpError } from "../../../lib/http.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
+import { allocatePostingSequences, assertRebuildHasNoActiveTransferRelation, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
 
 type Tx = Prisma.TransactionClient;
 const activeCoverage = { coverageStatus: "ACTIVE" } as const;
@@ -116,13 +117,15 @@ async function snapshot(tx: Tx, payment: Payment, recalculate: boolean) {
   if (!current) throw new HttpError(400, "This payment has no TIME_BASED rule");
   return { unitAmount: current.unitAmount, durationMonths: current.durationMonths };
 }
-async function refreshValidity(tx: Tx, subscriptionId: string) {
+export async function refreshSubscriptionValidity(tx: Tx, subscriptionId: string) {
   const latest = await tx.memberEventCoverage.findFirst({ where: { subscriptionId, ...activeCoverage },
     orderBy: [{ coverageTo: "desc" }, { id: "desc" }], select: { coverageTo: true } });
   await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { validUntil: latest?.coverageTo ?? null } });
 }
 async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: string, reason: string,
   addition?: { payment: Payment; recalculate: boolean }) {
+  await lockSubscriptionsForPosting(tx, [subscriptionId]);
+  await assertRebuildHasNoActiveTransferRelation(tx, subscriptionId);
   const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId },
     select: { id: true, memberId: true, eventCodeId: true, startDate: true, validUntil: true } });
   if (!sub) return;
@@ -135,8 +138,13 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
     tx.memberEventCoverage.findMany({ where: { subscriptionId, coverageSource: "OPENING", ...activeCoverage },
       select: { coverageTo: true }, orderBy: [{ coverageTo: "desc" }, { id: "desc" }] }),
     tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryType: "COVERAGE_USE", ...activeEntry },
-      select: { bankTransactionId: true, amountDelta: true } })
+      select: { bankTransactionId: true, amountDelta: true, coverage: { select: { coverageSource: true } } } })
   ]);
+  // Transfer-generated allocation always owns a TRANSFER-source coverage. Transfer commands
+  // never allow that state to survive without an ACTIVE transfer, so this is a defensive
+  // integrity conflict: broad rebuild must not silently replay pooled transfer economics.
+  if (activeLedger.some(row => row.coverage?.coverageSource === "TRANSFER"))
+    throw new HttpError(409, "This subscription has Carry Transfer-generated coverage. Broad TIME_BASED rebuild cannot safely replay transfer allocation; unwind the related transfer or use a dedicated correction path.");
   const ids = [...new Set([...ledger, ...coverage].flatMap(row => row.bankTransactionId ? [row.bankTransactionId] : []))];
   if (addition && !ids.includes(addition.payment.id)) ids.push(addition.payment.id);
   const payments = ids.length ? await tx.bankTransaction.findMany({ where: { id: { in: ids } }, select: paymentSelect }) : [];
@@ -179,8 +187,15 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
           && cents(use.amountDelta) === -row.grant.amountConsumed : !cov && !use);
     });
   if (unchanged) return;
+  const postingCount = plan.length + plan.filter(row => row.from).length;
+  const postingSequences = postingCount ? await allocatePostingSequences(tx, subscriptionId, postingCount) : [];
+  let postingSequenceIndex = 0;
   const now = new Date();
-  await tx.memberEventBalanceLedger.updateMany({ where: { subscriptionId, ...activeEntry },
+  // Broad rebuild owns bank-payment economics only. TRANSFER_IN / TRANSFER_OUT are
+  // append-only Carry Transfer audit owned by transfer and reversal commands, even
+  // after a transfer is REVERSED, so they are never voided or regenerated here.
+  await tx.memberEventBalanceLedger.updateMany({
+    where: { subscriptionId, ...activeEntry, entryType: { in: ["PAYMENT", "COVERAGE_USE"] } },
     data: { entryStatus: "VOIDED", voidedAt: now, voidedById: userId, voidReason: reason } });
   await tx.memberEventCoverage.updateMany({ where: { subscriptionId, coverageSource: "TRANSACTION", ...activeCoverage },
     data: { coverageStatus: "VOIDED", voidedAt: now, voidedById: userId, voidReason: reason } });
@@ -189,7 +204,7 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
     await tx.memberEventBalanceLedger.create({ data: {
       subscriptionId, bankTransactionId: payment.id, entryType: "PAYMENT", entryStatus: "ACTIVE",
       amountDelta: money(amount), effectiveDate: date, unitAmountSnapshot: rate.unitAmount,
-      durationMonthsSnapshot: rate.durationMonths, createdById: userId
+      durationMonthsSnapshot: rate.durationMonths, postingSequence: postingSequences[postingSequenceIndex++], createdById: userId
     } });
     if (from && to) {
       const created = await tx.memberEventCoverage.create({ data: {
@@ -202,11 +217,11 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
         subscriptionId, bankTransactionId: payment.id, coverageId: created.id,
         entryType: "COVERAGE_USE", entryStatus: "ACTIVE", amountDelta: money(-grant.amountConsumed),
         effectiveDate: date, unitAmountSnapshot: rate.unitAmount,
-        durationMonthsSnapshot: rate.durationMonths, createdById: userId
+        durationMonthsSnapshot: rate.durationMonths, postingSequence: postingSequences[postingSequenceIndex++], createdById: userId
       } });
     }
   }
-  await refreshValidity(tx, subscriptionId);
+  await refreshSubscriptionValidity(tx, subscriptionId);
 }
 
 /** Runs inside the caller's serializable transaction. ACTIVE PAYMENT proves allocation even with zero coverage. */

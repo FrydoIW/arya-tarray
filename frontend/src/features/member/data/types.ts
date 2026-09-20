@@ -67,10 +67,61 @@ export type IdentityHistoryWorkspace = {
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
 };
 
+export type ContributionRow = {
+  eventCodeId: string; eventCode: string; eventName: string; eventType: string; category: string;
+  campaign: { campaignId: string; campaignName: string; displayStatus: string } | null;
+  totalAmount: string; transactionCount: number;
+};
+export type SponsorshipSubscription = {
+  subscriptionId: string; event: { eventCodeId: string; code: string; eventName: string; eventType: string };
+  referenceNo: string | null; displayName: string | null; startDate: string | null; validUntil: string | null;
+  activeFlag: boolean; remark: string | null; status: "ACTIVE" | "INACTIVE" | "PENDING" | "SCHEDULED" | "EXPIRED";
+  timeRule: { unitAmount: string; durationMonths: number } | null;
+  carryBalance: string; principal: string; consumed: string; transferIn: string; transferOut: string;
+  balanceHistory: Array<{ ledgerId: string; transactionId: string | null; referenceNo: string | null; type: string; status: string; amountDelta: string; effectiveDate: string | null; unitAmount: string | null; durationMonths: number | null; voidReason: string | null }>;
+  coverage: Array<{ coverageId: string; source: string; status: string; transactionId: string | null; transactionDate: string | null; referenceNo: string | null; amountApplied: string | null; unitAmount: string | null; durationMonths: number | null; grantedUnits: number | null; coverageFrom: string; coverageTo: string; remark: string | null; voidReason: string | null }>;
+};
 export type SponsorshipWorkspace = {
   eventOptions: Array<{ eventCodeId: string; code: string; eventName: string }>;
-  subscriptions: Array<{ subscriptionId: string; event: { eventCodeId: string; code: string; eventName: string }; referenceNo: string | null; displayName: string | null; startDate: string | null; validUntil: string | null; activeFlag: boolean; remark: string | null; status: "ACTIVE" | "INACTIVE" | "PENDING" | "SCHEDULED" | "EXPIRED"; timeRule: { unitAmount: string; durationMonths: number } | null; carryBalance: string; balanceHistory: Array<{ ledgerId: string; transactionId: string | null; referenceNo: string | null; type: string; status: string; amountDelta: string; effectiveDate: string | null; unitAmount: string | null; durationMonths: number | null; voidReason: string | null }>; coverage: Array<{ coverageId: string; source: string; status: string; transactionId: string | null; transactionDate: string | null; referenceNo: string | null; amountApplied: string | null; unitAmount: string | null; durationMonths: number | null; grantedUnits: number | null; coverageFrom: string; coverageTo: string; remark: string | null; voidReason: string | null }> }>;
+  subscriptions: SponsorshipSubscription[];
+  contributions: ContributionRow[];
+  contributionTotals: Record<string, { amount: string; transactionCount: number }>;
   pendingPayments: Array<{ transactionId: string; transactionDate: string | null; referenceNo: string | null; amount: string; principalAmount: string; event: { eventCodeId: string; code: string; eventName: string } | null; unitAmount: string | null; grantedUnits: number | null; durationMonths: number | null; reason: string }>;
 };
+
+export type CarryTransferSubscription = {
+  subscriptionId: string; referenceNo: string | null; displayName: string | null;
+  eventCodeId: string; eventCode: string; eventName: string;
+};
+export type CarryTransferView = {
+  transferId: string; status: string; memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string;
+  amount: string; effectiveDate: string; reason: string; destinationRule: { unitAmount: string; durationMonths: number };
+  reversalOfTransferId: string | null; createdAt: string; reversedAt: string | null;
+};
+export type CarryTransferRecord = {
+  transferId: string; status: string; amount: string; effectiveDate: string; reason: string; createdAt: string;
+  destinationRule: { unitAmount: string; durationMonths: number };
+  createdBy: { userId: string; fullName: string } | null; reversedAt: string | null; reversedBy: { userId: string; fullName: string } | null;
+  source: CarryTransferSubscription | null; destination: CarryTransferSubscription | null;
+  reversalOf: { transferId: string; status: string; effectiveDate: string } | null;
+  reversal: { transferId: string; status: string; effectiveDate: string } | null;
+};
+export type CarryTransferHistory = {
+  rows: CarryTransferRecord[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+};
+export type CarryTransferBalance = { subscriptionId: string; carryBefore: string | null; carryAfter: string };
+export type CarryTransferAllocation = { units: number; amountApplied: string; unitAmount: string; durationMonths: number;
+  coverage: { coverageId: string; coverageFrom: string; coverageTo: string } | null };
+export type CarryTransferResult = {
+  replayed: boolean; transfer: CarryTransferView; source: CarryTransferBalance;
+  destination: CarryTransferBalance & { allocation: CarryTransferAllocation | null };
+};
+export type CarryTransferReversalResult = {
+  replayed: boolean; original: CarryTransferView; reversal: CarryTransferView;
+  restoringDestination: CarryTransferBalance; reversingSource: CarryTransferBalance;
+};
+export type CarryTransferInput = { destinationSubscriptionId: string; amount: string; reason: string; idempotencyKey: string };
+export type CarryTransferReverseInput = { reason: string; idempotencyKey: string };
 export type SubscriptionInput = { eventCodeId: string; referenceNo: string | null; displayName: string | null; startDate: string | null; activeFlag: boolean; remark: string | null };
 export type OpeningCoverageInput = { coverageFrom: string; coverageTo: string; remark: string };

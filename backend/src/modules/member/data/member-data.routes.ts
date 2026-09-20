@@ -11,6 +11,7 @@ memberDataRouter.get("/identity-options", requireMemberMutationAccess, asyncHand
 memberDataRouter.get("/member-options", requireMemberMutationAccess, asyncHandler(controller.memberOptions));
 memberDataRouter.get("/:memberId/donations", asyncHandler(controller.donations));
 memberDataRouter.get("/:memberId/sponsorship", asyncHandler(controller.sponsorship));
+memberDataRouter.get("/:memberId/carry-transfers", asyncHandler(controller.carryTransfers));
 memberDataRouter.get("/:memberId/identity-history", asyncHandler(controller.identityHistory));
 memberDataRouter.get("/:memberId", asyncHandler(controller.detail));
 memberDataRouter.patch("/:memberId/lifecycle", requireMemberMutationAccess, asyncHandler(controller.lifecycle));
@@ -25,6 +26,8 @@ memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/allocate", requi
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage", requireMemberMutationAccess, asyncHandler(controller.openingCoverage));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage/:coverageId/void", requireMemberMutationAccess, asyncHandler(controller.voidOpeningCoverage));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/retry-allocation", requireMemberMutationAccess, asyncHandler(controller.retryAllocation));
+memberDataRouter.post("/:memberId/subscriptions/:sourceSubscriptionId/carry-transfers", requireMemberMutationAccess, asyncHandler(controller.createCarryTransfer));
+memberDataRouter.post("/:memberId/carry-transfers/:transferId/reverse", requireMemberMutationAccess, asyncHandler(controller.reverseCarryTransfer));
 
 memberDataRouter.use(privateErrorHandler(
   "member-data",

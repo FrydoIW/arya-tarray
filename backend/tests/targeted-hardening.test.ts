@@ -149,7 +149,7 @@ test("Event Code action state blocks empty/invalid execution and reload while di
 
 test("bounded balance history is explicitly labeled with its repository limit", () => {
   const repository = readFileSync(new URL("../src/modules/member/data/member-data.repository.ts", import.meta.url), "utf8");
-  const screen = readFileSync(new URL("../../frontend/src/features/member/data/components/MemberSponsorship.tsx", import.meta.url), "utf8");
+  const screen = readFileSync(new URL("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx", import.meta.url), "utf8");
   assert.match(repository, /balanceLedger:.*take: 24/);
   assert.ok(screen.includes("Balance history · Latest 24 entries"));
 });

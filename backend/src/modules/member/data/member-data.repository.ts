@@ -147,7 +147,7 @@ export function pendingTimeBasedPaymentsWhere(memberId: string): Prisma.BankTran
 
 export function loadMemberSponsorship(memberId: string) {
   return prisma.$transaction(async tx => {
-    const [member, subscriptions, pending, eventOptions] = await Promise.all([
+    const [member, subscriptions, pending, eventOptions, contributionGroups] = await Promise.all([
       tx.member.findUnique({ where: { id: memberId }, select: { id: true } }),
       tx.memberEventSubscription.findMany({ where: { memberId }, include: {
         eventCode: { select: { id: true, code: true, eventName: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
@@ -160,13 +160,25 @@ export function loadMemberSponsorship(memberId: string) {
         memberEventBalanceLedger: { where: { entryType: "PAYMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { entryType: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, subscription: { select: { eventCodeId: true } } } },
         eventCode: { select: { id: true, code: true, eventName: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }
       }, orderBy: [{ transactionDate: "desc" }, { id: "desc" }] }),
-      tx.eventCode.findMany({ where: { eventType: "TIME_BASED", activeFlag: true, timeRule: { is: { activeFlag: true } } }, select: { id: true, code: true, eventName: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] })
+      tx.eventCode.findMany({ where: { eventType: "TIME_BASED", activeFlag: true, timeRule: { is: { activeFlag: true } } }, select: { id: true, code: true, eventName: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] }),
+      tx.bankTransaction.groupBy({
+        by: ["eventCodeId", "eventCampaignId"], where: canonicalMemberDonationWhere(memberId),
+        _sum: { originalAmount: true }, _count: { _all: true }
+      })
     ]);
     const balances = subscriptions.length ? await tx.memberEventBalanceLedger.groupBy({
-      by: ["subscriptionId"], where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryStatus: "ACTIVE" },
+      by: ["subscriptionId", "entryType"], where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryStatus: "ACTIVE" },
       _sum: { amountDelta: true }
     }) : [];
-    return { member, subscriptions, pending, eventOptions, balances };
+    const contributionEventIds = [...new Set(contributionGroups.flatMap(row => row.eventCodeId ? [row.eventCodeId] : []))];
+    const contributionCampaignIds = [...new Set(contributionGroups.flatMap(row => row.eventCampaignId ? [row.eventCampaignId] : []))];
+    const [contributionEvents, contributionCampaigns] = await Promise.all([
+      contributionEventIds.length ? tx.eventCode.findMany({ where: { id: { in: contributionEventIds } },
+        select: { id: true, code: true, eventName: true, eventType: true, category: true } }) : [],
+      contributionCampaignIds.length ? tx.eventCampaign.findMany({ where: { id: { in: contributionCampaignIds } },
+        select: { id: true, eventCodeId: true, campaignName: true, activeFlag: true, startDate: true, endDate: true } }) : []
+    ]);
+    return { member, subscriptions, pending, eventOptions, balances, contributionGroups, contributionEvents, contributionCampaigns };
   });
 }
 
