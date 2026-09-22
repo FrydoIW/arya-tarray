@@ -13,7 +13,7 @@ import { addCalendarMonthsInclusive, refreshSubscriptionStartDate, refreshSubscr
 type Tx = Prisma.TransactionClient;
 
 const transferHeaderSelect = {
-  id: true, memberId: true, sourceSubscriptionId: true, destinationSubscriptionId: true,
+  id: true, memberId: true, sourceSubscriptionId: true, destinationSubscriptionId: true, destinationCampaignId: true,
   amount: true, effectiveDate: true, reason: true, status: true, idempotencyKey: true,
   requestHash: true, reversalOfTransferId: true, destinationUnitAmountSnapshot: true,
   destinationDurationMonthsSnapshot: true, createdAt: true, createdById: true,
@@ -34,7 +34,8 @@ const destinationEventSelect = {
 } as const;
 
 export type CarryTransferCreateInput = {
-  destinationSubscriptionId: string;
+  destinationSubscriptionId?: string;
+  destinationCampaignId?: string;
   amount: string;
   reason: string;
   idempotencyKey: string;
@@ -50,7 +51,8 @@ export type CarryTransferView = {
   status: string;
   memberId: string;
   sourceSubscriptionId: string;
-  destinationSubscriptionId: string;
+  destinationSubscriptionId: string | null;
+  destinationCampaignId: string | null;
   amount: string;
   effectiveDate: string;
   reason: string;
@@ -61,7 +63,8 @@ export type CarryTransferView = {
 };
 
 export type CarryTransferBalanceView = {
-  subscriptionId: string;
+  subscriptionId: string | null;
+  campaignId?: string | null;
   carryBefore: string | null;
   carryAfter: string;
 };
@@ -90,7 +93,7 @@ export type CarryTransferReversalResult = {
 };
 
 type TransferHeader = {
-  id: string; memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string;
+  id: string; memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string | null; destinationCampaignId: string | null;
   amount: Prisma.Decimal; effectiveDate: Date; reason: string; status: string; idempotencyKey: string;
   requestHash: string; reversalOfTransferId: string | null; destinationUnitAmountSnapshot: Prisma.Decimal;
   destinationDurationMonthsSnapshot: number; createdAt: Date; createdById: string;
@@ -117,10 +120,12 @@ export function carryTransferRequestHash(payload: {
   amount?: string;
   transferId?: string;
   reason: string;
+  destinationCampaignId?: string;
 }) {
   const canonical = payload.kind === "CARRY_TRANSFER"
     ? JSON.stringify({ v: 1, kind: payload.kind, memberId: payload.memberId,
       sourceSubscriptionId: payload.sourceSubscriptionId, destinationSubscriptionId: payload.destinationSubscriptionId,
+      destinationCampaignId: payload.destinationCampaignId,
       amount: payload.amount, reason: payload.reason })
     : JSON.stringify({ v: 1, kind: payload.kind, memberId: payload.memberId, transferId: payload.transferId, reason: payload.reason });
   return createHash("sha256").update(canonical).digest("hex");
@@ -137,6 +142,7 @@ function toTransferView(row: TransferHeader): CarryTransferView {
     memberId: row.memberId,
     sourceSubscriptionId: row.sourceSubscriptionId,
     destinationSubscriptionId: row.destinationSubscriptionId,
+    destinationCampaignId: row.destinationCampaignId,
     amount: row.amount.toFixed(2),
     effectiveDate: dateOnly(row.effectiveDate),
     reason: row.reason,
@@ -182,19 +188,19 @@ async function replayForwardTransfer(tx: Tx, row: TransferHeader,
   if (row.requestHash !== command.requestHash || row.memberId !== command.memberId)
     throw new HttpError(409, "This idempotency key was already used for a different Carry Transfer request.");
   const [sourceCarry, destinationCarry] = await Promise.all([
-    activeCarryCents(tx, row.sourceSubscriptionId), activeCarryCents(tx, row.destinationSubscriptionId)
+    activeCarryCents(tx, row.sourceSubscriptionId), row.destinationSubscriptionId ? activeCarryCents(tx, row.destinationSubscriptionId) : Promise.resolve(0n)
   ]);
   return {
     replayed: true,
     transfer: toTransferView(row),
     source: { subscriptionId: row.sourceSubscriptionId, carryBefore: null, carryAfter: centsToDecimal(sourceCarry) },
-    destination: { subscriptionId: row.destinationSubscriptionId, carryBefore: null, carryAfter: centsToDecimal(destinationCarry), allocation: null }
+    destination: { subscriptionId: row.destinationSubscriptionId, campaignId: row.destinationCampaignId, carryBefore: null, carryAfter: centsToDecimal(destinationCarry), allocation: null }
   };
 }
 
 /** Core forward transfer. Must run inside the caller's serializable transaction. */
 export async function forwardCarryTransferRecord(tx: Tx, input: {
-  memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string;
+  memberId: string; sourceSubscriptionId: string; destinationSubscriptionId?: string; destinationCampaignId?: string;
   amount: string; reason: string; idempotencyKey: string; userId: string;
 }): Promise<CarryTransferResult> {
   const reason = input.reason.trim();
@@ -204,19 +210,67 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
   if (!idempotencyKey) throw new HttpError(400, "An idempotency key is required.");
   const amountCents = decimalStringToCents(input.amount);
   if (amountCents <= 0n) throw new HttpError(400, "Carry Transfer amount must be greater than zero.");
+  if (Boolean(input.destinationSubscriptionId) === Boolean(input.destinationCampaignId))
+    throw new HttpError(400, "Choose exactly one destination subscription or Campaign.");
   const requestHash = carryTransferRequestHash({ kind: "CARRY_TRANSFER", memberId: input.memberId,
     sourceSubscriptionId: input.sourceSubscriptionId, destinationSubscriptionId: input.destinationSubscriptionId,
+    destinationCampaignId: input.destinationCampaignId,
     amount: centsToDecimal(amountCents), reason });
 
   const existing = await tx.memberEventCarryTransfer.findUnique({ where: { idempotencyKey }, select: transferHeaderSelect });
   if (existing) return replayForwardTransfer(tx, existing, { memberId: input.memberId, requestHash });
 
-  await lockSubscriptionsForPosting(tx, [input.sourceSubscriptionId, input.destinationSubscriptionId]);
+  await lockSubscriptionsForPosting(tx, [input.sourceSubscriptionId, ...(input.destinationSubscriptionId ? [input.destinationSubscriptionId] : [])]);
 
   const member = await tx.member.findUnique({ where: { id: input.memberId }, select: { id: true } });
   if (!member) throw new HttpError(404, "Donatur tidak ditemukan.");
-  const { source, destination } = await loadOwnedSubscriptions(tx, input.memberId, input.sourceSubscriptionId, input.destinationSubscriptionId);
+  const source = await tx.memberEventSubscription.findUnique({ where: { id: input.sourceSubscriptionId }, select: subscriptionSelect });
+  if (!source || source.memberId !== input.memberId) throw new HttpError(404, "Source subscription was not found for this Member.");
+  if (!source.activeFlag) throw new HttpError(409, "The source subscription is not active.");
   await requireTimeBasedEvent(tx, source.eventCodeId, "The source");
+  const sourceCarryBefore = await activeCarryCents(tx, source.id);
+  if (amountCents > sourceCarryBefore)
+    throw new HttpError(409, "The source subscription does not have enough unused carry for this transfer.");
+
+  if (input.destinationCampaignId) {
+    const campaign = await tx.eventCampaign.findUnique({ where: { id: input.destinationCampaignId }, select: {
+      id: true, eventCodeId: true, campaignName: true, activeFlag: true, startDate: true, endDate: true,
+      eventCode: { select: { eventType: true, activeFlag: true } }
+    } });
+    if (!campaign || campaign.eventCode.eventType !== "CAMPAIGN") throw new HttpError(404, "Campaign destination was not found.");
+    if (!campaign.activeFlag || !campaign.eventCode.activeFlag) throw new HttpError(409, "The Campaign destination is not active.");
+    const today = businessDayDateValue();
+    if ((campaign.startDate && today < campaign.startDate) || (campaign.endDate && today > campaign.endDate))
+      throw new HttpError(409, "The Campaign destination is outside its valid period.");
+    const effectiveDate = businessDayDateValue();
+    let created;
+    try {
+      created = await tx.memberEventCarryTransfer.create({ data: {
+        memberId: input.memberId, sourceSubscriptionId: source.id, destinationCampaignId: campaign.id,
+        amount: centsToDecimal(amountCents), effectiveDate, reason, status: "ACTIVE", idempotencyKey, requestHash,
+        destinationUnitAmountSnapshot: "0.00", destinationDurationMonthsSnapshot: 0, createdById: input.userId
+      }, select: transferHeaderSelect });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        const raced = await tx.memberEventCarryTransfer.findUnique({ where: { idempotencyKey }, select: transferHeaderSelect });
+        if (raced) return replayForwardTransfer(tx, raced, { memberId: input.memberId, requestHash });
+      }
+      throw error;
+    }
+    const [sourceSequence] = await allocatePostingSequences(tx, source.id, 1);
+    await tx.memberEventBalanceLedger.create({ data: { subscriptionId: source.id, carryTransferId: created.id, entryType: "TRANSFER_OUT", entryStatus: "ACTIVE", amountDelta: centsToDecimal(-amountCents), effectiveDate, postingSequence: sourceSequence, createdById: input.userId } });
+    await tx.memberEventCampaignAllocation.create({ data: {
+      memberId: input.memberId, eventCampaignId: campaign.id, carryTransferId: created.id,
+      amountDelta: centsToDecimal(amountCents), allocationType: "CARRY_TRANSFER", allocationStatus: "ACTIVE",
+      effectiveDate, reason, createdById: input.userId
+    } });
+    return { replayed: false, transfer: toTransferView(created), source: { subscriptionId: source.id, carryBefore: centsToDecimal(sourceCarryBefore), carryAfter: centsToDecimal(sourceCarryBefore - amountCents) }, destination: { subscriptionId: null, campaignId: campaign.id, carryBefore: null, carryAfter: centsToDecimal(amountCents), allocation: null } };
+  }
+
+  const destination = await tx.memberEventSubscription.findUnique({ where: { id: input.destinationSubscriptionId! }, select: subscriptionSelect });
+  if (!destination || destination.memberId !== input.memberId) throw new HttpError(404, "Destination subscription was not found for this Member.");
+  if (source.id === destination.id) throw new HttpError(400, "Source and destination subscriptions must differ.");
+  if (!destination.activeFlag) throw new HttpError(409, "The destination subscription is not active.");
   const destinationEvent = await tx.eventCode.findUnique({ where: { id: destination.eventCodeId }, select: destinationEventSelect });
   if (!destinationEvent || destinationEvent.eventType !== "TIME_BASED")
     throw new HttpError(409, "The destination must be a TIME_BASED Event Code.");
@@ -226,9 +280,6 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
   const unitCents = decimalStringToCents(rule.unitAmount.toString());
   if (unitCents <= 0n || rule.durationMonths <= 0) throw new HttpError(409, "The destination Time Rule is invalid.");
 
-  const sourceCarryBefore = await activeCarryCents(tx, source.id);
-  if (amountCents > sourceCarryBefore)
-    throw new HttpError(409, "The source subscription does not have enough unused carry for this transfer.");
   const destinationCarryBefore = await activeCarryCents(tx, destination.id);
   const availableCents = destinationCarryBefore + amountCents;
   const unitsBig = availableCents / unitCents;
@@ -333,14 +384,14 @@ async function replayReversal(tx: Tx, existing: TransferHeader,
   const original = await tx.memberEventCarryTransfer.findUnique({ where: { id: command.transferId }, select: transferHeaderSelect });
   if (!original) throw new HttpError(404, "Carry Transfer was not found for this Member.");
   const [restoringCarry, reversingCarry] = await Promise.all([
-    activeCarryCents(tx, original.sourceSubscriptionId), activeCarryCents(tx, original.destinationSubscriptionId)
+    activeCarryCents(tx, original.sourceSubscriptionId), original.destinationSubscriptionId ? activeCarryCents(tx, original.destinationSubscriptionId) : Promise.resolve(0n)
   ]);
   return {
     replayed: true,
     original: toTransferView(original),
     reversal: toTransferView(existing),
     restoringDestination: { subscriptionId: original.sourceSubscriptionId, carryBefore: null, carryAfter: centsToDecimal(restoringCarry) },
-    reversingSource: { subscriptionId: original.destinationSubscriptionId, carryBefore: null, carryAfter: centsToDecimal(reversingCarry) }
+    reversingSource: { subscriptionId: original.destinationSubscriptionId, campaignId: original.destinationCampaignId, carryBefore: null, carryAfter: centsToDecimal(reversingCarry) }
   };
 }
 
@@ -360,7 +411,7 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
 
   const found = await tx.memberEventCarryTransfer.findUnique({ where: { id: input.transferId }, select: transferHeaderSelect });
   if (!found || found.memberId !== input.memberId) throw new HttpError(404, "Carry Transfer was not found for this Member.");
-  await lockSubscriptionsForPosting(tx, [found.sourceSubscriptionId, found.destinationSubscriptionId]);
+  await lockSubscriptionsForPosting(tx, [found.sourceSubscriptionId, ...(found.destinationSubscriptionId ? [found.destinationSubscriptionId] : [])]);
 
   const original = await tx.memberEventCarryTransfer.findUnique({ where: { id: found.id }, select: transferHeaderSelect });
   if (!original || original.memberId !== input.memberId) throw new HttpError(404, "Carry Transfer was not found for this Member.");
@@ -368,8 +419,39 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
   if (alreadyReversed) throw new HttpError(409, "This Carry Transfer already has a reversal.");
   if (original.status !== "ACTIVE") throw new HttpError(409, "Only an active Carry Transfer can be reversed.");
 
+  if (original.destinationCampaignId) {
+    const allocation = await tx.memberEventCampaignAllocation.findUnique({ where: { carryTransferId: original.id }, select: { id: true, eventCampaignId: true, amountDelta: true, allocationStatus: true } });
+    if (!allocation || allocation.allocationStatus !== "ACTIVE") throw new HttpError(409, "Campaign allocation evidence is incomplete.");
+    const amountCents = decimalStringToCents(original.amount.toString());
+    const restoringCarryBefore = await activeCarryCents(tx, original.sourceSubscriptionId);
+    const effectiveDate = businessDayDateValue();
+    let reversal;
+    try {
+      reversal = await tx.memberEventCarryTransfer.create({ data: {
+        memberId: input.memberId, sourceSubscriptionId: original.sourceSubscriptionId, destinationCampaignId: original.destinationCampaignId,
+        amount: centsToDecimal(amountCents), effectiveDate, reason, status: "ACTIVE", idempotencyKey, requestHash,
+        reversalOfTransferId: original.id, destinationUnitAmountSnapshot: "0.00", destinationDurationMonthsSnapshot: 0, createdById: input.userId
+      }, select: transferHeaderSelect });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        const raced = await tx.memberEventCarryTransfer.findUnique({ where: { idempotencyKey }, select: transferHeaderSelect });
+        if (raced) return replayReversal(tx, raced, { memberId: input.memberId, transferId: input.transferId, requestHash });
+      }
+      throw error;
+    }
+    const [sequence] = await allocatePostingSequences(tx, original.sourceSubscriptionId, 1);
+    await tx.memberEventBalanceLedger.create({ data: { subscriptionId: original.sourceSubscriptionId, carryTransferId: reversal.id, entryType: "TRANSFER_IN", entryStatus: "ACTIVE", amountDelta: centsToDecimal(amountCents), effectiveDate, postingSequence: sequence, createdById: input.userId } });
+    await tx.memberEventCampaignAllocation.create({ data: {
+      memberId: input.memberId, eventCampaignId: allocation.eventCampaignId, carryTransferId: reversal.id,
+      amountDelta: centsToDecimal(-amountCents), allocationType: "CARRY_REVERSAL", allocationStatus: "ACTIVE",
+      effectiveDate, reason, createdById: input.userId, reversalOfAllocationId: allocation.id
+    } });
+    const reversedOriginal = await tx.memberEventCarryTransfer.update({ where: { id: original.id }, data: { status: "REVERSED", reversedAt: new Date(), reversedById: input.userId }, select: transferHeaderSelect });
+    return { replayed: false, original: toTransferView(reversedOriginal), reversal: toTransferView(reversal), restoringDestination: { subscriptionId: original.sourceSubscriptionId, carryBefore: centsToDecimal(restoringCarryBefore), carryAfter: centsToDecimal(restoringCarryBefore + amountCents) }, reversingSource: { subscriptionId: original.sourceSubscriptionId, carryBefore: centsToDecimal(restoringCarryBefore), carryAfter: centsToDecimal(restoringCarryBefore + amountCents) } };
+  }
+
   const { source: reversingSource, destination: restoringDestination } = await loadOwnedSubscriptions(
-    tx, input.memberId, original.destinationSubscriptionId, original.sourceSubscriptionId);
+    tx, input.memberId, original.destinationSubscriptionId!, original.sourceSubscriptionId);
   await requireTimeBasedEvent(tx, reversingSource.eventCodeId, "The reversing source");
   await requireTimeBasedEvent(tx, restoringDestination.eventCodeId, "The restoring destination");
   const restoringEvent = await tx.eventCode.findUnique({ where: { id: restoringDestination.eventCodeId }, select: destinationEventSelect });
@@ -481,7 +563,7 @@ export async function getCarryTransfers(memberId: string, query: { page: number;
 type CarryTransferReadRow = Awaited<ReturnType<typeof loadMemberCarryTransfers>>["rows"][number];
 type CarryTransferSubscriptionView = { subscriptionId: string; referenceNo: string | null; displayName: string | null; eventCodeId: string; eventCode: string; eventName: string };
 
-function subscriptionView(row: CarryTransferReadRow["sourceSubscription"]): CarryTransferSubscriptionView | null {
+function subscriptionView(row: CarryTransferReadRow["sourceSubscription"] | CarryTransferReadRow["destinationSubscription"]): CarryTransferSubscriptionView | null {
   if (!row) return null;
   return { subscriptionId: row.id, referenceNo: row.referenceNo, displayName: row.displayName,
     eventCodeId: row.eventCode.id, eventCode: row.eventCode.code, eventName: row.eventCode.eventName };
@@ -501,6 +583,8 @@ export function mapCarryTransferRow(row: CarryTransferReadRow) {
     reversedBy: row.reversedBy ? { userId: row.reversedBy.id, fullName: row.reversedBy.fullName } : null,
     source: subscriptionView(row.sourceSubscription),
     destination: subscriptionView(row.destinationSubscription),
+    destinationCampaign: row.destinationCampaign ? { campaignId: row.destinationCampaign.id, campaignName: row.destinationCampaign.campaignName,
+      eventCodeId: row.destinationCampaign.eventCode.id, eventCode: row.destinationCampaign.eventCode.code, eventName: row.destinationCampaign.eventCode.eventName } : null,
     reversalOf: row.reversalOf ? { transferId: row.reversalOf.id, status: row.reversalOf.status, effectiveDate: dateOnly(row.reversalOf.effectiveDate) } : null,
     reversal: row.reversal ? { transferId: row.reversal.id, status: row.reversal.status, effectiveDate: dateOnly(row.reversal.effectiveDate) } : null
   };

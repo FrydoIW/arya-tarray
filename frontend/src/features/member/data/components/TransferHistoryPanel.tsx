@@ -33,7 +33,8 @@ export function TransferHistoryPanel({ history, loading, error, canMutate, busy,
     { key: "source", header: "Program Sumber", minWidth: "210px", render: row => row.source
       ? <div className={styles.name}><strong>{row.source.eventCode} · {row.source.eventName}</strong><small>{subscriptionLabel(row.source)}</small></div> : "—" },
     { key: "destination", header: "Program Tujuan", minWidth: "210px", render: row => row.destination
-      ? <div className={styles.name}><strong>{row.destination.eventCode} · {row.destination.eventName}</strong><small>{subscriptionLabel(row.destination)}</small></div> : "—" },
+      ? <div className={styles.name}><strong>{row.destination.eventCode} · {row.destination.eventName}</strong><small>{subscriptionLabel(row.destination)}</small></div>
+      : row.destinationCampaign ? <div className={styles.name}><strong>{row.destinationCampaign.eventCode} · {row.destinationCampaign.eventName}</strong><small>{row.destinationCampaign.campaignName} · Campaign</small></div> : "—" },
     { key: "amount", header: "Jumlah", align: "right", minWidth: "130px", render: row => <strong className={styles.money}>{formatMoney(row.amount)}</strong> },
     { key: "status", header: "Status", minWidth: "100px", render: row => <span className={styles.statusPill} data-status={row.status}>{row.status}</span> },
     { key: "reason", header: "Reason", minWidth: "210px", render: row => <span className={styles.wrapText}>{row.reason}</span> },
@@ -56,7 +57,7 @@ export function TransferHistoryPanel({ history, loading, error, canMutate, busy,
     {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
     <DataTable rows={history?.rows ?? []} columns={columns} rowKey={row => row.transferId} loading={loading}
       minWidth="1420px" loadingText="Memuat riwayat transfer…"
-      emptyState={{ title: "Belum ada transfer carry", description: "Transfer carry antar program TIME BASED akan muncul di sini." }}
+      emptyState={{ title: "Belum ada alokasi carry", description: "Alokasi carry antar TIME BASED atau ke Campaign akan muncul di sini." }}
       pagination={{ mode: "server", page: history?.pagination.page ?? 1, pageSize: history?.pagination.pageSize ?? 10,
         total: history?.pagination.total ?? 0, pageSizeOptions: [10, 25, 50],
         onPageChange, onPageSizeChange }} />

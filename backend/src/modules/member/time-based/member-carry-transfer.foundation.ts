@@ -10,7 +10,8 @@ export type CarryTransferRecord = {
   id: string;
   memberId: string;
   sourceSubscriptionId: string;
-  destinationSubscriptionId: string;
+  destinationSubscriptionId: string | null;
+  destinationCampaignId?: string | null;
   amount: { toString(): string };
   status: string;
   idempotencyKey: string;
@@ -65,13 +66,13 @@ export function validateCarryTransferIntegrity(input: {
   }
   const idempotency = new Map<string, CarryTransferRecord>();
   for (const transfer of input.transfers) {
-    if (transfer.sourceSubscriptionId === transfer.destinationSubscriptionId)
+    if (transfer.destinationSubscriptionId !== null && transfer.sourceSubscriptionId === transfer.destinationSubscriptionId)
       violations.push({ code: "same_subscription_transfer", transferId: transfer.id, detail: "Source and destination subscriptions must differ." });
     if (cents(transfer.amount) <= 0n)
       violations.push({ code: "non_positive_transfer_amount", transferId: transfer.id, detail: "Transfer amount must be positive." });
     const source = subscriptionById.get(transfer.sourceSubscriptionId);
-    const destination = subscriptionById.get(transfer.destinationSubscriptionId);
-    if (!source || !destination || source.memberId !== transfer.memberId || destination.memberId !== transfer.memberId)
+    const destination = transfer.destinationSubscriptionId ? subscriptionById.get(transfer.destinationSubscriptionId) : null;
+    if (!source || (transfer.destinationCampaignId ? false : !destination) || source.memberId !== transfer.memberId || (destination && destination.memberId !== transfer.memberId))
       violations.push({ code: "transfer_member_subscription_mismatch", transferId: transfer.id, detail: "Transfer subscriptions must belong to the transfer Member." });
     const prior = idempotency.get(transfer.idempotencyKey);
     if (prior) {
@@ -82,20 +83,28 @@ export function validateCarryTransferIntegrity(input: {
     const legs = (entriesByTransfer.get(transfer.id) ?? []).filter(entry => entry.entryStatus === "ACTIVE");
     const out = legs.filter(entry => entry.entryType === "TRANSFER_OUT");
     const incoming = legs.filter(entry => entry.entryType === "TRANSFER_IN");
-    if (out.length !== 1 || incoming.length !== 1) {
+    const campaignDestination = Boolean(transfer.destinationCampaignId);
+    const campaignReversal = campaignDestination && Boolean(transfer.reversalOfTransferId);
+    if (campaignDestination ? (campaignReversal ? (out.length !== 0 || incoming.length !== 1) : (out.length !== 1 || incoming.length !== 0)) : (out.length !== 1 || incoming.length !== 1)) {
       violations.push({ code: "transfer_leg_pair_invalid", transferId: transfer.id, detail: "An active transfer requires exactly one TRANSFER_OUT and one TRANSFER_IN leg." });
     } else {
-      if (out[0].subscriptionId !== transfer.sourceSubscriptionId || incoming[0].subscriptionId !== transfer.destinationSubscriptionId)
+      if ((!campaignReversal && out[0] && out[0].subscriptionId !== transfer.sourceSubscriptionId)
+        || (campaignReversal && incoming[0] && incoming[0].subscriptionId !== transfer.sourceSubscriptionId)
+        || (!campaignDestination && incoming[0].subscriptionId !== transfer.destinationSubscriptionId))
         violations.push({ code: "transfer_leg_subscription_mismatch", transferId: transfer.id, detail: "Transfer legs do not match header subscriptions." });
       const expected = cents(transfer.amount);
-      if (cents(out[0].amountDelta) !== -expected || cents(incoming[0].amountDelta) !== expected || cents(out[0].amountDelta) + cents(incoming[0].amountDelta) !== 0n)
+      if ((!campaignReversal && out[0] && cents(out[0].amountDelta) !== -expected)
+        || (campaignReversal && incoming[0] && cents(incoming[0].amountDelta) !== expected)
+        || (!campaignDestination && (cents(incoming[0].amountDelta) !== expected || cents(out[0].amountDelta) + cents(incoming[0].amountDelta) !== 0n)))
         violations.push({ code: "transfer_leg_amount_mismatch", transferId: transfer.id, detail: "Transfer legs must be equal, opposite, and match the header amount." });
     }
     if (transfer.reversalOfTransferId) {
       const original = transferById.get(transfer.reversalOfTransferId);
-      if (!original || cents(original.amount) !== cents(transfer.amount)
-        || original.sourceSubscriptionId !== transfer.destinationSubscriptionId
-        || original.destinationSubscriptionId !== transfer.sourceSubscriptionId)
+      const campaignReversalValid = Boolean(original?.destinationCampaignId) && original?.sourceSubscriptionId === transfer.sourceSubscriptionId
+        && original?.destinationSubscriptionId === transfer.destinationSubscriptionId && original?.destinationCampaignId === transfer.destinationCampaignId;
+      const subscriptionReversalValid = !original?.destinationCampaignId && original?.sourceSubscriptionId === transfer.destinationSubscriptionId
+        && original?.destinationSubscriptionId === transfer.sourceSubscriptionId;
+      if (!original || cents(original.amount) !== cents(transfer.amount) || (!campaignReversalValid && !subscriptionReversalValid))
         violations.push({ code: "transfer_reversal_mismatch", transferId: transfer.id, detail: "Reversal must swap subscriptions and preserve amount." });
     }
   }
@@ -108,6 +117,7 @@ export function carryTransferDependencies(input: {
   transfers: CarryTransferRecord[];
 }) {
   const transferById = new Map(input.transfers.map(row => [row.id, row]));
+  if (input.transfer.destinationSubscriptionId === null) return [];
   const inbound = input.entries.find(entry => entry.carryTransferId === input.transfer.id && entry.entryStatus === "ACTIVE"
     && entry.entryType === "TRANSFER_IN" && entry.subscriptionId === input.transfer.destinationSubscriptionId);
   if (!inbound) return [{ kind: "NEGATIVE_LEDGER", ledgerId: "", transferId: null, postingSequence: 0n, resolved: false, missingInbound: true } as TransferDependency & { missingInbound: true }];

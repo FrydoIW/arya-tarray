@@ -7,6 +7,7 @@ import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInpu
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
 import { canonicalMemberDonationWhere, officialDonationTransactionWhere } from "../member-donation.rules.js";
 import { reconcileTimeBasedCoverageForIdentity, synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
+import { currentBusinessDayValue } from "../../../lib/business-time.js";
 
 export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string; search?: string };
 
@@ -147,7 +148,7 @@ export function pendingTimeBasedPaymentsWhere(memberId: string): Prisma.BankTran
 
 export function loadMemberSponsorship(memberId: string) {
   return prisma.$transaction(async tx => {
-    const [member, subscriptions, pending, eventOptions, contributionGroups] = await Promise.all([
+    const [member, subscriptions, pending, eventOptions, contributionGroups, campaignAllocations, campaignOptions] = await Promise.all([
       tx.member.findUnique({ where: { id: memberId }, select: { id: true } }),
       tx.memberEventSubscription.findMany({ where: { memberId }, include: {
         eventCode: { select: { id: true, code: true, eventName: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
@@ -164,6 +165,18 @@ export function loadMemberSponsorship(memberId: string) {
       tx.bankTransaction.groupBy({
         by: ["eventCodeId", "eventCampaignId"], where: canonicalMemberDonationWhere(memberId),
         _sum: { originalAmount: true }, _count: { _all: true }
+      }),
+      tx.memberEventCampaignAllocation.findMany({
+        where: { memberId, allocationStatus: "ACTIVE" }, orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        select: { id: true, eventCampaignId: true, amountDelta: true, allocationType: true, allocationStatus: true, effectiveDate: true, reason: true,
+          eventCampaign: { select: { id: true, campaignName: true, eventCodeId: true, eventCode: { select: { code: true, eventName: true, eventType: true } } } } }
+      }),
+      tx.eventCampaign.findMany({
+        where: { activeFlag: true, eventCode: { eventType: "CAMPAIGN", activeFlag: true }, OR: [
+          { startDate: null }, { startDate: { lte: new Date(`${currentBusinessDayValue()}T00:00:00.000Z`) } }
+        ], AND: [{ OR: [{ endDate: null }, { endDate: { gte: new Date(`${currentBusinessDayValue()}T00:00:00.000Z`) } }] }] },
+        select: { id: true, campaignName: true, eventCodeId: true, startDate: true, endDate: true, eventCode: { select: { code: true, eventName: true } } },
+        orderBy: [{ campaignName: "asc" }, { id: "asc" }]
       })
     ]);
     const balances = subscriptions.length ? await tx.memberEventBalanceLedger.groupBy({
@@ -182,7 +195,7 @@ export function loadMemberSponsorship(memberId: string) {
       contributionCampaignIds.length ? tx.eventCampaign.findMany({ where: { id: { in: contributionCampaignIds } },
         select: { id: true, eventCodeId: true, campaignName: true, activeFlag: true, startDate: true, endDate: true } }) : []
     ]);
-    return { member, subscriptions, paymentDates, pending, eventOptions, balances, contributionGroups, contributionEvents, contributionCampaigns };
+    return { member, subscriptions, paymentDates, pending, eventOptions, balances, contributionGroups, contributionEvents, contributionCampaigns, campaignAllocations, campaignOptions };
   });
 }
 

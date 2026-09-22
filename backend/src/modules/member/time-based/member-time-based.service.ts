@@ -58,13 +58,14 @@ export function selectHistoricalCoverageEntitlement(input: {
     amountApplied: historical.amountApplied }) : null;
 }
 export function selectHistoricalPaymentSnapshot(input: {
-  eventCodeId: string | null; principalAmount: { toString(): string }; recalculate: boolean;
+  eventCodeId: string | null; principalAmount: { toString(): string }; alternativePrincipalAmount?: { toString(): string } | null; recalculate: boolean;
   entries: Array<{ entryType: string; amountDelta: { toString(): string }; unitAmountSnapshot: { toString(): string } | null;
     durationMonthsSnapshot: number | null; subscription: { eventCodeId: string } }>;
 }) {
   if (!input.eventCodeId || input.recalculate) return null;
+  const acceptedAmounts = new Set([cents(input.principalAmount), ...(input.alternativePrincipalAmount ? [cents(input.alternativePrincipalAmount)] : [])]);
   const row = input.entries.find(item => item.entryType === "PAYMENT" && item.subscription.eventCodeId === input.eventCodeId
-    && cents(item.amountDelta) === cents(input.principalAmount) && item.unitAmountSnapshot && item.durationMonthsSnapshot);
+    && acceptedAmounts.has(cents(item.amountDelta)) && item.unitAmountSnapshot && item.durationMonthsSnapshot);
   return row ? { unitAmount: row.unitAmountSnapshot!.toString(), durationMonths: row.durationMonthsSnapshot! } : null;
 }
 export function resolveCoverageStart(input: { latestCoverageTo: Date | null; startDate: Date | null; transactionDate: Date }) {
@@ -138,7 +139,7 @@ async function snapshot(tx: Tx, payment: Payment, recalculate: boolean) {
           grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true } } } })
     ]);
     const old = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId,
-      principalAmount: payment.baseAmount, recalculate: false, entries })
+      principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false, entries })
       ?? selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCodeId,
         principalAmount: payment.baseAmount, recalculate: false,
         coverages: coverages.map(row => ({ coverageStatus: row.coverageStatus,
@@ -209,7 +210,10 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
   let lastCoverageTo = openings[0]?.coverageTo ?? null;
   const plan = surviving.map((payment, index) => {
     const rate = snapshots[index];
-    const amount = cents(payment.baseAmount!);
+    // The derived base amount is a classification aid only. The complete
+    // finalized bank amount (including the three-digit suffix) remains donor
+    // money in the wallet and therefore drives PAYMENT/carry arithmetic.
+    const amount = cents(payment.originalAmount);
     const grant = calculateCarryGrant(balance, amount, decimalStringToCents(rate.unitAmount));
     const months = grant.grantedUnits * rate.durationMonths;
     if (!Number.isSafeInteger(months)) throw new HttpError(400, "TIME_BASED coverage duration is too large");
@@ -331,7 +335,7 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
   const active = activePayments.length === 1 ? activePayments[0] : null;
   if (destination && active && active.subscriptionId === destination && oldIds.length === 1
     && !options?.recalculate && active.unitAmountSnapshot && active.durationMonthsSnapshot
-    && cents(active.amountDelta) === cents(payment.baseAmount!)
+    && cents(active.amountDelta) === cents(payment.originalAmount)
     && isCurrentTimeBasedAllocation({ subscriptionMemberId: active.subscription.memberId,
       subscriptionEventCodeId: active.subscription.eventCodeId, paymentMemberId: memberId,
       paymentEventCodeId: payment.eventCodeId, verificationStatus: payment.memberIdentity?.verificationStatus }))

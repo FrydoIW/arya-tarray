@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { addOpeningCoverageRecord, pendingTimeBasedPaymentPreview, updateSubscriptionRecord, voidOpeningCoverageRecord, retryAllocationRecord } from "../src/modules/member/data/member-data.service.js";
-import { manuallyAllocateTimeBasedPayment, reconcileTimeBasedCoverageForIdentity, rebuildTimeBasedSubscription, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../src/modules/member/time-based/member-time-based.service.js";
+import { calculateCarryGrant, manuallyAllocateTimeBasedPayment, reconcileTimeBasedCoverageForIdentity, rebuildTimeBasedSubscription, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../src/modules/member/time-based/member-time-based.service.js";
 import { assertNoOutstandingTimeBasedCarry } from "../src/modules/configuration/event-code/event-time-rule.service.js";
 import { loadDashboardTimeBasedCarry, loadDashboardTimeBasedSummary, summarizeTimeBasedCarry } from "../src/modules/monitoring/dashboard/dashboard.repository.js";
 import { pendingTimeBasedPaymentsWhere } from "../src/modules/member/data/member-data.repository.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
 const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
+test("TIME_BASED wallet keeps classification suffix money in carry", () => {
+  assert.deepEqual(calculateCarryGrant(0n, 250004n, 150000n), { grantedUnits: 1, amountConsumed: 150000n, carryBalance: 100004n });
+  assert.deepEqual(calculateCarryGrant(0n, 1150003n, 100000n), { grantedUnits: 11, amountConsumed: 1100000n, carryBalance: 50003n });
+  assert.deepEqual(calculateCarryGrant(0n, 500001n, 50000n), { grantedUnits: 10, amountConsumed: 500000n, carryBalance: 1n });
+});
 type Payment = ReturnType<typeof payment>;
 function payment(id: string, amount: string, date = "2026-01-31", memberId: string | null = "member-a") {
   return { id, transactionDate: day(date), referenceNo: id, originalAmount: d(amount), baseAmount: d(amount),
@@ -177,9 +182,9 @@ test("first finalized payment automatically creates one program and allocates it
   assert.equal(f.subs.length, 1);
   assert.equal(f.subs[0].memberId, "member-a");
   assert.equal(f.subs[0].eventCodeId, "rupang");
-  assert.equal(f.active().filter(row => row.entryType === "PAYMENT")[0].amountDelta.toFixed(2), "250000.00");
+  assert.equal(f.active().filter(row => row.entryType === "PAYMENT")[0].amountDelta.toFixed(2), "250004.00");
   assert.equal(f.active().filter(row => row.entryType === "COVERAGE_USE")[0].amountDelta.toFixed(2), "-150000.00");
-  assert.equal(f.balance(f.subs[0].id), "100000.00");
+  assert.equal(f.balance(f.subs[0].id), "100004.00");
   assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-09-01");
   assert.equal(f.activeCoverage(f.subs[0].id)[0].grantedUnits, 1);
   assert.equal(f.activeCoverage(f.subs[0].id)[0].coverageFrom.toISOString().slice(0, 10), "2026-09-01");
@@ -430,6 +435,7 @@ test("historical PAYMENT snapshot requires same Event Code and unchanged princip
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("25000"), recalculate: false, entries: [row] })?.unitAmount, "50000");
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "other", principalAmount: d("25000"), recalculate: false, entries: [row] }), null);
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("75000"), recalculate: false, entries: [row] }), null);
+  assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("25004"), alternativePrincipalAmount: d("25000"), recalculate: false, entries: [row] })?.unitAmount, "50000");
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("25000"), recalculate: true, entries: [row] }), null);
 });
 

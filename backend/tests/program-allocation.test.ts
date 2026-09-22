@@ -147,9 +147,8 @@ test("STANDARD and CAMPAIGN contributions render without TIME_BASED entitlement 
   assert.match(overview, /TYPE_ORDER/);
   assert.match(overview, /Time-based/);
   assert.match(screen, /<CampaignSection/);
-  assert.match(screen, /row\.eventType === "CAMPAIGN"/);
-  assert.match(screen, /row\.campaign\?\.campaignName/);
-  assert.match(screen, /row\.campaign\.displayStatus/);
+  assert.match(screen, /Campaign aktif dapat menerima alokasi carry/);
+  assert.match(screen, /allocatedFromCarry/);
   assert.doesNotMatch(overview, /Transfer Carry/);
   assert.doesNotMatch(overview, /carryBalance/);
   assert.doesNotMatch(overview, /coverage/);
@@ -160,13 +159,13 @@ test("TIME_BASED cards separate principal, consumed, carry, current rule, and hi
   const card = read("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx");
   assert.match(card, /Current rule/);
   assert.match(card, /Historical rate follows the ledger below/);
-  assert.match(card, /Principal/);
+  assert.match(card, /Dana masuk/);
   assert.match(card, /Consumed/);
   assert.match(card, /Carry tersedia/);
   assert.match(card, /canOfferTransfer\(/);
   assert.match(card, /ledgerEntryLabel\(entry\.type\)/);
   assert.match(card, /Balance history · Latest 24 entries/);
-  assert.match(card, /Transfer Carry/);
+  assert.match(card, /Alokasikan Carry/);
 });
 
 test("TIME BASED program metadata keeps status and start date system-managed", () => {

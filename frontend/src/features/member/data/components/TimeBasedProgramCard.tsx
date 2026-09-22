@@ -13,6 +13,7 @@ type CardProps = {
   canMutate: boolean;
   memberActive: boolean;
   destinations: SponsorshipSubscription[];
+  hasCampaignDestinations?: boolean;
   busy: boolean;
   onTransfer: (subscription: SponsorshipSubscription) => void;
   onEdit: (subscription: SponsorshipSubscription) => void;
@@ -27,11 +28,11 @@ function signedMoney(value: string) {
 }
 
 export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActive, destinations, busy,
-  onTransfer, onEdit, onOpeningCoverage, onVoidOpening }: CardProps) {
+  hasCampaignDestinations = false, onTransfer, onEdit, onOpeningCoverage, onVoidOpening }: CardProps) {
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const allocations = sub.balanceHistory.filter(entry => entry.type === "PAYMENT");
   const canTransfer = canOfferTransfer({ canMutate, memberActive, activeFlag: sub.activeFlag,
-    carry: sub.carryBalance, destinationCount: destinations.length });
+    carry: sub.carryBalance, destinationCount: destinations.length + (hasCampaignDestinations ? 1 : 0) });
 
   return <article className={styles.programCard}>
     <header className={styles.programHead}>
@@ -44,7 +45,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
     </header>
 
     {canMutate ? <div className={styles.cardActions}>
-      {canTransfer ? <Button size="sm" icon={<ArrowLeftRight size={14} />} disabled={busy} onClick={() => onTransfer(sub)}>Transfer Carry</Button> : null}
+      {canTransfer ? <Button size="sm" icon={<ArrowLeftRight size={14} />} disabled={busy} onClick={() => onTransfer(sub)}>Alokasikan Carry</Button> : null}
       <Button size="sm" variant="ghost" icon={<BookOpenText size={14} />} disabled={busy}
         onClick={() => setLedgerOpen(open => !open)}>{ledgerOpen ? "Hide Ledger" : "View Ledger"}</Button>
       <Button size="sm" variant="ghost" icon={<Pencil size={14} />} disabled={busy} onClick={() => onEdit(sub)}>Edit</Button>
@@ -64,7 +65,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
       <section className={styles.financialPanel} aria-label="Ringkasan alokasi">
         <span className={styles.subsectionTitle}>Ringkasan alokasi</span>
         <div className={styles.allocationRows}>
-          <div><span>Principal</span><strong className={styles.money}>{formatMoney(sub.principal)}</strong></div>
+          <div><span>Dana masuk</span><strong className={styles.money}>{formatMoney(sub.principal)}</strong></div>
           <div><span>Consumed</span><strong className={styles.money}>{formatMoney(sub.consumed)}</strong></div>
         </div>
         <div className={styles.carryHighlight}><span aria-hidden="true"><WalletCards size={18} /></span><div><small>Carry tersedia</small><strong className={styles.money}>{formatMoney(sub.carryBalance)}</strong></div></div>

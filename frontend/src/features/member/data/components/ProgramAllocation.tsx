@@ -7,8 +7,8 @@ import { Modal } from "@/components/ui/Modal";
 import { formatDate, formatMoney } from "@/lib/format";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import * as api from "../api/member-data.api";
-import { transferDestinationCandidates } from "../program-allocation.utils";
-import type { CarryTransferHistory, CarryTransferInput, CarryTransferRecord, CarryTransferReverseInput, ContributionRow, OpeningCoverageInput, SponsorshipSubscription, SponsorshipWorkspace, SubscriptionInput } from "../types";
+import { moneyToCents, transferDestinationCandidates } from "../program-allocation.utils";
+import type { CarryTransferHistory, CarryTransferInput, CarryTransferRecord, CarryTransferReverseInput, OpeningCoverageInput, SponsorshipSubscription, SponsorshipWorkspace, SubscriptionInput } from "../types";
 import { ContributionOverview } from "./ContributionOverview";
 import { ReverseTransferModal } from "./ReverseTransferModal";
 import { TimeBasedProgramCard } from "./TimeBasedProgramCard";
@@ -19,24 +19,23 @@ import styles from "../styles/program-allocation.module.css";
 type FormMode = "create" | "edit" | "opening" | "void-opening" | null;
 const emptySubscription: SubscriptionInput = { eventCodeId: "", referenceNo: null, displayName: null, startDate: null, activeFlag: true, remark: null };
 
-function CampaignSection({ contributions }: { contributions: ContributionRow[] }) {
-  if (!contributions.length) return null;
+function CampaignSection({ campaigns, canMutate, hasCarry, canAllocate, onAllocate }: { campaigns: SponsorshipWorkspace["campaigns"]; canMutate: boolean; hasCarry: boolean; canAllocate: boolean; onAllocate: () => void }) {
   return <section className={styles.section} aria-labelledby="pa-campaign-title">
     <div className={styles.sectionHead}>
-      <div><h2 id="pa-campaign-title">Campaign</h2><p>Alokasi donasi campaign yang tercatat pada riwayat donasi.</p></div>
+      <div><h2 id="pa-campaign-title">CAMPAIGN</h2><p>Partisipasi Campaign dan alokasi carry donatur.</p></div>
+      {canMutate && canAllocate && hasCarry ? <Button size="sm" icon={<Gift size={14} />} onClick={onAllocate}>Alokasikan Carry</Button> : null}
     </div>
-    <div className={styles.campaignGrid}>
-      {contributions.map(row => <article key={`${row.eventCodeId}:${row.campaign?.campaignId ?? "none"}`} className={styles.campaignCard}>
+    {campaigns.length ? <div className={styles.campaignGrid}>
+      {campaigns.map(row => <article key={row.campaignId} className={styles.campaignCard}>
         <span className={styles.campaignIcon} aria-hidden="true"><Gift size={17} /></span>
         <div>
-          <header><div><strong>{row.eventCode} · {row.eventName}</strong><small>{row.category}</small></div>
-            {row.campaign ? <em data-status={row.campaign.displayStatus}>{row.campaign.displayStatus}</em> : null}
+          <header><div><strong>{row.eventCode} · {row.eventName}</strong><small>{row.campaignName}</small></div>
+            <em data-status={row.status}>{row.status}</em>
           </header>
-          <p>{row.campaign?.campaignName ?? "Campaign tidak ditemukan"}</p>
-          <footer><span>{row.transactionCount} transaksi</span><strong className={styles.money}>{formatMoney(row.totalAmount)}</strong></footer>
+          <footer><span>Langsung {formatMoney(row.directContribution)} · Carry {formatMoney(row.allocatedFromCarry)}</span><strong className={styles.money}>{formatMoney(row.totalAllocation)}</strong></footer>
         </div>
       </article>)}
-    </div>
+    </div> : <div className={styles.compactEmpty}><span aria-hidden="true"><Gift size={18} /></span><div><strong>Belum ada alokasi Campaign</strong><p>Campaign aktif dapat menerima alokasi carry tanpa membuat transaksi bank baru.</p></div>{canMutate && canAllocate && hasCarry ? <Button size="sm" onClick={onAllocate}>Tambah Campaign</Button> : null}</div>}
   </section>;
 }
 
@@ -136,6 +135,11 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
     setForm({ ...emptySubscription, eventCodeId: eligibleEvent });
     setFormError(""); setMode("create");
   }
+  function openCampaignAllocation() {
+    const source = data?.subscriptions.find(item => item.activeFlag && moneyToCents(item.carryBalance)! > BigInt(0)) ?? null;
+    if (!source) return;
+    setTransferError(""); setTransferSource(source);
+  }
 
   if (loading && !data) return <section className={styles.section}><p className={styles.empty}>Memuat Program &amp; Allocation…</p></section>;
 
@@ -155,7 +159,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
           : canMutate && !loading && data.eventOptions.length === 0 ? <p className={styles.notice}>Siapkan Event Code TIME BASED aktif beserta Time Rule terlebih dahulu.</p> : null}
         {data.subscriptions.length ? <div className={styles.programGrid}>
           {data.subscriptions.map(sub => <TimeBasedProgramCard key={sub.subscriptionId} subscription={sub} canMutate={canMutate}
-            memberActive={memberActive} busy={busy} destinations={transferDestinationCandidates(data.subscriptions, sub.subscriptionId)}
+            memberActive={memberActive} busy={busy} hasCampaignDestinations={Boolean(data.availableCampaigns.length)} destinations={transferDestinationCandidates(data.subscriptions, sub.subscriptionId)}
             onTransfer={subSource => { setTransferError(""); setTransferSource(subSource); }}
             onEdit={editSubscription}
             onOpeningCoverage={subSource => { setSubscriptionId(subSource.subscriptionId); setOpening({ coverageFrom: "", coverageTo: "", remark: "" }); setFormError(""); setMode("opening"); }}
@@ -177,7 +181,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
               <div className={styles.attentionDetail}>
                 <strong>{payment.event ? `${payment.event.code} · ${payment.event.eventName}` : "Time-Based payment"}</strong>
                 <div className={styles.attentionFacts}>
-                  <span>{formatDate(payment.transactionDate)}</span><span>Principal {formatMoney(payment.principalAmount)}</span>
+                  <span>{formatDate(payment.transactionDate)}</span><span>Dana masuk {formatMoney(payment.principalAmount)}</span>
                   <span>{payment.unitAmount && payment.durationMonths ? `${formatMoney(payment.unitAmount)} / unit · ${payment.durationMonths} bulan` : "Rule perlu perhatian"}</span>
                 </div>
                 <p>{compatible.length === 0 ? "Belum ada program aktif yang kompatibel." : payment.reason}</p>
@@ -196,7 +200,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         </div>
       </section> : null}
 
-      <CampaignSection contributions={data.contributions.filter(row => row.eventType === "CAMPAIGN")} />
+      <CampaignSection campaigns={data.campaigns} canMutate={canMutate && memberActive} hasCarry={data.subscriptions.some(item => item.activeFlag && moneyToCents(item.carryBalance)! > BigInt(0))} canAllocate={Boolean(data.availableCampaigns.length)} onAllocate={openCampaignAllocation} />
 
       <TransferHistoryPanel history={history} loading={historyLoading} error={historyError} canMutate={canMutate} busy={busy}
         onReverse={row => { setReverseError(""); setReverseTarget(row); }}
@@ -206,6 +210,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
 
     <TransferCarryModal open={Boolean(transferSource)} source={transferSource} busy={busy} error={transferError}
       destinations={transferSource && data ? transferDestinationCandidates(data.subscriptions, transferSource.subscriptionId) : []}
+      campaigns={data?.availableCampaigns ?? []}
       onClose={() => !busy && setTransferSource(null)} onSubmit={submitTransfer} />
     <ReverseTransferModal open={Boolean(reverseTarget)} transfer={reverseTarget} busy={busy} error={reverseError}
       onClose={() => !busy && setReverseTarget(null)} onSubmit={submitReverse} />

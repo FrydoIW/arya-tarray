@@ -84,7 +84,7 @@ export function pendingTimeBasedPaymentPreview(payment: {
 }, subscriptions: Array<{ event: { eventCodeId: string }; activeFlag: boolean }>) {
   let estimate: ReturnType<typeof resolveTimeBasedUnits> = null;
   const ledgerSnapshot = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCode?.id ?? null,
-    principalAmount: payment.baseAmount ?? payment.originalAmount, recalculate: false, entries: payment.memberEventBalanceLedger ?? [] });
+    principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false, entries: payment.memberEventBalanceLedger ?? [] });
   const coverageSnapshot = selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCode?.id ?? null, principalAmount: payment.baseAmount ?? payment.originalAmount, recalculate: false,
     coverages: payment.memberEventCoverages.map(row => ({ coverageStatus: row.coverageStatus, subscriptionEventCodeId: row.subscription.eventCodeId, unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot, grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });
   try {
@@ -93,12 +93,12 @@ export function pendingTimeBasedPaymentPreview(payment: {
       ? resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: { unitAmount: { toString: () => historical.unitAmount }, durationMonths: historical.durationMonths, activeFlag: true }, transaction: payment, requiresClassification: true })
       : resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true });
   }
-  catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: null, grantedUnits: null, durationMonths: null, reason }; }
+  catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: payment.originalAmount.toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: null, grantedUnits: null, durationMonths: null, reason }; }
   const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === payment.eventCode?.id && subscription.activeFlag);
   const reason = matching.length === 0 ? "No active subscription for this Event Code"
     : matching.length > 1 ? "Multiple active subscriptions — choose one"
       : "Allocation pending synchronization";
-  return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: (payment.baseAmount ?? payment.originalAmount).toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: estimate?.unitAmount ?? null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
+  return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: payment.originalAmount.toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: estimate?.unitAmount ?? null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
 }
 
 export type SubscriptionLedgerTotals = { principal: bigint; consumed: bigint; transferIn: bigint; transferOut: bigint; carry: bigint };
@@ -142,6 +142,30 @@ export function summarizeContributions(input: {
   }).sort((a, b) => a.eventCode.localeCompare(b.eventCode) || (a.campaign?.campaignName ?? "").localeCompare(b.campaign?.campaignName ?? ""));
 }
 
+export function summarizeCampaignAllocations(input: {
+  contributions: ReturnType<typeof summarizeContributions>;
+  allocations: Array<{ id: string; eventCampaignId: string; amountDelta: { toString(): string }; allocationType: string; allocationStatus: string; effectiveDate: Date; reason: string;
+    eventCampaign: { id: string; campaignName: string; eventCodeId: string; eventCode: { code: string; eventName: string; eventType: string } } }>;
+  campaigns: Array<{ id: string; campaignName: string; eventCodeId: string; startDate: Date | null; endDate: Date | null; eventCode: { code: string; eventName: string } }>;
+}) {
+  const byId = new Map<string, { campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string; status: string; directContribution: bigint; allocatedFromCarry: bigint; allocationHistory: Array<{ allocationId: string; amountDelta: string; allocationType: string; effectiveDate: string; reason: string }> }>();
+  for (const row of input.contributions) {
+    if (row.eventType !== "CAMPAIGN" || !row.campaign) continue;
+    const current = byId.get(row.campaign.campaignId) ?? { campaignId: row.campaign.campaignId, campaignName: row.campaign.campaignName, eventCodeId: row.eventCodeId, eventCode: row.eventCode, eventName: row.eventName, status: row.campaign.displayStatus, directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: [] };
+    current.directContribution += decimalStringToCents(row.totalAmount); byId.set(row.campaign.campaignId, current);
+  }
+  for (const row of input.campaigns) {
+    if (!byId.has(row.id)) byId.set(row.id, { campaignId: row.id, campaignName: row.campaignName, eventCodeId: row.eventCodeId, eventCode: row.eventCode.code, eventName: row.eventCode.eventName, status: "ACTIVE", directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: [] });
+  }
+  for (const row of input.allocations) {
+    const current = byId.get(row.eventCampaignId) ?? { campaignId: row.eventCampaignId, campaignName: row.eventCampaign.campaignName, eventCodeId: row.eventCampaign.eventCodeId, eventCode: row.eventCampaign.eventCode.code, eventName: row.eventCampaign.eventCode.eventName, status: "ACTIVE", directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: [] };
+    const amount = decimalStringToCents(row.amountDelta.toString()); current.allocatedFromCarry += amount;
+    current.allocationHistory.push({ allocationId: row.id, amountDelta: centsToDecimal(amount), allocationType: row.allocationType, effectiveDate: dateOnly(row.effectiveDate)!, reason: row.reason });
+    byId.set(row.eventCampaignId, current);
+  }
+  return [...byId.values()].map(row => ({ ...row, directContribution: centsToDecimal(row.directContribution), allocatedFromCarry: centsToDecimal(row.allocatedFromCarry), totalAllocation: centsToDecimal(row.directContribution + row.allocatedFromCarry) })).sort((a, b) => a.eventCode.localeCompare(b.eventCode) || a.campaignName.localeCompare(b.campaignName));
+}
+
 export async function getSponsorship(memberId: string) {
   const result = await repository.loadMemberSponsorship(memberId);
   if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
@@ -181,6 +205,7 @@ export async function getSponsorship(memberId: string) {
   const contributions = summarizeContributions({
     groups: result.contributionGroups, events: result.contributionEvents, campaigns: result.contributionCampaigns
   });
+  const campaigns = summarizeCampaignAllocations({ contributions, allocations: result.campaignAllocations, campaigns: result.campaignOptions });
   const totalsByType = contributions.reduce((totals, row) => {
     const current = totals.get(row.eventType) ?? { amount: 0n, transactionCount: 0 };
     current.amount += decimalStringToCents(row.totalAmount); current.transactionCount += row.transactionCount;
@@ -190,7 +215,7 @@ export async function getSponsorship(memberId: string) {
     const value = totalsByType.get(type) ?? { amount: 0n, transactionCount: 0 };
     return [type, { amount: centsToDecimal(value.amount), transactionCount: value.transactionCount }];
   }));
-  return { subscriptions, contributions, contributionTotals,
+  return { subscriptions, contributions, campaigns, availableCampaigns: result.campaignOptions.map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName, eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName })), contributionTotals,
     eventOptions: result.eventOptions.map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })),
     pendingPayments: result.pending.map(payment => pendingTimeBasedPaymentPreview(payment, subscriptions)) };
 }

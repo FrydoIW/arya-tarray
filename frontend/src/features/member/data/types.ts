@@ -85,6 +85,8 @@ export type SponsorshipWorkspace = {
   eventOptions: Array<{ eventCodeId: string; code: string; eventName: string }>;
   subscriptions: SponsorshipSubscription[];
   contributions: ContributionRow[];
+  campaigns: Array<{ campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string; status: string; directContribution: string; allocatedFromCarry: string; totalAllocation: string; allocationHistory: Array<{ allocationId: string; amountDelta: string; allocationType: string; effectiveDate: string; reason: string }> }>;
+  availableCampaigns: Array<{ campaignId: string; campaignName: string; eventCodeId: string; code: string; eventName: string }>;
   contributionTotals: Record<string, { amount: string; transactionCount: number }>;
   pendingPayments: Array<{ transactionId: string; transactionDate: string | null; referenceNo: string | null; amount: string; principalAmount: string; event: { eventCodeId: string; code: string; eventName: string } | null; unitAmount: string | null; grantedUnits: number | null; durationMonths: number | null; reason: string }>;
 };
@@ -94,7 +96,7 @@ export type CarryTransferSubscription = {
   eventCodeId: string; eventCode: string; eventName: string;
 };
 export type CarryTransferView = {
-  transferId: string; status: string; memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string;
+  transferId: string; status: string; memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string | null; destinationCampaignId: string | null;
   amount: string; effectiveDate: string; reason: string; destinationRule: { unitAmount: string; durationMonths: number };
   reversalOfTransferId: string | null; createdAt: string; reversedAt: string | null;
 };
@@ -103,6 +105,7 @@ export type CarryTransferRecord = {
   destinationRule: { unitAmount: string; durationMonths: number };
   createdBy: { userId: string; fullName: string } | null; reversedAt: string | null; reversedBy: { userId: string; fullName: string } | null;
   source: CarryTransferSubscription | null; destination: CarryTransferSubscription | null;
+  destinationCampaign: { campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string } | null;
   reversalOf: { transferId: string; status: string; effectiveDate: string } | null;
   reversal: { transferId: string; status: string; effectiveDate: string } | null;
 };
@@ -110,7 +113,7 @@ export type CarryTransferHistory = {
   rows: CarryTransferRecord[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
 };
-export type CarryTransferBalance = { subscriptionId: string; carryBefore: string | null; carryAfter: string };
+export type CarryTransferBalance = { subscriptionId: string | null; campaignId?: string | null; carryBefore: string | null; carryAfter: string };
 export type CarryTransferAllocation = { units: number; amountApplied: string; unitAmount: string; durationMonths: number;
   coverage: { coverageId: string; coverageFrom: string; coverageTo: string } | null };
 export type CarryTransferResult = {
@@ -121,7 +124,7 @@ export type CarryTransferReversalResult = {
   replayed: boolean; original: CarryTransferView; reversal: CarryTransferView;
   restoringDestination: CarryTransferBalance; reversingSource: CarryTransferBalance;
 };
-export type CarryTransferInput = { destinationSubscriptionId: string; amount: string; reason: string; idempotencyKey: string };
+export type CarryTransferInput = { destinationSubscriptionId?: string; destinationCampaignId?: string; amount: string; reason: string; idempotencyKey: string };
 export type CarryTransferReverseInput = { reason: string; idempotencyKey: string };
 export type SubscriptionInput = { eventCodeId: string; referenceNo: string | null; displayName: string | null; startDate: string | null; activeFlag: boolean; remark: string | null };
 export type SubscriptionMetadataInput = { referenceNo: string | null; displayName: string | null; remark: string | null };

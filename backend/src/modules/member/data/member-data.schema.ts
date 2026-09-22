@@ -88,11 +88,14 @@ export const openingCoverageSchema = z.object({
 
 export const carryTransferParamsSchema = z.object({ memberId: z.string().uuid(), sourceSubscriptionId: z.string().uuid() });
 export const carryTransferCreateSchema = z.object({
-  destinationSubscriptionId: z.string().uuid(),
+  destinationSubscriptionId: z.string().uuid().optional(),
+  destinationCampaignId: z.string().uuid().optional(),
   amount: carryTransferAmount,
   reason: correctionReason,
   idempotencyKey: carryTransferIdempotencyKey
-}).strict();
+}).strict().refine(value => Boolean(value.destinationSubscriptionId) !== Boolean(value.destinationCampaignId), {
+  message: "Choose exactly one destination subscription or Campaign"
+});
 export const carryTransferReverseParamsSchema = z.object({ memberId: z.string().uuid(), transferId: z.string().uuid() });
 export const carryTransferReverseSchema = z.object({
   reason: correctionReason,

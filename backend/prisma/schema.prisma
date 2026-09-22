@@ -34,6 +34,7 @@ model Member {
   identityHistoryTo   MemberIdentityHistory[] @relation("MemberIdentityHistoryToMember")
   eventSubscriptions MemberEventSubscription[]
   carryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferMember")
+  campaignAllocations MemberEventCampaignAllocation[]
   @@index([memberName], map: "idx_member_name")
   @@index([initialName], map: "idx_member_initial_name")
   @@index([city], map: "idx_member_city")
@@ -149,6 +150,7 @@ model User {
   voidedMemberEventBalanceEntries MemberEventBalanceLedger[] @relation("MemberEventBalanceVoidedBy")
   createdMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferCreatedBy")
   reversedMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferReversedBy")
+  createdMemberEventCampaignAllocations MemberEventCampaignAllocation[] @relation("MemberEventCampaignAllocationCreatedBy")
   id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
   fullName     String   @map("full_name") @db.VarChar(150)
   email        String   @db.VarChar(150)
@@ -292,6 +294,8 @@ model EventCampaign {
   transactions BankTransaction[]
   correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCampaign")
   correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCampaign")
+  memberCampaignAllocations MemberEventCampaignAllocation[]
+  destinationCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationCampaign")
 
   @@index([eventCodeId, activeFlag], map: "idx_event_campaign_event_active")
   @@index([startDate, endDate], map: "idx_event_campaign_period")
@@ -429,7 +433,8 @@ model MemberEventCarryTransfer {
   id String @id @default(uuid()) @map("member_event_carry_transfer_id") @db.Char(36)
   memberId String @map("member_id") @db.Char(36)
   sourceSubscriptionId String @map("source_subscription_id") @db.Char(36)
-  destinationSubscriptionId String @map("destination_subscription_id") @db.Char(36)
+  destinationSubscriptionId String? @map("destination_subscription_id") @db.Char(36)
+  destinationCampaignId String? @map("destination_campaign_id") @db.Char(36)
   amount Decimal @db.Decimal(20, 2)
   effectiveDate DateTime @map("effective_date") @db.Date
   reason String @db.VarChar(1000)
@@ -446,19 +451,49 @@ model MemberEventCarryTransfer {
 
   member Member @relation("MemberEventCarryTransferMember", fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_member")
   sourceSubscription MemberEventSubscription @relation("MemberEventCarryTransferSourceSubscription", fields: [sourceSubscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_source_subscription")
-  destinationSubscription MemberEventSubscription @relation("MemberEventCarryTransferDestinationSubscription", fields: [destinationSubscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_destination_subscription")
+  destinationSubscription MemberEventSubscription? @relation("MemberEventCarryTransferDestinationSubscription", fields: [destinationSubscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_destination_subscription")
+  destinationCampaign EventCampaign? @relation("MemberEventCarryTransferDestinationCampaign", fields: [destinationCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_destination_campaign")
   createdBy User @relation("MemberEventCarryTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_created_by")
   reversedBy User? @relation("MemberEventCarryTransferReversedBy", fields: [reversedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_reversed_by")
   reversalOf MemberEventCarryTransfer? @relation("MemberEventCarryTransferReversal", fields: [reversalOfTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_reversal_of")
   reversal MemberEventCarryTransfer? @relation("MemberEventCarryTransferReversal")
   balanceLedger MemberEventBalanceLedger[]
+  campaignAllocation MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationTransfer")
 
   @@index([memberId, effectiveDate], map: "idx_member_event_carry_transfer_member_date")
   @@index([sourceSubscriptionId, status, effectiveDate], map: "idx_member_event_carry_transfer_source")
   @@index([destinationSubscriptionId, status, effectiveDate], map: "idx_member_event_carry_transfer_destination")
+  @@index([destinationCampaignId, status, effectiveDate], map: "idx_member_event_carry_transfer_campaign_destination")
   @@index([createdById], map: "idx_member_event_carry_transfer_created_by")
   @@index([reversedById], map: "idx_member_event_carry_transfer_reversed_by")
   @@map("arya_member_event_carry_transfer")
+}
+
+model MemberEventCampaignAllocation {
+  id String @id @default(uuid()) @map("member_event_campaign_allocation_id") @db.Char(36)
+  memberId String @map("member_id") @db.Char(36)
+  eventCampaignId String @map("event_campaign_id") @db.Char(36)
+  carryTransferId String @unique(map: "uq_member_event_campaign_allocation_transfer") @map("member_event_carry_transfer_id") @db.Char(36)
+  amountDelta Decimal @map("amount_delta") @db.Decimal(20, 2)
+  allocationType String @map("allocation_type") @db.VarChar(30)
+  allocationStatus String @default("ACTIVE") @map("allocation_status") @db.VarChar(20)
+  effectiveDate DateTime @map("effective_date") @db.Date
+  reason String @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById String @map("created_by") @db.Char(36)
+  reversalOfAllocationId String? @unique(map: "uq_member_event_campaign_allocation_reversal") @map("reversal_of_allocation_id") @db.Char(36)
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_member")
+  eventCampaign EventCampaign @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_campaign")
+  carryTransfer MemberEventCarryTransfer @relation("MemberEventCampaignAllocationTransfer", fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_transfer")
+  createdBy User @relation("MemberEventCampaignAllocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_created_by")
+  reversalOf MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal", fields: [reversalOfAllocationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_reversal_of")
+  reversal MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal")
+
+  @@index([memberId, eventCampaignId, allocationStatus, effectiveDate], map: "idx_member_event_campaign_allocation_member_campaign")
+  @@index([eventCampaignId, allocationStatus, effectiveDate], map: "idx_member_event_campaign_allocation_campaign")
+  @@index([createdById], map: "idx_member_event_campaign_allocation_created_by")
+  @@map("arya_member_event_campaign_allocation")
 }
 
 model BankAccount {

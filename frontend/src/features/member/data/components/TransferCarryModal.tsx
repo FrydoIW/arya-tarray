@@ -14,13 +14,14 @@ type Props = {
   open: boolean;
   source: SponsorshipSubscription | null;
   destinations: SponsorshipSubscription[];
+  campaigns?: Array<{ campaignId: string; campaignName: string; code: string; eventName: string }>;
   busy: boolean;
   error: string;
   onClose: () => void;
   onSubmit: (input: CarryTransferInput) => Promise<boolean>;
 };
 
-export function TransferCarryModal({ open, source, destinations, busy, error, onClose, onSubmit }: Props) {
+export function TransferCarryModal({ open, source, destinations, campaigns = [], busy, error, onClose, onSubmit }: Props) {
   const [destinationId, setDestinationId] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -30,7 +31,7 @@ export function TransferCarryModal({ open, source, destinations, busy, error, on
 
   useEffect(() => {
     if (!open || !source) return;
-    setDestinationId(destinationsRef.current[0]?.subscriptionId ?? "");
+    setDestinationId(destinationsRef.current[0]?.subscriptionId ?? (campaigns[0] ? `campaign:${campaigns[0].campaignId}` : ""));
     setAmount(source.carryBalance);
     setReason("");
     commandRef.current = null;
@@ -38,9 +39,10 @@ export function TransferCarryModal({ open, source, destinations, busy, error, on
 
   if (!source) return null;
   const destination = destinations.find(item => item.subscriptionId === destinationId) ?? null;
+  const campaign = destinationId.startsWith("campaign:") ? campaigns.find(item => `campaign:${item.campaignId}` === destinationId) ?? null : null;
   const amountError = validateTransferAmount(amount, source.carryBalance);
   const reasonError = reason.trim().length < 3 ? "Reason wajib diisi (minimal 3 karakter)." : null;
-  const destinationError = destination ? null : "Pilih program tujuan.";
+  const destinationError = destination || campaign ? null : "Pilih program tujuan.";
   const invalid = Boolean(amountError || reasonError || destinationError);
   const estimate = destination?.timeRule
     ? transferEstimate({ amount, destinationCarry: destination.carryBalance, unitAmount: destination.timeRule.unitAmount, durationMonths: destination.timeRule.durationMonths })
@@ -48,17 +50,17 @@ export function TransferCarryModal({ open, source, destinations, busy, error, on
   const hint = error ? dependencyConflictHint(error) : null;
 
   async function submit() {
-    if (busy || invalid || !destination) return;
+    if (busy || invalid || (!destination && !campaign)) return;
     const cents = moneyToCents(amount);
     if (cents === null) return;
     const normalized = centsToMoney(cents);
-    const payload = JSON.stringify({ destinationSubscriptionId: destination.subscriptionId, amount: normalized, reason: reason.trim() });
+    const payload = JSON.stringify({ destinationSubscriptionId: destination?.subscriptionId, destinationCampaignId: campaign?.campaignId, amount: normalized, reason: reason.trim() });
     if (!commandRef.current || commandRef.current.payload !== payload)
       commandRef.current = { key: createIdempotencyKey(), payload };
-    await onSubmit({ destinationSubscriptionId: destination.subscriptionId, amount: normalized, reason: reason.trim(), idempotencyKey: commandRef.current.key });
+    await onSubmit({ ...(destination ? { destinationSubscriptionId: destination.subscriptionId } : { destinationCampaignId: campaign!.campaignId }), amount: normalized, reason: reason.trim(), idempotencyKey: commandRef.current.key });
   }
 
-  return <Modal open={open} title="Transfer Carry" description="Memindahkan saldo carry yang belum terpakai antar program TIME BASED milik donatur yang sama."
+  return <Modal open={open} title="Alokasikan Carry" description="Alokasikan saldo carry yang belum terpakai ke TIME BASED lain atau Campaign aktif milik donatur yang sama."
     onClose={() => !busy && onClose()}>
     <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); void submit(); }}>
       <div className={styles.sourceBox}>
@@ -73,11 +75,12 @@ export function TransferCarryModal({ open, source, destinations, busy, error, on
         <small className={styles.helper}>Default seluruh carry. Partial diperbolehkan.</small>
         {amountError ? <small className={styles.fieldError}>{amountError}</small> : null}
       </label>
-      <label className={styles.field}>Destination Program
-        <Select value={destinationId} disabled={busy || !destinations.length} onChange={event => setDestinationId(event.target.value)} aria-label="Destination program">
+      <label className={styles.field}>Tujuan Alokasi
+        <Select value={destinationId} disabled={busy || (!destinations.length && !campaigns.length)} onChange={event => setDestinationId(event.target.value)} aria-label="Destination program">
           {destinations.map(item => <option key={item.subscriptionId} value={item.subscriptionId}>
             {item.event.code} · {item.event.eventName} — {subscriptionLabel(item)}
           </option>)}
+          {campaigns.map(item => <option key={item.campaignId} value={`campaign:${item.campaignId}`}>{item.code} · {item.eventName} — {item.campaignName}</option>)}
         </Select>
         {destinationError ? <small className={styles.fieldError}>{destinationError}</small> : null}
       </label>
@@ -86,6 +89,7 @@ export function TransferCarryModal({ open, source, destinations, busy, error, on
         <strong>{destination.timeRule ? `${formatMoney(destination.timeRule.unitAmount)} / ${destination.timeRule.durationMonths} bln` : "Tidak ada rule aktif"}</strong>
         <small>Destination carry saat ini {formatMoney(destination.carryBalance)}</small>
       </div> : null}
+      {campaign ? <div className={styles.ruleBox}><span>Campaign aktif</span><strong>{campaign.code} · {campaign.eventName}</strong><small>{campaign.campaignName} menerima alokasi carry tanpa membuat BankTransaction.</small></div> : null}
       {estimate ? <div className={styles.previewBox}>
         <span>Estimated Result <small>perkiraan — backend tetap otoritatif</small></span>
         <div className={styles.previewRow}><span>Generated coverage</span><b>{estimate.months > 0 ? `${estimate.units} unit · ${estimate.months} bln` : "Belum cukup untuk 1 unit"}</b></div>
@@ -104,7 +108,7 @@ export function TransferCarryModal({ open, source, destinations, busy, error, on
       </ul>
       <div className={styles.footer}>
         <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={busy || invalid}>{busy ? "Memproses…" : "Transfer Carry"}</Button>
+        <Button type="submit" disabled={busy || invalid}>{busy ? "Memproses…" : "Alokasikan Carry"}</Button>
       </div>
     </form>
   </Modal>;
