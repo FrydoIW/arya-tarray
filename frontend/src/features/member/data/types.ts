@@ -124,4 +124,5 @@ export type CarryTransferReversalResult = {
 export type CarryTransferInput = { destinationSubscriptionId: string; amount: string; reason: string; idempotencyKey: string };
 export type CarryTransferReverseInput = { reason: string; idempotencyKey: string };
 export type SubscriptionInput = { eventCodeId: string; referenceNo: string | null; displayName: string | null; startDate: string | null; activeFlag: boolean; remark: string | null };
+export type SubscriptionMetadataInput = { referenceNo: string | null; displayName: string | null; remark: string | null };
 export type OpeningCoverageInput = { coverageFrom: string; coverageTo: string; remark: string };

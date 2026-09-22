@@ -90,6 +90,40 @@ function eligible(payment: Payment, sub: { memberId: string; eventCodeId: string
       paymentMemberId: payment.memberIdentity?.memberId, paymentEventCodeId: payment.eventCodeId,
       verificationStatus: payment.memberIdentity?.verificationStatus });
 }
+
+/**
+ * The schema intentionally has no unsafe "one inactive record" constraint. This range lock
+ * serializes the only lifecycle transition that may introduce an ACTIVE logical program.
+ * It relies on idx_member_event_sub_member_event and is held by the caller's transaction.
+ */
+export async function lockActiveTimeBasedProgram(tx: Tx, memberId: string, eventCodeId: string) {
+  const raw = tx as Tx & { $queryRaw?: <T = unknown>(query: Prisma.Sql) => Promise<T> };
+  if (typeof raw.$queryRaw !== "function") return;
+  await raw.$queryRaw(Prisma.sql`SELECT member_event_subscription_id FROM arya_member_event_subscription
+    WHERE member_id = ${memberId} AND event_code_id = ${eventCodeId} AND active_flag = 1
+    ORDER BY member_event_subscription_id FOR UPDATE`);
+}
+
+/** Returns the single current program, creates it under the range lock, or reports a legacy ambiguity. */
+export async function ensureActiveTimeBasedProgram(tx: Tx, input: { memberId: string; eventCodeId: string; userId: string }) {
+  await lockActiveTimeBasedProgram(tx, input.memberId, input.eventCodeId);
+  const matches = await tx.memberEventSubscription.findMany({ where: { memberId: input.memberId,
+    eventCodeId: input.eventCodeId, activeFlag: true }, select: { id: true } });
+  if (matches.length === 1) return matches[0].id;
+  if (matches.length > 1) return null;
+  const created = await tx.memberEventSubscription.create({ data: {
+    memberId: input.memberId, eventCodeId: input.eventCodeId, activeFlag: true,
+    createdById: input.userId, updatedById: input.userId
+  }, select: { id: true } });
+  return created.id;
+}
+
+function hasResolvableCurrentTimeRule(payment: Payment) {
+  try {
+    return Boolean(resolveTimeBasedUnits({ eventCode: payment.eventCode, rule: payment.eventCode?.timeRule ?? null,
+      transaction: payment, requiresClassification: true }));
+  } catch { return false; }
+}
 async function snapshot(tx: Tx, payment: Payment, recalculate: boolean) {
   if (!payment.baseAmount || !payment.eventCodeId) throw new HttpError(400, "TIME_BASED principal and Event Code are required");
   if (!recalculate) {
@@ -122,6 +156,24 @@ export async function refreshSubscriptionValidity(tx: Tx, subscriptionId: string
     orderBy: [{ coverageTo: "desc" }, { id: "desc" }], select: { coverageTo: true } });
   await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { validUntil: latest?.coverageTo ?? null } });
 }
+function earliestDate(values: Array<Date | null | undefined>) {
+  return values.filter((value): value is Date => Boolean(value)).reduce<Date | null>((earliest, value) =>
+    !earliest || value.getTime() < earliest.getTime() ? utcDay(value) : earliest, null);
+}
+export function resolveEffectiveStartDate(input: { coverageFrom: Date[]; paymentDates: Date[] }) {
+  return earliestDate([...input.coverageFrom, ...input.paymentDates]);
+}
+/** Re-resolves the system-managed participation start from surviving financial evidence. */
+export async function refreshSubscriptionStartDate(tx: Tx, subscriptionId: string) {
+  const [payments, coverages] = await Promise.all([
+    tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryStatus: "ACTIVE", entryType: { in: ["PAYMENT", "TRANSFER_IN"] } },
+      select: { effectiveDate: true } }),
+    tx.memberEventCoverage.findMany({ where: { subscriptionId, ...activeCoverage }, select: { coverageFrom: true } })
+  ]);
+  const startDate = earliestDate([...payments.map(row => row.effectiveDate), ...coverages.map(row => row.coverageFrom)]);
+  await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { startDate } });
+  return startDate;
+}
 async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: string, reason: string,
   addition?: { payment: Payment; recalculate: boolean }) {
   await lockSubscriptionsForPosting(tx, [subscriptionId]);
@@ -136,7 +188,7 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
       select: { bankTransactionId: true, coverageFrom: true, coverageTo: true, unitAmountSnapshot: true,
         durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true } }),
     tx.memberEventCoverage.findMany({ where: { subscriptionId, coverageSource: "OPENING", ...activeCoverage },
-      select: { coverageTo: true }, orderBy: [{ coverageTo: "desc" }, { id: "desc" }] }),
+      select: { coverageFrom: true, coverageTo: true }, orderBy: [{ coverageTo: "desc" }, { id: "desc" }] }),
     tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryType: "COVERAGE_USE", ...activeEntry },
       select: { bankTransactionId: true, amountDelta: true, coverage: { select: { coverageSource: true } } } })
   ]);
@@ -152,6 +204,7 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
   const surviving = payments.filter(row => eligible(row, sub)).sort((a, b) =>
     a.transactionDate!.getTime() - b.transactionDate!.getTime() || a.id.localeCompare(b.id));
   const snapshots = await Promise.all(surviving.map(row => snapshot(tx, row, addition?.payment.id === row.id && addition.recalculate)));
+  const effectiveStartDate = resolveEffectiveStartDate({ coverageFrom: openings.map(row => row.coverageFrom), paymentDates: surviving.map(row => row.transactionDate!) });
   let balance = 0n;
   let lastCoverageTo = openings[0]?.coverageTo ?? null;
   const plan = surviving.map((payment, index) => {
@@ -161,7 +214,7 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
     const months = grant.grantedUnits * rate.durationMonths;
     if (!Number.isSafeInteger(months)) throw new HttpError(400, "TIME_BASED coverage duration is too large");
     const from = months ? resolveCoverageStart({ latestCoverageTo: lastCoverageTo,
-      startDate: sub.startDate, transactionDate: payment.transactionDate! }) : null;
+      startDate: effectiveStartDate, transactionDate: payment.transactionDate! }) : null;
     const to = from ? addCalendarMonthsInclusive(from, months) : null;
     if (to) lastCoverageTo = to;
     balance = grant.carryBalance;
@@ -186,7 +239,11 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
           && cov.amountApplied && cents(cov.amountApplied) === row.grant.amountConsumed
           && cents(use.amountDelta) === -row.grant.amountConsumed : !cov && !use);
     });
-  if (unchanged) return;
+  if (unchanged) {
+    if (sub.startDate?.getTime() !== effectiveStartDate?.getTime())
+      await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { startDate: effectiveStartDate } });
+    return;
+  }
   const postingCount = plan.length + plan.filter(row => row.from).length;
   const postingSequences = postingCount ? await allocatePostingSequences(tx, subscriptionId, postingCount) : [];
   let postingSequenceIndex = 0;
@@ -221,7 +278,7 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
       } });
     }
   }
-  await refreshSubscriptionValidity(tx, subscriptionId);
+  await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { startDate: effectiveStartDate, validUntil: lastCoverageTo } });
 }
 
 /** Runs inside the caller's serializable transaction. ACTIVE PAYMENT proves allocation even with zero coverage. */
@@ -261,10 +318,14 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
       // Deactivating a subscription never transfers an existing payment.
       destination = pinned.subscriptionId;
     } else {
-      const matches = await tx.memberEventSubscription.findMany({ where: { memberId,
-        eventCodeId: payment.eventCodeId!, activeFlag: true }, select: { id: true } });
-      if (matches.length === 1) destination = matches[0].id;
-      else pending = matches.length ? "AMBIGUOUS" : "PENDING_SUBSCRIPTION";
+      // Invalid or missing rules remain visible as an exception; do not fabricate a program.
+      // A valid first finalized payment establishes the normal Member + Event logical program.
+      if (!hasResolvableCurrentTimeRule(payment)) pending = "PENDING_SUBSCRIPTION";
+      else {
+        const ensured = await ensureActiveTimeBasedProgram(tx, { memberId, eventCodeId: payment.eventCodeId!, userId });
+        if (ensured) destination = ensured;
+        else pending = "AMBIGUOUS";
+      }
     }
   }
   const active = activePayments.length === 1 ? activePayments[0] : null;

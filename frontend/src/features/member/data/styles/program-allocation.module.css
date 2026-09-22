@@ -113,10 +113,18 @@
 
 .modalBody { display: grid; gap: 14px; padding: 18px; }
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.subscriptionModalBody { gap: 16px; padding: 18px 22px 20px; }
+.subscriptionFormGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .field { display: grid; gap: 6px; min-width: 0; color: #475467; font-size: 12px; font-weight: var(--font-weight-semibold); }
 .field input, .field textarea, .field select { width: 100%; min-width: 0; padding: 10px; min-height: var(--control-height); border: 1px solid var(--line); border-radius: var(--radius-control); background: #fff; color: #344054; font: inherit; font-weight: var(--font-weight-regular); }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: 0; border-color: #9ec5f4; box-shadow: 0 0 0 3px rgba(59, 130, 246, .08); }
 .helper { color: var(--muted); font-size: 11px; font-weight: 400; }
+.readOnlyField select { color: #667085; background: #f5f8fc; border-color: #dce5f0; cursor: not-allowed; }
+.readOnlyValue { display: flex; align-items: center; min-height: var(--control-height); padding: 10px; border: 1px solid #dce5f0; border-radius: var(--radius-control); background: #f5f8fc; color: #667085; font-size: 12px; font-weight: var(--font-weight-regular); }
+.statusField { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.statusLabel { color: #475467; font-size: 12px; font-weight: var(--font-weight-semibold); }
+.statusReadOnly { display: grid; align-content: center; gap: 4px; min-height: var(--control-height); padding: 8px 12px; box-sizing: border-box; border: 1px solid #dce5f0; border-radius: 9px; background: #f5f8fc; }
+.statusReadOnly small { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.4; }
 .fieldError { color: #b42318; font-size: 11px; font-weight: 600; }
 .hint { display: block; margin-top: 6px; color: #8b5b18; font-size: 11px; font-weight: 600; }
 
@@ -137,6 +145,7 @@
 .previewRow b { color: var(--ink); }
 .warningBox { display: grid; gap: 5px; margin: 0; padding: 11px 12px 11px 28px; border: 1px solid #f3e3c3; border-radius: 9px; background: #fffbf2; color: #7a5a1c; font-size: 11px; }
 .footer { display: flex; justify-content: flex-end; gap: 8px; }
+.subscriptionModalBody .footer { padding-top: 14px; border-top: 1px solid #edf1f5; }
 .toggle { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: #f9fafb; font-size: 12px; }
 .toggle span { display: grid; gap: 4px; }
 .toggle input { margin-top: 2px; accent-color: var(--primary); }
@@ -156,4 +165,6 @@
   .pendingRow { align-items: stretch; flex-direction: column; }
   .pendingRow select { width: 100%; }
   .modalBody { padding: 14px; }
+  .subscriptionModalBody { padding: 16px; }
+  .subscriptionFormGrid { grid-template-columns: 1fr; gap: 14px; }
 }

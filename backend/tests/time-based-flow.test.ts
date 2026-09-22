@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { addOpeningCoverageRecord, pendingTimeBasedPaymentPreview, updateSubscriptionRecord, voidOpeningCoverageRecord, retryAllocationRecord } from "../src/modules/member/data/member-data.service.js";
-import { manuallyAllocateTimeBasedPayment, reconcileTimeBasedCoverageForIdentity, rebuildTimeBasedSubscription, selectHistoricalPaymentSnapshot, synchronizeTimeBasedTransaction } from "../src/modules/member/time-based/member-time-based.service.js";
+import { manuallyAllocateTimeBasedPayment, reconcileTimeBasedCoverageForIdentity, rebuildTimeBasedSubscription, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../src/modules/member/time-based/member-time-based.service.js";
 import { assertNoOutstandingTimeBasedCarry } from "../src/modules/configuration/event-code/event-time-rule.service.js";
 import { loadDashboardTimeBasedCarry, loadDashboardTimeBasedSummary, summarizeTimeBasedCarry } from "../src/modules/monitoring/dashboard/dashboard.repository.js";
 import { pendingTimeBasedPaymentsWhere } from "../src/modules/member/data/member-data.repository.js";
@@ -62,6 +62,11 @@ function fixture() {
       },
       findMany: async ({ where }: { where: { memberId: string; eventCodeId: string; activeFlag: boolean } }) =>
         subs.filter(row => row.memberId === where.memberId && row.eventCodeId === where.eventCodeId && row.activeFlag === where.activeFlag),
+      create: async ({ data }: { data: Pick<Sub, "memberId" | "eventCodeId" | "activeFlag"> }) => {
+        const row: Sub = { id: `sub-${id()}`, memberId: data.memberId, eventCodeId: data.eventCodeId,
+          activeFlag: data.activeFlag, startDate: null, validUntil: null, referenceNo: null, displayName: null, remark: null };
+        subs.push(row); return row;
+      },
       update: async ({ where, data }: { where: { id: string }; data: Partial<Sub> }) => {
         const row = subs.find(item => item.id === where.id)!; Object.assign(row, data); return row;
       }
@@ -150,6 +155,7 @@ test("zero-unit payment is allocated, leaves validUntil unchanged, and repeated 
   await f.sync("p1");
   assert.equal(f.entries.length, history);
   assert.equal(f.subs[0].validUntil, null);
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-01-31");
   assert.equal(f.active().filter(row => row.entryType === "PAYMENT").length, 1);
 });
 
@@ -159,28 +165,112 @@ test("pending query excludes an ACTIVE PAYMENT even when no coverage exists", ()
   assert.deepEqual(where.memberIdentity, { is: { memberId: "member-a", verificationStatus: "VERIFIED" } });
 });
 
-test("zero and multiple compatible subscriptions stay pending until a unique choice exists", async () => {
-  const f = fixture(); f.payments.push(payment("p1", "25000"));
-  f.subs[0].activeFlag = false;
-  assert.equal((await f.sync("p1")).state, "PENDING_SUBSCRIPTION");
-  assert.equal(f.active().length, 0);
-  f.subs[0].activeFlag = true;
-  f.subs.push({ ...f.subs[0], id: "sub-b" });
-  assert.equal((await f.sync("p1")).state, "AMBIGUOUS");
-  assert.equal(f.active().length, 0);
-  f.subs[1].activeFlag = false;
-  assert.equal((await f.sync("p1")).state, "ALLOCATED");
-  assert.equal(f.balance(), "25000.00");
+test("first finalized payment automatically creates one program and allocates its principal", async () => {
+  const f = fixture(); f.subs.length = 0;
+  const first = payment("p1", "250004", "2026-09-01");
+  first.baseAmount = d("250000");
+  first.eventCode.timeRule = { unitAmount: d("150000"), durationMonths: 3, activeFlag: true };
+  f.payments.push(first);
+
+  const result = await f.sync("p1");
+  assert.equal(result.state, "ALLOCATED");
+  assert.equal(f.subs.length, 1);
+  assert.equal(f.subs[0].memberId, "member-a");
+  assert.equal(f.subs[0].eventCodeId, "rupang");
+  assert.equal(f.active().filter(row => row.entryType === "PAYMENT")[0].amountDelta.toFixed(2), "250000.00");
+  assert.equal(f.active().filter(row => row.entryType === "COVERAGE_USE")[0].amountDelta.toFixed(2), "-150000.00");
+  assert.equal(f.balance(f.subs[0].id), "100000.00");
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-09-01");
+  assert.equal(f.activeCoverage(f.subs[0].id)[0].grantedUnits, 1);
+  assert.equal(f.activeCoverage(f.subs[0].id)[0].coverageFrom.toISOString().slice(0, 10), "2026-09-01");
+  assert.equal(f.activeCoverage(f.subs[0].id)[0].coverageTo.toISOString().slice(0, 10), "2026-11-30");
 });
 
-test("deactivating a competing subscription resolves a partial pending payment", async () => {
+test("automatic program lifecycle reuses one active program and is idempotent", async () => {
+  const f = fixture(); f.subs.length = 0; f.payments.push(payment("p1", "25000"));
+  await f.sync("p1"); const historyCount = f.entries.length;
+  await f.sync("p1");
+  assert.equal(f.subs.length, 1);
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-01-31");
+  assert.equal(f.entries.length, historyCount);
+  f.payments.push(payment("p2", "25000", "2026-02-01"));
+  assert.equal((await f.sync("p2")).subscriptionId, f.subs[0].id);
+  assert.equal(f.subs.length, 1);
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-01-31");
+});
+
+test("member resync recovers a historic pending TIME_BASED payment into its automatic program", async () => {
+  const f = fixture(); f.subs.length = 0; f.payments.push(payment("historic", "25000", "2025-12-01"));
+
+  await synchronizePendingTimeBasedForMember(f.tx, "member-a", "admin");
+  assert.equal(f.subs.length, 1);
+  assert.equal(f.active().filter(row => row.bankTransactionId === "historic" && row.entryType === "PAYMENT").length, 1);
+});
+
+test("automatic program creation locks the active member-event range before it can create", async () => {
+  const f = fixture(); f.subs.length = 0; f.payments.push(payment("p1", "25000"));
+  const locks: unknown[] = [];
+  (f.tx as unknown as { $queryRaw: (query: unknown) => Promise<unknown[]> }).$queryRaw = async query => {
+    locks.push(query);
+    return [];
+  };
+
+  await f.sync("p1");
+  assert.equal(f.subs.length, 1);
+  assert.ok(locks.some(query => /arya_member_event_subscription[\s\S]*active_flag = 1[\s\S]*FOR UPDATE/
+    .test((query as { strings: string[] }).strings.join("?"))));
+});
+
+test("missing current TIME_BASED rule remains pending and never creates a fabricated program", async () => {
+  const f = fixture(); f.subs.length = 0;
+  const invalid = payment("p1", "25000");
+  invalid.eventCode.timeRule.activeFlag = false;
+  f.payments.push(invalid);
+
+  assert.equal((await f.sync("p1")).state, "PENDING_SUBSCRIPTION");
+  assert.equal(f.subs.length, 0);
+  assert.equal(f.entries.length, 0);
+  assert.equal(f.coverages.length, 0);
+});
+
+test("non-finalized TIME_BASED payment never creates a program or economic entries", async () => {
+  const f = fixture(); f.subs.length = 0;
+  const pending = payment("p1", "25000");
+  pending.status = "CHECK";
+  f.payments.push(pending);
+
+  assert.equal((await f.sync("p1")).state, "NOT_TIME_BASED");
+  assert.equal(f.subs.length, 0);
+  assert.equal(f.entries.length, 0);
+});
+
+test("FINALIZED STANDARD and CAMPAIGN payments never enter the TIME_BASED lifecycle", async () => {
+  for (const eventType of ["STANDARD", "CAMPAIGN"] as const) {
+    const f = fixture(); f.subs.length = 0;
+    const transaction = payment(eventType, "25000");
+    transaction.eventCode.eventType = eventType;
+    f.payments.push(transaction);
+    assert.equal((await f.sync(eventType)).state, "NOT_TIME_BASED");
+    assert.equal(f.subs.length, 0);
+    assert.equal(f.entries.length, 0);
+  }
+});
+
+test("multiple legacy active programs remain an actionable ambiguity", async () => {
   const f = fixture(); f.payments.push(payment("p1", "25000"));
   f.subs.push({ ...f.subs[0], id: "sub-b" });
   assert.equal((await f.sync("p1")).state, "AMBIGUOUS");
-  await updateSubscriptionRecord(f.tx, "member-a", "sub-b",
-    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin");
-  assert.equal(f.balance(), "25000.00");
-  assert.equal(f.activeCoverage().length, 0);
+  assert.equal(f.active().length, 0);
+});
+
+test("metadata edit cannot change a competing program status", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "25000"));
+  f.subs.push({ ...f.subs[0], id: "sub-b" });
+  assert.equal((await f.sync("p1")).state, "AMBIGUOUS");
+  await assert.rejects(() => updateSubscriptionRecord(f.tx, "member-a", "sub-b",
+    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin"), /Status Program/);
+  assert.equal(f.subs[1].activeFlag, true);
+  assert.equal(f.balance(), "0.00");
 });
 
 test("deactivation with carry is rejected and never transfers an allocated partial payment", async () => {
@@ -188,7 +278,7 @@ test("deactivation with carry is rejected and never transfers an allocated parti
   await f.sync("p1");
   f.subs.push({ ...f.subs[0], id: "sub-b", validUntil: null });
   await assert.rejects(() => updateSubscriptionRecord(f.tx, "member-a", "sub-a",
-    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin"), /carry/);
+    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin"), /Status Program/);
   assert.equal(f.subs[0].activeFlag, true);
   assert.equal(f.balance("sub-a"), "25000.00");
   assert.equal(f.balance("sub-b"), "0.00");
@@ -233,10 +323,13 @@ test("approved correction to a different Event Code voids old economic effect", 
   await f.sync("p1");
   f.payments[0].eventCodeId = "other";
   f.payments[0].eventCode.id = "other";
-  assert.equal((await f.sync("p1", true)).state, "PENDING_SUBSCRIPTION");
-  assert.equal(f.balance(), "0.00");
-  assert.equal(f.activeCoverage().length, 0);
-  assert.ok(f.entries.every(row => row.entryStatus === "VOIDED"));
+  assert.equal((await f.sync("p1", true)).state, "ALLOCATED");
+  assert.equal(f.balance("sub-a"), "0.00");
+  assert.equal(f.activeCoverage("sub-a").length, 0);
+  assert.ok(f.entries.filter(row => row.subscriptionId === "sub-a").every(row => row.entryStatus === "VOIDED"));
+  const corrected = f.subs.find(row => row.eventCodeId === "other");
+  assert.ok(corrected);
+  assert.equal(f.active().filter(row => row.subscriptionId === corrected!.id && row.entryType === "PAYMENT").length, 1);
 });
 
 test("repeated explicit rebuild preserves active ledger identity and VOIDED audit count", async () => {
@@ -299,14 +392,35 @@ test("Opening coverage has no cash entry and rebuilds transaction validity", asy
   await addOpeningCoverageRecord(f.tx, "member-a", "sub-a", { coverageFrom: "2026-02-28", coverageTo: "2026-03-31", remark: "Legacy" }, "admin");
   assert.equal(f.active().filter(row => row.entryType === "PAYMENT").length, paymentCount);
   assert.equal(f.active().filter(row => row.bankTransactionId === null).length, 0);
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-01-31");
 });
 
-test("start date remains locked after coverage; metadata can change", async () => {
+test("opening coverage earlier than payment becomes the effective start and payment keeps its ledger date", async () => {
+  const f = fixture();
+  const first = payment("p1", "250000", "2026-09-01");
+  first.eventCode.timeRule = { unitAmount: d("150000"), durationMonths: 3, activeFlag: true };
+  f.payments.push(first);
+  await addOpeningCoverageRecord(f.tx, "member-a", "sub-a", { coverageFrom: "2026-05-01", coverageTo: "2026-11-10", remark: "Legacy" }, "admin");
+  await f.sync("p1");
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-05-01");
+  assert.equal(f.active().find(row => row.entryType === "PAYMENT")?.effectiveDate.toISOString().slice(0, 10), "2026-09-01");
+  assert.equal(f.activeCoverage()[0].coverageFrom.toISOString().slice(0, 10), "2026-11-11");
+  assert.equal(f.activeCoverage()[0].coverageTo.toISOString().slice(0, 10), "2027-02-10");
+});
+
+test("opening coverage later than the first payment never moves the effective start forward", async () => {
+  const f = fixture(); f.payments.push(payment("p1", "50000", "2026-05-01"));
+  await f.sync("p1");
+  await addOpeningCoverageRecord(f.tx, "member-a", "sub-a", { coverageFrom: "2026-08-01", coverageTo: "2026-08-31", remark: "Later evidence" }, "admin");
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-05-01");
+});
+
+test("system-managed start date remains stable while metadata can change", async () => {
   const f = fixture(); f.payments.push(payment("p1", "50000")); await f.sync("p1");
   await assert.rejects(() => updateSubscriptionRecord(f.tx, "member-a", "sub-a",
-    { referenceNo: "R2", displayName: null, startDate: "2026-02-01", activeFlag: true, remark: null }, "admin"), /Start date cannot change/);
+    { referenceNo: "R2", displayName: null, startDate: "2026-02-01", remark: null }, "admin"), /Start date cannot change/);
   await updateSubscriptionRecord(f.tx, "member-a", "sub-a",
-    { referenceNo: "R2", displayName: null, startDate: null, activeFlag: true, remark: null }, "admin");
+    { referenceNo: "R2", displayName: null, remark: null }, "admin");
   assert.equal(f.subs[0].referenceNo, "R2");
 });
 
@@ -364,12 +478,12 @@ test("Dashboard Time-Based counts exclude unfunded validUntil NULL", async () =>
     { activeSubscriptions: 1, expiringSoon: 1, expiredSubscriptions: 1 });
 });
 
-test("zero-carry subscription may deactivate after full payment without losing history", async () => {
+test("zero-carry subscription status is still system-managed after full payment", async () => {
   const f = fixture(); f.payments.push(payment("p1", "50000")); await f.sync("p1");
   const before = f.entries.length;
-  await updateSubscriptionRecord(f.tx, "member-a", "sub-a",
-    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin");
-  assert.equal(f.subs[0].activeFlag, false);
+  await assert.rejects(() => updateSubscriptionRecord(f.tx, "member-a", "sub-a",
+    { referenceNo: null, displayName: null, startDate: null, activeFlag: false, remark: null }, "admin"), /Status Program/);
+  assert.equal(f.subs[0].activeFlag, true);
   assert.equal(f.balance(), "0.00");
   assert.equal(f.entries.length, before);
 });
@@ -386,6 +500,7 @@ test("Opening void records reason, preserves history and rebuilds payment covera
   assert.equal(opening.voidReason, "Wrong legacy interval");
   assert.equal(oldCoverage.coverageStatus, "VOIDED");
   assert.equal(f.activeCoverage()[0].coverageFrom.toISOString().slice(0, 10), "2026-02-01");
+  assert.equal(f.subs[0].startDate?.toISOString().slice(0, 10), "2026-02-01");
   assert.equal(f.subs[0].validUntil?.toISOString().slice(0, 10), "2026-02-28");
   assert.equal(f.active().filter(row => row.entryType === "PAYMENT").length, 1);
   assert.equal(f.balance(), "0.00");

@@ -3,7 +3,7 @@ import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib
 import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
-import { manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../time-based/member-time-based.service.js";
+import { lockActiveTimeBasedProgram, manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, resolveEffectiveStartDate, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../time-based/member-time-based.service.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { campaignDisplayStatus } from "../../configuration/event-code/event-campaign.service.js";
@@ -11,6 +11,12 @@ import { deriveAge } from "./member-data.domain.js";
 import { aggregateCategories, centsToDecimal } from "./member-donation.domain.js";
 import * as repository from "./member-data.repository.js";
 import type { IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput, OpeningCoverageInput, SubscriptionCreateInput, SubscriptionUpdateInput } from "./member-data.schema.js";
+
+type SubscriptionMetadataUpdateInput = SubscriptionUpdateInput & {
+  /** Legacy callers may still provide lifecycle fields; normal API validation rejects them. */
+  startDate?: string | null;
+  activeFlag?: boolean;
+};
 
 const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 function listMember(row: Awaited<ReturnType<typeof repository.workspaceRecords>>["rows"][number]) {
@@ -140,11 +146,21 @@ export async function getSponsorship(memberId: string) {
   const result = await repository.loadMemberSponsorship(memberId);
   if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
   const ledgerTotals = summarizeSubscriptionLedger(result.balances);
+  const paymentDatesBySubscription = new Map<string, Date[]>();
+  for (const row of result.paymentDates) {
+    const dates = paymentDatesBySubscription.get(row.subscriptionId) ?? [];
+    dates.push(row.effectiveDate);
+    paymentDatesBySubscription.set(row.subscriptionId, dates);
+  }
   const subscriptions = result.subscriptions.map(item => {
     const totals = ledgerTotals.get(item.id) ?? { principal: 0n, consumed: 0n, transferIn: 0n, transferOut: 0n, carry: 0n };
+    const resolvedStartDate = resolveEffectiveStartDate({
+      coverageFrom: item.coverages.filter(coverage => coverage.coverageStatus === "ACTIVE").map(coverage => coverage.coverageFrom),
+      paymentDates: paymentDatesBySubscription.get(item.id) ?? []
+    }) ?? item.startDate;
     return {
       subscriptionId: item.id, event: { eventCodeId: item.eventCode.id, code: item.eventCode.code, eventName: item.eventCode.eventName, eventType: item.eventCode.eventType }, referenceNo: item.referenceNo,
-      displayName: item.displayName, startDate: dateOnly(item.startDate), validUntil: dateOnly(item.validUntil), activeFlag: item.activeFlag, remark: item.remark,
+      displayName: item.displayName, startDate: dateOnly(resolvedStartDate), validUntil: dateOnly(item.validUntil), activeFlag: item.activeFlag, remark: item.remark,
       status: sponsorshipStatus(item),
       timeRule: item.eventCode.timeRule ? { unitAmount: item.eventCode.timeRule.unitAmount.toString(), durationMonths: item.eventCode.timeRule.durationMonths } : null,
       carryBalance: centsToDecimal(totals.carry),
@@ -185,28 +201,30 @@ export async function createSubscription(memberId: string, input: SubscriptionCr
     if (!member?.activeFlag) throw new HttpError(400, "Active Member is required for a sponsorship subscription");
     if (!event || event.eventType !== "TIME_BASED" || !event.activeFlag) throw new HttpError(400, "Choose an active TIME_BASED Event Code");
     if (!event.timeRule?.activeFlag) throw new HttpError(400, "Configure an active Time Rule before adding a subscription");
+    if (input.activeFlag) {
+      await lockActiveTimeBasedProgram(tx, memberId, input.eventCodeId);
+      const active = await tx.memberEventSubscription.findMany({ where: { memberId, eventCodeId: input.eventCodeId, activeFlag: true }, select: { id: true } });
+      if (active.length) throw new HttpError(409, "An active TIME_BASED program already exists for this Member and Event Code");
+    }
     await tx.memberEventSubscription.create({ data: { memberId, eventCodeId: input.eventCodeId, referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, createdById: userId, updatedById: userId } });
     if (input.activeFlag) await synchronizePendingTimeBasedForMember(tx, memberId, userId, input.eventCodeId);
   });
   return getSponsorship(memberId);
 }
 
-export async function updateSubscriptionRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, input: SubscriptionUpdateInput, userId: string) {
+export async function updateSubscriptionRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, input: SubscriptionMetadataUpdateInput, userId: string) {
     const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { memberId: true, eventCodeId: true, startDate: true, activeFlag: true } });
     if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
-    if (sub.activeFlag && !input.activeFlag) {
-      const balance = await tx.memberEventBalanceLedger.aggregate({ where: { subscriptionId, entryStatus: "ACTIVE" }, _sum: { amountDelta: true } });
-      assertSubscriptionCanDeactivate(balance._sum.amountDelta?.toString() ?? "0");
-    }
-    if (dateOnly(sub.startDate) !== input.startDate) {
+    if (input.activeFlag !== undefined)
+      throw new HttpError(409, "Status Program dikelola otomatis oleh sistem.");
+    if (input.startDate !== undefined && dateOnly(sub.startDate) !== input.startDate) {
       const [coverage, payment] = await Promise.all([
         tx.memberEventCoverage.findFirst({ where: { subscriptionId }, select: { id: true } }),
         tx.memberEventBalanceLedger.findFirst({ where: { subscriptionId, entryType: "PAYMENT" }, select: { id: true } })
       ]);
       if (coverage || payment) throw new HttpError(409, "Start date cannot change after coverage or payment history exists. Other subscription details can still be edited.");
     }
-    await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, updatedById: userId } });
-    if (sub.activeFlag !== input.activeFlag) await synchronizePendingTimeBasedForMember(tx, memberId, userId, sub.eventCodeId);
+    await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { referenceNo: input.referenceNo, displayName: input.displayName, remark: input.remark, updatedById: userId } });
 }
 
 export async function updateSubscription(memberId: string, subscriptionId: string, input: SubscriptionUpdateInput, userId: string) {

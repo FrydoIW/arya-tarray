@@ -170,6 +170,10 @@ export function loadMemberSponsorship(memberId: string) {
       by: ["subscriptionId", "entryType"], where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryStatus: "ACTIVE" },
       _sum: { amountDelta: true }
     }) : [];
+    const paymentDates = subscriptions.length ? await tx.memberEventBalanceLedger.findMany({
+      where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryType: "PAYMENT", entryStatus: "ACTIVE" },
+      select: { subscriptionId: true, effectiveDate: true }
+    }) : [];
     const contributionEventIds = [...new Set(contributionGroups.flatMap(row => row.eventCodeId ? [row.eventCodeId] : []))];
     const contributionCampaignIds = [...new Set(contributionGroups.flatMap(row => row.eventCampaignId ? [row.eventCampaignId] : []))];
     const [contributionEvents, contributionCampaigns] = await Promise.all([
@@ -178,7 +182,7 @@ export function loadMemberSponsorship(memberId: string) {
       contributionCampaignIds.length ? tx.eventCampaign.findMany({ where: { id: { in: contributionCampaignIds } },
         select: { id: true, eventCodeId: true, campaignName: true, activeFlag: true, startDate: true, endDate: true } }) : []
     ]);
-    return { member, subscriptions, pending, eventOptions, balances, contributionGroups, contributionEvents, contributionCampaigns };
+    return { member, subscriptions, paymentDates, pending, eventOptions, balances, contributionGroups, contributionEvents, contributionCampaigns };
   });
 }
 

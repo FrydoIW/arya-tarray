@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import type { CarryTransferHistory, CarryTransferInput, CarryTransferResult, CarryTransferReverseInput, CarryTransferReversalResult, DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityMetadataInput, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace, OpeningCoverageInput, SponsorshipWorkspace, SubscriptionInput } from "../types";
+import type { CarryTransferHistory, CarryTransferInput, CarryTransferResult, CarryTransferReverseInput, CarryTransferReversalResult, DonationQuery, DonationWorkspace, IdentityHistoryWorkspace, IdentityMetadataInput, IdentityOption, MemberDataQuery, MemberDetail, MemberOption, MemberProfileInput, MemberRow, MemberWorkspace, OpeningCoverageInput, SponsorshipWorkspace, SubscriptionInput, SubscriptionMetadataInput } from "../types";
 
 const base = "/member/data";
 export function getWorkspace(query: MemberDataQuery, signal?: AbortSignal) {
@@ -17,7 +17,7 @@ export function getDonations(memberId: string, query: DonationQuery, signal?: Ab
 }
 export function getSponsorship(memberId: string, signal?: AbortSignal) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/sponsorship`, { signal }); }
 export function createSubscription(memberId: string, input: SubscriptionInput) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions`, { method: "POST", body: JSON.stringify(input) }); }
-export function updateSubscription(memberId: string, subscriptionId: string, input: Omit<SubscriptionInput, "eventCodeId">) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}`, { method: "PATCH", body: JSON.stringify(input) }); }
+export function updateSubscription(memberId: string, subscriptionId: string, input: SubscriptionMetadataInput) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}`, { method: "PATCH", body: JSON.stringify(input) }); }
 export function allocateSponsorshipPayment(memberId: string, subscriptionId: string, transactionId: string) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/allocate`, { method: "POST", body: JSON.stringify({ transactionId }) }); }
 export function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/opening-coverage`, { method: "POST", body: JSON.stringify(input) }); }
 export function voidOpeningCoverage(memberId: string, subscriptionId: string, coverageId: string, reason: string) { return apiFetch<SponsorshipWorkspace>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(subscriptionId)}/opening-coverage/${encodeURIComponent(coverageId)}/void`, { method: "POST", body: JSON.stringify({ reason }) }); }

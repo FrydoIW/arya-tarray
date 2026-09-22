@@ -130,8 +130,6 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
   }
 
   const editedSubscription = data?.subscriptions.find(item => item.subscriptionId === subscriptionId);
-  const startLocked = mode === "edit" && Boolean(editedSubscription?.coverage.length || editedSubscription?.balanceHistory.length);
-  const carryLocked = mode === "edit" && editedSubscription?.activeFlag && Number(editedSubscription.carryBalance) !== 0;
   function openCreateSubscription(eventCodeId?: string) {
     const eligibleEvent = eventCodeId && data?.eventOptions.some(event => event.eventCodeId === eventCodeId)
       ? eventCodeId : data?.eventOptions[0]?.eventCodeId ?? "";
@@ -150,11 +148,11 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
 
       <section className={styles.section} aria-labelledby="pa-programs-title">
         <div className={styles.sectionHead}>
-          <div><h2 id="pa-programs-title">TIME_BASED Programs</h2><p>Coverage, carry, dan catatan historis per subscription.</p></div>
-          {canMutate && data.subscriptions.length ? <Button size="sm" icon={<CalendarPlus size={14} />} disabled={loading || busy || !memberActive || !data.eventOptions.length} onClick={() => openCreateSubscription()}>Add Subscription</Button> : null}
+          <div><h2 id="pa-programs-title">TIME BASED</h2><p>Coverage, carry, dan riwayat alokasi program donatur.</p></div>
+          {canMutate && data.subscriptions.length ? <Button size="sm" icon={<CalendarPlus size={14} />} disabled={loading || busy || !memberActive || !data.eventOptions.length} onClick={() => openCreateSubscription()}>Tambah Program</Button> : null}
         </div>
-        {canMutate && !memberActive ? <p className={styles.notice}>Aktifkan donatur sebelum menambah subscription.</p>
-          : canMutate && !loading && data.eventOptions.length === 0 ? <p className={styles.notice}>Siapkan Event Code TIME_BASED aktif beserta Time Rule terlebih dahulu.</p> : null}
+        {canMutate && !memberActive ? <p className={styles.notice}>Aktifkan donatur sebelum menambah program.</p>
+          : canMutate && !loading && data.eventOptions.length === 0 ? <p className={styles.notice}>Siapkan Event Code TIME BASED aktif beserta Time Rule terlebih dahulu.</p> : null}
         {data.subscriptions.length ? <div className={styles.programGrid}>
           {data.subscriptions.map(sub => <TimeBasedProgramCard key={sub.subscriptionId} subscription={sub} canMutate={canMutate}
             memberActive={memberActive} busy={busy} destinations={transferDestinationCandidates(data.subscriptions, sub.subscriptionId)}
@@ -164,13 +162,13 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
             onVoidOpening={(subSource, targetCoverageId) => { setSubscriptionId(subSource.subscriptionId); setCoverageId(targetCoverageId); setVoidReason(""); setFormError(""); setMode("void-opening"); }} />)}
         </div> : <div className={styles.compactEmpty}>
           <span aria-hidden="true"><CalendarPlus size={18} /></span>
-          <div><strong>Belum ada subscription TIME_BASED</strong><p>Tambahkan subscription untuk mulai mengelola coverage dan carry.</p></div>
-          {canMutate ? <Button size="sm" disabled={loading || busy || !memberActive || !data.eventOptions.length} onClick={() => openCreateSubscription()}>Add Subscription</Button> : null}
+          <div><strong>Belum ada program TIME BASED</strong><p>Tambahkan program untuk mulai mengelola coverage dan carry.</p></div>
+          {canMutate ? <Button size="sm" disabled={loading || busy || !memberActive || !data.eventOptions.length} onClick={() => openCreateSubscription()}>Tambah Program</Button> : null}
         </div>}
       </section>
 
       {data.pendingPayments.length ? <section className={styles.section} aria-labelledby="pa-attention-title">
-        <div className={styles.sectionHead}><div><h2 id="pa-attention-title">Perlu Tindakan</h2><p>Pembayaran TIME_BASED yang belum dapat diselesaikan alokasinya.</p></div></div>
+        <div className={styles.sectionHead}><div><h2 id="pa-attention-title">Perlu Tindakan</h2><p>Pembayaran TIME BASED yang belum dapat diselesaikan alokasinya.</p></div></div>
         <div className={styles.attentionList}>
           {data.pendingPayments.map(payment => {
             const compatible = data.subscriptions.filter(sub => sub.activeFlag && sub.event.eventCodeId === payment.event?.eventCodeId);
@@ -182,11 +180,11 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
                   <span>{formatDate(payment.transactionDate)}</span><span>Principal {formatMoney(payment.principalAmount)}</span>
                   <span>{payment.unitAmount && payment.durationMonths ? `${formatMoney(payment.unitAmount)} / unit · ${payment.durationMonths} bulan` : "Rule perlu perhatian"}</span>
                 </div>
-                <p>{compatible.length === 0 ? "Belum ada subscription aktif yang kompatibel." : payment.reason}</p>
+                <p>{compatible.length === 0 ? "Belum ada program aktif yang kompatibel." : payment.reason}</p>
               </div>
               <div className={styles.attentionAction}>
               {canMutate && compatible.length === 0 ? <Button size="sm" disabled={busy || !memberActive || !data.eventOptions.some(event => event.eventCodeId === payment.event?.eventCodeId)}
-                onClick={() => openCreateSubscription(payment.event?.eventCodeId)}>Create Subscription</Button> : null}
+                onClick={() => openCreateSubscription(payment.event?.eventCodeId)}>Buat Program</Button> : null}
               {canMutate && compatible.length === 1 ? <Button size="sm" variant="secondary" disabled={busy || payment.grantedUnits === null}
                 onClick={() => void performSponsorship(() => api.retryAllocation(memberId, compatible[0].subscriptionId, payment.transactionId), "Retry Allocation berhasil.", setError)}>Retry Allocation</Button> : null}
               {canMutate && compatible.length > 1 ? <select aria-label="Allocate payment" defaultValue="" disabled={busy || payment.grantedUnits === null}
@@ -212,31 +210,35 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
     <ReverseTransferModal open={Boolean(reverseTarget)} transfer={reverseTarget} busy={busy} error={reverseError}
       onClose={() => !busy && setReverseTarget(null)} onSubmit={submitReverse} />
 
-    <Modal open={mode === "create" || mode === "edit"} title={mode === "create" ? "Tambah subscription program" : "Edit subscription program"}
-      description="Metadata subscription saja; coverage tetap berada di ledger audit." onClose={() => !busy && setMode(null)}>
-      <form className={styles.modalBody} onSubmit={event => {
+    <Modal open={mode === "create" || mode === "edit"} title={mode === "create" ? "Tambah Program" : "Edit Program"}
+      description={mode === "create" ? "Tambahkan metadata program. Coverage dan ledger tersimpan sebagai audit." : "Perbarui metadata program. Riwayat coverage dan ledger tetap tersimpan sebagai audit."} onClose={() => !busy && setMode(null)}>
+      <form className={`${styles.modalBody} ${styles.subscriptionModalBody}`} onSubmit={event => {
         event.preventDefault();
-        if (mode === "create") void performSponsorship(() => api.createSubscription(memberId, form), "Subscription ditambahkan.", setFormError);
+        if (mode === "create") void performSponsorship(() => api.createSubscription(memberId, form), "Program ditambahkan.", setFormError);
         else void performSponsorship(() => api.updateSubscription(memberId, subscriptionId, { referenceNo: form.referenceNo, displayName: form.displayName,
-          startDate: form.startDate, activeFlag: form.activeFlag, remark: form.remark }), "Subscription diperbarui.", setFormError);
+          remark: form.remark }), "Program diperbarui.", setFormError);
       }}>
         {formError ? <div className="ui-alert ui-alert-error" role="alert">{formError}</div> : null}
-        <div className={styles.formGrid}>
-          <label className={styles.field}>Program<select value={form.eventCodeId} disabled={busy || mode === "edit"} onChange={event => setForm(value => ({ ...value, eventCodeId: event.target.value }))}>
+        <label className={`${styles.field} ${mode === "edit" ? styles.readOnlyField : ""}`}>Program<select value={form.eventCodeId} disabled={busy || mode === "edit"} onChange={event => setForm(value => ({ ...value, eventCodeId: event.target.value }))}>
             {mode === "edit" && editedSubscription && !data?.eventOptions.some(item => item.eventCodeId === editedSubscription.event.eventCodeId)
               ? <option value={editedSubscription.event.eventCodeId}>{editedSubscription.event.code} · {editedSubscription.event.eventName} (historis)</option> : null}
             {data?.eventOptions.map(item => <option key={item.eventCodeId} value={item.eventCodeId}>{item.code} · {item.eventName}</option>)}
-          </select></label>
-          <label className={styles.field}>Reference<input value={form.referenceNo ?? ""} maxLength={100} onChange={event => setForm(value => ({ ...value, referenceNo: event.target.value || null }))} /></label>
-          <label className={styles.field}>Display name<input value={form.displayName ?? ""} maxLength={200} onChange={event => setForm(value => ({ ...value, displayName: event.target.value || null }))} /></label>
-          <label className={styles.field}>Start date<input type="date" value={form.startDate ?? ""} disabled={busy || startLocked} onChange={event => setForm(value => ({ ...value, startDate: event.target.value || null }))} />
-            {startLocked ? <small>Start date terkunci setelah ada coverage atau riwayat pembayaran.</small> : null}</label>
+          </select>{mode === "edit" ? <small className={styles.helper}>Program tidak dapat diubah setelah dibuat.</small> : null}</label>
+        <div className={styles.subscriptionFormGrid}>
+          <label className={styles.field}>Nama Tampilan<input value={form.displayName ?? ""} maxLength={200} onChange={event => setForm(value => ({ ...value, displayName: event.target.value || null }))} /></label>
+          <label className={styles.field}>Referensi<input value={form.referenceNo ?? ""} maxLength={100} onChange={event => setForm(value => ({ ...value, referenceNo: event.target.value || null }))} /></label>
+          <label className={styles.field}>Tanggal Mulai
+            {mode === "edit" ? <span className={styles.readOnlyValue}>{form.startDate ? formatDate(form.startDate) : "—"}</span>
+              : <input type="date" value={form.startDate ?? ""} disabled={busy} onChange={event => setForm(value => ({ ...value, startDate: event.target.value || null }))} />}
+            {mode === "edit" ? <small className={styles.helper}>Dikelola otomatis dari riwayat pembayaran dan coverage aktif.</small> : null}</label>
+          <div className={styles.statusField}>
+            <span className={styles.statusLabel}>Status Program</span>
+            <div className={styles.statusReadOnly}><span className={styles.statusPill} data-status={editedSubscription?.status ?? "ACTIVE"}>{editedSubscription?.activeFlag ? "Aktif" : "Nonaktif"}</span><small>Dikelola otomatis oleh sistem.</small></div>
+          </div>
         </div>
-        <label className={styles.toggle}><input type="checkbox" checked={form.activeFlag} disabled={busy || Boolean(carryLocked)} onChange={event => setForm(value => ({ ...value, activeFlag: event.target.checked }))} /><span>Subscription aktif</span></label>
-        {carryLocked ? <small>Selesaikan carry {formatMoney(editedSubscription!.carryBalance)} sebelum menonaktifkan.</small> : null}
-        <label className={styles.field}>Remark<textarea rows={3} value={form.remark ?? ""} onChange={event => setForm(value => ({ ...value, remark: event.target.value || null }))} /></label>
-        <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Cancel</Button>
-          <Button type="submit" disabled={busy || !form.eventCodeId}>{busy ? "Menyimpan…" : "Save"}</Button></div>
+        <label className={styles.field}>Catatan<textarea rows={3} maxLength={1000} value={form.remark ?? ""} onChange={event => setForm(value => ({ ...value, remark: event.target.value || null }))} /></label>
+        <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Batal</Button>
+          <Button type="submit" disabled={busy || !form.eventCodeId}>{busy ? "Menyimpan…" : "Simpan"}</Button></div>
       </form>
     </Modal>
 

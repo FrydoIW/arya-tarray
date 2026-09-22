@@ -8,7 +8,7 @@ import { centsToDecimal } from "../data/member-donation.domain.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
 import { allocatePostingSequences, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
 import { loadMemberCarryTransfers } from "./member-carry-transfer.repository.js";
-import { addCalendarMonthsInclusive, refreshSubscriptionValidity } from "./member-time-based.service.js";
+import { addCalendarMonthsInclusive, refreshSubscriptionStartDate, refreshSubscriptionValidity } from "./member-time-based.service.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -305,6 +305,7 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
   }
 
   await refreshSubscriptionValidity(tx, destination.id);
+  await refreshSubscriptionStartDate(tx, destination.id);
 
   return {
     replayed: false,
@@ -449,6 +450,7 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
     data: { status: "REVERSED", reversedAt, reversedById: input.userId },
     select: transferHeaderSelect
   });
+  await refreshSubscriptionStartDate(tx, restoringDestination.id);
 
   return {
     replayed: false,

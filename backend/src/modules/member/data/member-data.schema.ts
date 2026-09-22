@@ -74,8 +74,8 @@ export const subscriptionCreateSchema = z.object({
 });
 export const subscriptionUpdateSchema = z.object({
   referenceNo: z.string().trim().max(100).nullable(), displayName: z.string().trim().max(200).nullable(),
-  startDate: sponsorshipDate, activeFlag: z.boolean(), remark: z.string().trim().max(1000).nullable()
-});
+  remark: z.string().trim().max(1000).nullable()
+}).strict();
 export const subscriptionParamsSchema = z.object({ memberId: z.string().uuid(), subscriptionId: z.string().uuid() });
 export const allocationSchema = z.object({ transactionId: z.string().uuid() });
 export const openingCoverageParamsSchema = subscriptionParamsSchema.extend({ coverageId: z.string().uuid() });

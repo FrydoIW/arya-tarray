@@ -36,7 +36,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
   return <article className={styles.programCard}>
     <header className={styles.programHead}>
       <div>
-        <span className={styles.programKicker}><CalendarDays size={14} aria-hidden="true" /> TIME_BASED PROGRAM</span>
+        <span className={styles.programKicker}><CalendarDays size={14} aria-hidden="true" /> TIME BASED PROGRAM</span>
         <strong>{sub.event.code} · {sub.event.eventName}</strong>
         <small>{sub.referenceNo || sub.displayName || "Tanpa referensi"}{sub.displayName && sub.referenceNo ? ` · ${sub.displayName}` : ""}</small>
       </div>
@@ -56,7 +56,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
         <span className={styles.subsectionTitle}>Informasi program</span>
         <div className={styles.factList}>
           <div><span>Current rule</span><strong>{sub.timeRule ? `${formatMoney(sub.timeRule.unitAmount)} / ${sub.timeRule.durationMonths} bln` : "Tidak ada rule aktif"}</strong></div>
-          <div><span>Mulai</span><strong>{sub.startDate ? formatDate(sub.startDate) : "Tanggal pembayaran"}</strong></div>
+          <div><span>Mulai</span><strong>{sub.startDate ? formatDate(sub.startDate) : "—"}</strong></div>
           <div><span>Berlaku sampai</span><strong>{sub.validUntil ? formatDate(sub.validUntil) : "—"}</strong></div>
         </div>
       </section>

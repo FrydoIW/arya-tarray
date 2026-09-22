@@ -58,7 +58,7 @@ export function TransferCarryModal({ open, source, destinations, busy, error, on
     await onSubmit({ destinationSubscriptionId: destination.subscriptionId, amount: normalized, reason: reason.trim(), idempotencyKey: commandRef.current.key });
   }
 
-  return <Modal open={open} title="Transfer Carry" description="Memindahkan saldo carry yang belum terpakai antar program TIME_BASED milik donatur yang sama."
+  return <Modal open={open} title="Transfer Carry" description="Memindahkan saldo carry yang belum terpakai antar program TIME BASED milik donatur yang sama."
     onClose={() => !busy && onClose()}>
     <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); void submit(); }}>
       <div className={styles.sourceBox}>

@@ -56,7 +56,7 @@ export function TransferHistoryPanel({ history, loading, error, canMutate, busy,
     {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
     <DataTable rows={history?.rows ?? []} columns={columns} rowKey={row => row.transferId} loading={loading}
       minWidth="1420px" loadingText="Memuat riwayat transfer…"
-      emptyState={{ title: "Belum ada transfer carry", description: "Transfer carry antar program TIME_BASED akan muncul di sini." }}
+      emptyState={{ title: "Belum ada transfer carry", description: "Transfer carry antar program TIME BASED akan muncul di sini." }}
       pagination={{ mode: "server", page: history?.pagination.page ?? 1, pageSize: history?.pagination.pageSize ?? 10,
         total: history?.pagination.total ?? 0, pageSizeOptions: [10, 25, 50],
         onPageChange, onPageSizeChange }} />

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { summarizeContributions, summarizeSubscriptionLedger } from "../src/modules/member/data/member-data.service.js";
+import { subscriptionUpdateSchema } from "../src/modules/member/data/member-data.schema.js";
 import { canOfferTransfer, centsToMoney, coverageSourceLabel, createIdempotencyKey, dependencyConflictHint, ledgerEntryKind, ledgerEntryLabel, moneyToCents, subscriptionLabel, transferDestinationCandidates, transferEstimate, validateTransferAmount } from "../../frontend/src/features/member/data/program-allocation.utils.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -142,10 +143,13 @@ test("idempotency keys are unique per command and coverage/subscription labels s
 
 test("STANDARD and CAMPAIGN contributions render without TIME_BASED entitlement controls", () => {
   const overview = read("../../frontend/src/features/member/data/components/ContributionOverview.tsx");
-  assert.match(overview, /No entitlement program/);
-  assert.match(overview, /row\.eventType === "CAMPAIGN"/);
-  assert.match(overview, /row\.campaign\.campaignName/);
-  assert.match(overview, /row\.campaign\.displayStatus/);
+  const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
+  assert.match(overview, /TYPE_ORDER/);
+  assert.match(overview, /Time-based/);
+  assert.match(screen, /<CampaignSection/);
+  assert.match(screen, /row\.eventType === "CAMPAIGN"/);
+  assert.match(screen, /row\.campaign\?\.campaignName/);
+  assert.match(screen, /row\.campaign\.displayStatus/);
   assert.doesNotMatch(overview, /Transfer Carry/);
   assert.doesNotMatch(overview, /carryBalance/);
   assert.doesNotMatch(overview, /coverage/);
@@ -154,16 +158,31 @@ test("STANDARD and CAMPAIGN contributions render without TIME_BASED entitlement 
 
 test("TIME_BASED cards separate principal, consumed, carry, current rule, and historical rate", () => {
   const card = read("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx");
-  assert.match(card, /Current Rule/);
-  assert.match(card, /Applied Historical Rate/);
+  assert.match(card, /Current rule/);
+  assert.match(card, /Historical rate follows the ledger below/);
   assert.match(card, /Principal/);
   assert.match(card, /Consumed/);
-  assert.match(card, /Carry/);
-  assert.match(card, /Unused TIME_BASED program balance/);
+  assert.match(card, /Carry tersedia/);
   assert.match(card, /canOfferTransfer\(/);
   assert.match(card, /ledgerEntryLabel\(entry\.type\)/);
   assert.match(card, /Balance history · Latest 24 entries/);
   assert.match(card, /Transfer Carry/);
+});
+
+test("TIME BASED program metadata keeps status and start date system-managed", () => {
+  const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
+  const card = read("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx");
+  assert.match(screen, /<h2 id="pa-programs-title">TIME BASED<\/h2>/);
+  assert.match(screen, /riwayat alokasi program donatur/);
+  assert.match(screen, /statusReadOnly/);
+  assert.match(screen, /formatDate\(form\.startDate\)/);
+  assert.doesNotMatch(screen, /type="checkbox"/);
+  assert.doesNotMatch(screen, /activeFlag: form\.activeFlag/);
+  assert.doesNotMatch(screen, /Mengikuti tanggal pembayaran pertama/);
+  assert.match(card, /sub\.startDate \? formatDate\(sub\.startDate\) : "—"/);
+  assert.equal(subscriptionUpdateSchema.safeParse({ referenceNo: null, displayName: null, remark: null }).success, true);
+  assert.equal(subscriptionUpdateSchema.safeParse({ referenceNo: null, displayName: null, remark: null, activeFlag: false }).success, false);
+  assert.equal(subscriptionUpdateSchema.safeParse({ referenceNo: null, displayName: null, remark: null, startDate: "2026-09-01" }).success, false);
 });
 
 test("Transfer Carry modal validates amount, reason, destination, previews the estimate, and states the invariants", () => {
