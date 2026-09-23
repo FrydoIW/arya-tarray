@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarPlus, CircleAlert, Gift } from "lucide-react";
+import { ArrowLeftRight, CalendarPlus, CircleAlert, Gift } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate, formatMoney } from "@/lib/format";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import * as api from "../api/member-data.api";
-import { moneyToCents, transferDestinationCandidates } from "../program-allocation.utils";
-import type { CarryTransferHistory, CarryTransferInput, CarryTransferRecord, CarryTransferReverseInput, OpeningCoverageInput, SponsorshipSubscription, SponsorshipWorkspace, SubscriptionInput } from "../types";
+import { canOfferCampaignTransfer, moneyToCents, transferDestinationCandidates } from "../program-allocation.utils";
+import type { CarryTransferHistory, CarryTransferInput, CarryTransferRecord, CarryTransferReverseInput, OpeningCoverageInput, SponsorshipSubscription, SponsorshipWorkspace, SubscriptionInput, TransferModalSource } from "../types";
 import { ContributionOverview } from "./ContributionOverview";
 import { ReverseTransferModal } from "./ReverseTransferModal";
 import { TimeBasedProgramCard } from "./TimeBasedProgramCard";
@@ -34,29 +34,45 @@ function campaignStatusLabel(status: string) {
   return status;
 }
 
-function CampaignSection({ campaigns, participationOptions, canMutate, onAddCampaign }: {
+function CampaignSection({ campaigns, canMutate, timeBasedDestinationCount, availableCampaigns, onAddCampaign, onCarry }: {
   campaigns: SponsorshipWorkspace["campaigns"];
-  participationOptions: SponsorshipWorkspace["campaignParticipationOptions"];
   canMutate: boolean;
+  timeBasedDestinationCount: number;
+  availableCampaigns: SponsorshipWorkspace["availableCampaigns"];
   onAddCampaign: () => void;
+  onCarry: (campaign: SponsorshipWorkspace["campaigns"][number]) => void;
 }) {
-  const canAddCampaign = canMutate;
   return <section className={styles.section} aria-labelledby="pa-campaign-title">
     <div className={styles.sectionHead}>
-      <div><h2 id="pa-campaign-title">CAMPAIGN</h2><p>Partisipasi Campaign dan alokasi carry donatur.</p></div>
-      {campaigns.length && canAddCampaign ? <Button size="sm" icon={<Gift size={14} />} onClick={onAddCampaign}>Tambah Campaign</Button> : null}
+      <div><h2 id="pa-campaign-title">CAMPAIGN</h2><p>Partisipasi Campaign, target, dan carry donatur.</p></div>
+      {campaigns.length && canMutate ? <Button size="sm" icon={<Gift size={14} />} onClick={onAddCampaign}>Tambah Campaign</Button> : null}
     </div>
     {campaigns.length ? <div className={styles.campaignGrid}>
-      {campaigns.map(row => <article key={row.campaignId} className={styles.campaignCard}>
-        <span className={styles.campaignIcon} aria-hidden="true"><Gift size={17} /></span>
-        <div>
-          <header><div><strong>{row.eventCode} · {row.eventName}</strong><small>{row.campaignName}</small></div>
-            <em data-status={row.status}>{campaignStatusLabel(row.status)}</em>
-          </header>
-          <footer><span>Direct contribution {formatMoney(row.directContribution)} · Allocated from Carry {formatMoney(row.allocatedFromCarry)}</span><strong className={styles.money}>Total allocation {formatMoney(row.totalAllocation)}</strong></footer>
-        </div>
-      </article>)}
-    </div> : <div className={styles.compactEmpty}><span aria-hidden="true"><Gift size={18} /></span><div><strong>Belum ada Campaign</strong><p>Tambahkan Campaign jika donatur ingin berpartisipasi.</p></div>{canAddCampaign ? <Button size="sm" onClick={onAddCampaign}>Tambah Campaign</Button> : null}</div>}
+      {campaigns.map(row => {
+        const otherCampaignDestinations = availableCampaigns.filter(campaign => campaign.campaignId !== row.campaignId).length;
+        // Campaign carry is a real donor wallet source; the action is explicit per card.
+        const canCarry = canOfferCampaignTransfer({ canMutate, memberActive: true, carry: row.carryBalance,
+          destinationCount: timeBasedDestinationCount + otherCampaignDestinations });
+        return <article key={row.campaignId} className={styles.campaignCard}>
+          <span className={styles.campaignIcon} aria-hidden="true"><Gift size={17} /></span>
+          <div>
+            <header><div><strong>{row.eventCode} · {row.eventName}</strong><small>{row.campaignName}</small></div>
+              <em data-status={row.status}>{campaignStatusLabel(row.status)}</em>
+            </header>
+            <div className={styles.campaignFigures}>
+              <span>Kontribusi langsung <b className={styles.money}>{formatMoney(row.directContribution)}</b></span>
+              <span>Terpakai untuk Campaign <b className={styles.money}>{formatMoney(row.appliedToCampaign)}</b></span>
+              <span>Alokasi dari Carry <b className={styles.money}>{formatMoney(row.allocatedFromCarry)}</b></span>
+              <span>Saldo Carry <b className={styles.money}>{formatMoney(row.carryBalance)}</b></span>
+              {row.targetAmount ? <span>Target <b className={styles.money}>{formatMoney(row.targetApplied)} / {formatMoney(row.targetAmount)}</b></span> : null}
+            </div>
+            {canCarry ? <div className={styles.cardActions}>
+              <Button size="sm" icon={<ArrowLeftRight size={14} />} onClick={() => onCarry(row)}>Alokasikan Carry</Button>
+            </div> : null}
+          </div>
+        </article>;
+      })}
+    </div> : <div className={styles.compactEmpty}><span aria-hidden="true"><Gift size={18} /></span><div><strong>Belum ada Campaign</strong><p>Tambahkan Campaign jika donatur ingin berpartisipasi.</p></div>{canMutate ? <Button size="sm" onClick={onAddCampaign}>Tambah Campaign</Button> : null}</div>}
   </section>;
 }
 
@@ -71,7 +87,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
   const [historyError, setHistoryError] = useState("");
   const [historyPage, setHistoryPage] = useState(1);
   const [historyPageSize, setHistoryPageSize] = useState(10);
-  const [transferSource, setTransferSource] = useState<SponsorshipSubscription | null>(null);
+  const [transferSource, setTransferSource] = useState<TransferModalSource | null>(null);
   const [transferError, setTransferError] = useState("");
   const [reverseTarget, setReverseTarget] = useState<CarryTransferRecord | null>(null);
   const [reverseError, setReverseError] = useState("");
@@ -137,8 +153,10 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
 
   async function submitTransfer(input: CarryTransferInput) {
     if (!transferSource) return false;
-    return performTransferCommand(() => api.createCarryTransfer(memberId, transferSource.subscriptionId, input),
-      "Perintah transfer carry sudah diproses. Data disegarkan.", setTransferError);
+    const action = transferSource.type === "CAMPAIGN"
+      ? () => api.createCampaignWalletTransfer(memberId, transferSource.campaign.campaignId, input)
+      : () => api.createCarryTransfer(memberId, transferSource.subscription.subscriptionId, input);
+    return performTransferCommand(action, "Perintah alokasi carry sudah diproses. Data disegarkan.", setTransferError);
   }
   async function submitReverse(input: CarryTransferReverseInput) {
     if (!reverseTarget) return false;
@@ -196,7 +214,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         {data.subscriptions.length ? <div className={styles.programGrid}>
           {data.subscriptions.map(sub => <TimeBasedProgramCard key={sub.subscriptionId} subscription={sub} canMutate={canMutate}
             memberActive={memberActive} busy={busy} hasCampaignDestinations={Boolean(data.availableCampaigns.length)} destinations={transferDestinationCandidates(data.subscriptions, sub.subscriptionId)}
-            onTransfer={subSource => { setTransferError(""); setTransferSource(subSource); }}
+            onTransfer={subSource => { setTransferError(""); setTransferSource({ type: "TIME_BASED", subscription: subSource }); }}
             onEdit={editSubscription}
             onOpeningCoverage={subSource => { setSubscriptionId(subSource.subscriptionId); setOpening({ coverageFrom: "", coverageTo: "", remark: "" }); setFormError(""); setMode("opening"); }}
             onVoidOpening={(subSource, targetCoverageId) => { setSubscriptionId(subSource.subscriptionId); setCoverageId(targetCoverageId); setVoidReason(""); setFormError(""); setMode("void-opening"); }} />)}
@@ -236,8 +254,11 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         </div>
       </section> : null}
 
-      <CampaignSection campaigns={data.campaigns} participationOptions={data.campaignParticipationOptions}
-        canMutate={canMutate && memberActive} onAddCampaign={openCampaignParticipation} />
+      <CampaignSection campaigns={data.campaigns} canMutate={canMutate && memberActive}
+        timeBasedDestinationCount={transferDestinationCandidates(data.subscriptions, "").length}
+        availableCampaigns={data.availableCampaigns}
+        onAddCampaign={openCampaignParticipation}
+        onCarry={campaign => { setTransferError(""); setTransferSource({ type: "CAMPAIGN", campaign }); }} />
 
       <TransferHistoryPanel history={history} loading={historyLoading} error={historyError} canMutate={canMutate} busy={busy}
         onReverse={row => { setReverseError(""); setReverseTarget(row); }}
@@ -246,8 +267,11 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
     </> : null}
 
     <TransferCarryModal open={Boolean(transferSource)} source={transferSource} busy={busy} error={transferError}
-      destinations={transferSource && data ? transferDestinationCandidates(data.subscriptions, transferSource.subscriptionId) : []}
-      campaigns={data?.availableCampaigns ?? []}
+      destinations={data ? transferDestinationCandidates(data.subscriptions,
+        transferSource?.type === "TIME_BASED" ? transferSource.subscription.subscriptionId : "") : []}
+      campaigns={transferSource?.type === "CAMPAIGN"
+        ? (data?.availableCampaigns ?? []).filter(campaign => campaign.campaignId !== transferSource.campaign.campaignId)
+        : data?.availableCampaigns ?? []}
       onClose={() => !busy && setTransferSource(null)} onSubmit={submitTransfer} />
     <ReverseTransferModal open={Boolean(reverseTarget)} transfer={reverseTarget} busy={busy} error={reverseError}
       onClose={() => !busy && setReverseTarget(null)} onSubmit={submitReverse} />

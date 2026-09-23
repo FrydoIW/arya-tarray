@@ -71,6 +71,21 @@ export function sponsorshipStatus(item: { activeFlag: boolean }) {
   return item.activeFlag ? "ACTIVE" : "INACTIVE";
 }
 
+/** A program's current rule is only usable when both the Event Code and its rule are active. */
+export function eligibleSubscriptionTimeRule(eventCode: { activeFlag: boolean;
+  timeRule: { unitAmount: { toString(): string }; durationMonths: number; activeFlag: boolean } | null }) {
+  return eventCode.activeFlag && eventCode.timeRule?.activeFlag
+    ? { unitAmount: eventCode.timeRule.unitAmount.toString(), durationMonths: eventCode.timeRule.durationMonths }
+    : null;
+}
+
+/** "Tambah Program" may only offer programs this donor does not already own. */
+export function filterEligibleTimeBasedEventOptions<T extends { id: string }>(
+  eventOptions: T[], subscriptions: Array<{ event: { eventCodeId: string } }>
+) {
+  return eventOptions.filter(event => !subscriptions.some(subscription => subscription.event.eventCodeId === event.id));
+}
+
 export function initialTimeBasedSubscriptionState() {
   return { activeFlag: true as const, startDate: null };
 }
@@ -219,12 +234,17 @@ export function summarizeCampaignAllocations(input: {
   }
   for (const row of byId.values()) row.status = campaignStatus(row.campaignId, row.status);
   return [...byId.values()].map(row => {
-    const target = input.targetState?.get(row.campaignId) ?? { target: row.targetAmount, applied: row.directApplied + row.allocatedFromCarry + row.legacyApplied };
-    const totalAllocation = row.directApplied + row.allocatedFromCarry + row.legacyApplied;
+    const appliedToCampaign = row.directApplied + row.allocatedFromCarry + row.legacyApplied;
+    const target = input.targetState?.get(row.campaignId) ?? { target: row.targetAmount, applied: appliedToCampaign };
+    // Direct contribution remains the donor's full donation evidence. "Total allocation"
+    // keeps its long-standing card meaning (direct contribution + carry allocated), while
+    // targetApplied/appliedToCampaign expose the portion actually consumed by the target.
+    const totalAllocation = row.directContribution + row.allocatedFromCarry;
     return { ...row, targetAmount: target.target === null ? null : centsToDecimal(target.target), targetApplied: centsToDecimal(target.applied),
       targetRemaining: target.target === null ? null : centsToDecimal(target.target > target.applied ? target.target - target.applied : 0n),
       directContribution: centsToDecimal(row.directContribution), allocatedFromCarry: centsToDecimal(row.allocatedFromCarry),
-      carryBalance: centsToDecimal(row.carryBalance), totalAllocation: centsToDecimal(totalAllocation), appliedToCampaign: centsToDecimal(totalAllocation) };
+      carryBalance: centsToDecimal(row.carryBalance), totalAllocation: centsToDecimal(totalAllocation),
+      appliedToCampaign: centsToDecimal(appliedToCampaign), directApplied: centsToDecimal(row.directApplied) };
   }).sort((a, b) => a.eventCode.localeCompare(b.eventCode) || a.campaignName.localeCompare(b.campaignName));
 }
 
@@ -261,8 +281,7 @@ export async function getSponsorship(memberId: string) {
       displayName: item.displayName, startDate: dateOnly(resolvedStartDate), validUntil: dateOnly(item.validUntil), activeFlag: item.activeFlag, remark: item.remark,
       status: sponsorshipStatus(item),
       eventActiveFlag: item.eventCode.activeFlag,
-      timeRule: item.eventCode.activeFlag && item.eventCode.timeRule?.activeFlag
-        ? { unitAmount: item.eventCode.timeRule.unitAmount.toString(), durationMonths: item.eventCode.timeRule.durationMonths } : null,
+      timeRule: eligibleSubscriptionTimeRule(item.eventCode),
       carryBalance: centsToDecimal(totals.carry),
       principal: centsToDecimal(totals.principal),
       consumed: centsToDecimal(totals.consumed),
@@ -318,7 +337,7 @@ export async function getSponsorship(memberId: string) {
     campaignParticipationOptions: campaignParticipationOptions.map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName,
       eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName,
       startDate: dateOnly(campaign.startDate), endDate: dateOnly(campaign.endDate) })), contributionTotals,
-    eventOptions: result.eventOptions.filter(event => !subscriptions.some(subscription => subscription.event.eventCodeId === event.id))
+    eventOptions: filterEligibleTimeBasedEventOptions(result.eventOptions, subscriptions)
       .map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })),
     pendingPayments: result.pending.map(payment => pendingTimeBasedPaymentPreview(payment, subscriptions)) };
 }

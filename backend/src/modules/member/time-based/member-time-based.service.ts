@@ -244,7 +244,7 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
   const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId },
     select: { id: true, memberId: true, eventCodeId: true, startDate: true, validUntil: true } });
   if (!sub) return;
-  const [ledger, coverage, openings, activeLedger] = await Promise.all([
+  const [ledger, coverage, openings, activeLedger, transferIns] = await Promise.all([
     tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryType: "PAYMENT", ...activeEntry },
       select: { bankTransactionId: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, effectiveDate: true } }),
     tx.memberEventCoverage.findMany({ where: { subscriptionId, coverageSource: "TRANSACTION", ...activeCoverage },
@@ -253,7 +253,9 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
     tx.memberEventCoverage.findMany({ where: { subscriptionId, coverageSource: "OPENING", ...activeCoverage },
       select: { coverageFrom: true, coverageTo: true }, orderBy: [{ coverageTo: "desc" }, { id: "desc" }] }),
     tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryType: "COVERAGE_USE", ...activeEntry },
-      select: { bankTransactionId: true, amountDelta: true, coverage: { select: { coverageSource: true } } } })
+      select: { bankTransactionId: true, amountDelta: true, coverage: { select: { coverageSource: true } } } }),
+    tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryType: "TRANSFER_IN", ...activeEntry,
+      carryTransfer: { is: { status: "ACTIVE" } } }, select: { effectiveDate: true } })
   ]);
   // Transfer-generated allocation always owns a TRANSFER-source coverage. Transfer commands
   // never allow that state to survive without an ACTIVE transfer, so this is a defensive
@@ -267,7 +269,8 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
   const surviving = payments.filter(row => eligible(row, sub)).sort((a, b) =>
     a.transactionDate!.getTime() - b.transactionDate!.getTime() || a.id.localeCompare(b.id));
   const snapshots = await Promise.all(surviving.map(row => snapshot(tx, row, addition?.payment.id === row.id && addition.recalculate)));
-  const effectiveStartDate = resolveEffectiveStartDate({ coverageFrom: openings.map(row => row.coverageFrom), paymentDates: surviving.map(row => row.transactionDate!) });
+  const effectiveStartDate = resolveEffectiveStartDate({ coverageFrom: openings.map(row => row.coverageFrom),
+    paymentDates: surviving.map(row => row.transactionDate!), transferInDates: transferIns.map(row => row.effectiveDate) });
   let balance = 0n;
   let lastCoverageTo = openings[0]?.coverageTo ?? null;
   const plan = surviving.map((payment, index) => {

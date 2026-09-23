@@ -67,14 +67,29 @@ type DestinationCandidate = {
   subscriptionId: string; activeFlag: boolean;
   timeRule: { unitAmount: string; durationMonths: number } | null;
   event?: { eventType?: string } | null;
+  eventActiveFlag?: boolean;
 };
 
-/** Same-Member data only. Source, non-TIME_BASED programs, inactive programs, and missing rules are excluded. */
+/** Same-Member data only. Source, non-TIME_BASED, inactive programs, inactive Events, and missing rules are excluded. */
 export function transferDestinationCandidates<T extends DestinationCandidate>(subscriptions: T[], sourceSubscriptionId: string) {
   return subscriptions.filter(subscription => subscription.subscriptionId !== sourceSubscriptionId
     && subscription.activeFlag
+    && subscription.eventActiveFlag !== false
     && subscription.event?.eventType === "TIME_BASED"
     && Boolean(subscription.timeRule));
+}
+
+/**
+ * Voluntary wallet transfers into TIME BASED must form at least one unit at the
+ * destination. Returns the remaining top-up needed, or null when satisfied.
+ */
+export function destinationUnitRequirement(amount: string, destinationCarry: string, unitAmount: string): string | null {
+  const transfer = moneyToCents(amount);
+  const carry = moneyToCents(destinationCarry);
+  const unit = moneyToCents(unitAmount);
+  if (transfer === null || carry === null || unit === null || unit <= BigInt(0)) return null;
+  const available = carry + transfer;
+  return available >= unit ? null : centsToMoney(unit - available);
 }
 
 export function canOfferTransfer(input: { canMutate: boolean; memberActive: boolean; activeFlag: boolean; carry: string; destinationCount: number }) {
@@ -82,6 +97,11 @@ export function canOfferTransfer(input: { canMutate: boolean; memberActive: bool
   if (input.destinationCount < 1) return false;
   const carry = moneyToCents(input.carry);
   return carry !== null && carry > BigInt(0);
+}
+
+/** Campaign wallet sources have no lifecycle flag of their own; the donor must be mutable and the wallet positive. */
+export function canOfferCampaignTransfer(input: { canMutate: boolean; memberActive: boolean; carry: string; destinationCount: number }) {
+  return canOfferTransfer({ ...input, activeFlag: true });
 }
 
 /** Domain hint for unwind-first conflicts. Backend message stays the primary signal. */

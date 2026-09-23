@@ -6,7 +6,7 @@ import { prisma } from "../../../lib/prisma.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { centsToDecimal } from "../data/member-donation.domain.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
-import { allocatePostingSequences, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
+import { allocatePostingSequences, assertNoUnresolvedDependencies, laterSubscriptionDependencies, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
 import { loadMemberCarryTransfers } from "./member-carry-transfer.repository.js";
 import { addCalendarMonthsInclusive, refreshSubscriptionStartDate, refreshSubscriptionValidity } from "./member-time-based.service.js";
 import { campaignTransferAmountIsAllowed, campaignWalletCents, requireCampaignCarryDestination } from "../campaign/member-campaign-wallet.service.js";
@@ -295,6 +295,8 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
     throw new HttpError(400, "Choose exactly one source subscription or Campaign wallet.");
   if (Boolean(input.destinationSubscriptionId) === Boolean(input.destinationCampaignId))
     throw new HttpError(400, "Choose exactly one destination subscription or Campaign.");
+  if (input.sourceCampaignId && input.destinationCampaignId && input.sourceCampaignId === input.destinationCampaignId)
+    throw new HttpError(400, "Campaign wallet source and destination must differ.");
   const requestHash = carryTransferRequestHash({ kind: "CARRY_TRANSFER", memberId: input.memberId,
     sourceSubscriptionId: input.sourceSubscriptionId, sourceCampaignId: input.sourceCampaignId,
     destinationSubscriptionId: input.destinationSubscriptionId,
@@ -479,12 +481,14 @@ async function replayReversal(tx: Tx, existing: TransferHeader,
     throw new HttpError(409, "This idempotency key was already used for a different Carry Transfer reversal request.");
   const original = await tx.memberEventCarryTransfer.findUnique({ where: { id: command.transferId }, select: transferHeaderSelect });
   if (!original || original.memberId !== command.memberId) throw new HttpError(404, "Carry Transfer was not found for this Member.");
-  const restoring = original.sourceCampaignId
-    ? await campaignWalletSnapshot(tx, original.memberId, original.sourceCampaignId, existing.id)
-    : original.sourceSubscriptionId
-      ? { type: "TIME_BASED" as const, subscriptionId: original.sourceSubscriptionId,
-        ...(await walletSnapshot(tx, original.sourceSubscriptionId, existing.id)) }
-      : null;
+  let restoring: CarryTransferReversalResult["restoringDestination"] | null;
+  if (original.sourceCampaignId) {
+    restoring = await campaignWalletSnapshot(tx, original.memberId, original.sourceCampaignId, existing.id);
+  } else if (original.sourceSubscriptionId) {
+    const snapshot = await walletSnapshot(tx, original.sourceSubscriptionId, existing.id);
+    restoring = { type: "TIME_BASED", subscriptionId: original.sourceSubscriptionId,
+      carryBefore: snapshot.carryBefore, carryAfter: snapshot.carryAfter };
+  } else restoring = null;
   if (!restoring) throw new HttpError(409, "Carry Transfer source evidence is incomplete.");
   let reversingSource: CarryTransferReversalResult["reversingSource"];
   if (original.destinationCampaignId) {
@@ -526,6 +530,7 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
   const alreadyReversed = await tx.memberEventCarryTransfer.findFirst({ where: { reversalOfTransferId: original.id }, select: { id: true } });
   if (alreadyReversed) throw new HttpError(409, "This Carry Transfer already has a reversal.");
   if (original.status !== "ACTIVE") throw new HttpError(409, "Only an active Carry Transfer can be reversed.");
+  if (original.reversalOfTransferId) throw new HttpError(409, "A reversal transfer cannot be reversed again.");
 
   // A Campaign source is a donor wallet, not Campaign target capacity. Reversal
   // compensates that wallet and (where relevant) the destination application.
@@ -536,8 +541,10 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
       const allocation = await tx.memberEventCampaignAllocation.findUnique({ where: { carryTransferId: original.id },
         select: { id: true, eventCampaignId: true, allocationStatus: true } });
       if (!allocation || allocation.allocationStatus !== "ACTIVE") throw new HttpError(409, "Campaign allocation evidence is incomplete.");
+      // Reversal headers describe the reverse movement: original destination becomes
+      // the reversing source and the original source becomes the restoring destination.
       const reversal = await tx.memberEventCarryTransfer.create({ data: {
-        memberId: input.memberId, sourceCampaignId: original.sourceCampaignId, destinationCampaignId: original.destinationCampaignId,
+        memberId: input.memberId, sourceCampaignId: original.destinationCampaignId, destinationCampaignId: original.sourceCampaignId,
         amount: centsToDecimal(amountCents), effectiveDate, reason, status: "ACTIVE", idempotencyKey, requestHash,
         reversalOfTransferId: original.id, destinationUnitAmountSnapshot: "0.00", destinationDurationMonthsSnapshot: 0, createdById: input.userId
       }, select: transferHeaderSelect });
@@ -559,13 +566,11 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
     const inbound = await tx.memberEventBalanceLedger.findFirst({ where: { carryTransferId: original.id, entryType: "TRANSFER_IN", entryStatus: "ACTIVE" },
       select: { subscriptionId: true, postingSequence: true } });
     if (!inbound) throw new HttpError(409, "Carry Transfer ledger evidence is incomplete.");
-    const laterNegative = await tx.memberEventBalanceLedger.findFirst({ where: { subscriptionId: inbound.subscriptionId, entryStatus: "ACTIVE",
-      postingSequence: { gt: inbound.postingSequence }, amountDelta: { lt: 0 } }, select: { id: true } });
-    if (laterNegative) throw new HttpError(409, "Later balance actions depend on this Carry Transfer. Unwind the downstream transfers first.");
+    assertNoUnresolvedDependencies(await laterSubscriptionDependencies(tx, inbound.subscriptionId, inbound.postingSequence));
     if (amountCents > await activeCarryCents(tx, inbound.subscriptionId))
       throw new HttpError(409, "The subscription that received the transfer no longer has enough carry to reverse it.");
     const reversal = await tx.memberEventCarryTransfer.create({ data: {
-      memberId: input.memberId, sourceCampaignId: original.sourceCampaignId, destinationSubscriptionId: original.destinationSubscriptionId,
+      memberId: input.memberId, sourceSubscriptionId: original.destinationSubscriptionId, destinationCampaignId: original.sourceCampaignId,
       amount: centsToDecimal(amountCents), effectiveDate, reason, status: "ACTIVE", idempotencyKey, requestHash,
       reversalOfTransferId: original.id, destinationUnitAmountSnapshot: original.destinationUnitAmountSnapshot,
       destinationDurationMonthsSnapshot: original.destinationDurationMonthsSnapshot, createdById: input.userId
@@ -594,7 +599,7 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
     let reversal;
     try {
       reversal = await tx.memberEventCarryTransfer.create({ data: {
-        memberId: input.memberId, sourceSubscriptionId: original.sourceSubscriptionId, destinationCampaignId: original.destinationCampaignId,
+        memberId: input.memberId, sourceCampaignId: original.destinationCampaignId, destinationSubscriptionId: original.sourceSubscriptionId,
         amount: centsToDecimal(amountCents), effectiveDate, reason, status: "ACTIVE", idempotencyKey, requestHash,
         reversalOfTransferId: original.id, destinationUnitAmountSnapshot: "0.00", destinationDurationMonthsSnapshot: 0, createdById: input.userId
       }, select: transferHeaderSelect });
@@ -613,6 +618,7 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
       effectiveDate, reason, createdById: input.userId, reversalOfAllocationId: allocation.id
     } });
     const reversedOriginal = await tx.memberEventCarryTransfer.update({ where: { id: original.id }, data: { status: "REVERSED", reversedAt: new Date(), reversedById: input.userId }, select: transferHeaderSelect });
+    await refreshSubscriptionStartDate(tx, original.sourceSubscriptionId);
     const restored = await walletSnapshot(tx, original.sourceSubscriptionId, reversal.id);
     return { original: toTransferView(reversedOriginal), reversal: toTransferView(reversal),
       restoringDestination: { type: "TIME_BASED", subscriptionId: original.sourceSubscriptionId,
@@ -636,21 +642,7 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
     select: { id: true, subscriptionId: true, postingSequence: true }
   });
   if (!inbound) throw new HttpError(409, "Carry Transfer ledger evidence is incomplete.");
-  const laterNegatives = await tx.memberEventBalanceLedger.findMany({
-    where: { subscriptionId: inbound.subscriptionId, entryStatus: "ACTIVE", postingSequence: { gt: inbound.postingSequence }, amountDelta: { lt: 0 } },
-    orderBy: { postingSequence: "asc" },
-    select: { id: true, entryType: true, carryTransferId: true, postingSequence: true }
-  });
-  if (laterNegatives.length) {
-    const downstreamIds = [...new Set(laterNegatives.flatMap(row => row.carryTransferId ? [row.carryTransferId] : []))];
-    const downstream = downstreamIds.length
-      ? await tx.memberEventCarryTransfer.findMany({ where: { id: { in: downstreamIds } }, select: { id: true, status: true } })
-      : [];
-    const statusById = new Map(downstream.map(row => [row.id, row.status]));
-    const unresolved = laterNegatives.some(row => row.entryType !== "TRANSFER_OUT" || !row.carryTransferId || statusById.get(row.carryTransferId) !== "REVERSED");
-    if (unresolved)
-      throw new HttpError(409, "Later balance actions depend on this Carry Transfer. Unwind the downstream transfers first.");
-  }
+  assertNoUnresolvedDependencies(await laterSubscriptionDependencies(tx, inbound.subscriptionId, inbound.postingSequence));
 
   const reversingCarryBefore = await activeCarryCents(tx, reversingSource.id);
   if (amountCents > reversingCarryBefore)
@@ -704,7 +696,12 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
     data: { status: "REVERSED", reversedAt, reversedById: input.userId },
     select: transferHeaderSelect
   });
-  await refreshSubscriptionStartDate(tx, restoringDestination.id);
+  // Both wallets changed economically: the restored destination gained carry and the
+  // reversing source lost it, so both system-managed start dates are re-resolved.
+  await Promise.all([
+    refreshSubscriptionStartDate(tx, restoringDestination.id),
+    refreshSubscriptionStartDate(tx, reversingSource.id)
+  ]);
 
   const [restored, reversed] = await Promise.all([
     walletSnapshot(tx, restoringDestination.id, reversal.id), walletSnapshot(tx, reversingSource.id, reversal.id)
@@ -770,6 +767,7 @@ export function mapCarryTransferRow(row: CarryTransferReadRow) {
       eventCodeId: row.destinationCampaign.eventCode.id, eventCode: row.destinationCampaign.eventCode.code, eventName: row.destinationCampaign.eventCode.eventName } : null,
     reversalOf: row.reversalOf ? { transferId: row.reversalOf.id, status: row.reversalOf.status, effectiveDate: dateOnly(row.reversalOf.effectiveDate) } : null,
     reversal: row.reversal ? { transferId: row.reversal.id, status: row.reversal.status, effectiveDate: dateOnly(row.reversal.effectiveDate) } : null,
-    isReversible: row.isReversible
+    isReversible: row.isReversible,
+    reversalBlockedReason: row.reversalBlockedReason
   };
 }

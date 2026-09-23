@@ -22,6 +22,7 @@ import "./time-based.test.js";
 import "./time-based-flow.test.js";
 import "./carry-transfer-foundation.test.js";
 import "./carry-transfer.test.js";
+import "./campaign-wallet.test.js";
 import "./program-allocation.test.js";
 import "./time-rule-bulk.test.js";
 import "./statement-upload-campaign.test.js";

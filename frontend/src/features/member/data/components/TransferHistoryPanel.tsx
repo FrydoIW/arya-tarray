@@ -11,10 +11,6 @@ import styles from "../styles/program-allocation.module.css";
 
 const shortId = (value: string) => `${value.slice(0, 8)}…`;
 
-export function isReversible(row: CarryTransferRecord) {
-  return row.status === "ACTIVE" && !row.reversal && !row.reversalOf;
-}
-
 type Props = {
   history: CarryTransferHistory | null;
   loading: boolean;
@@ -30,8 +26,10 @@ type Props = {
 export function TransferHistoryPanel({ history, loading, error, canMutate, busy, onReverse, onPageChange, onPageSizeChange, onRefresh }: Props) {
   const columns: DataTableColumn<CarryTransferRecord>[] = [
     { key: "effectiveDate", header: "Tanggal", minWidth: "110px", render: row => formatDate(row.effectiveDate) },
-    { key: "source", header: "Program Sumber", minWidth: "210px", render: row => row.source
-      ? <div className={styles.name}><strong>{row.source.eventCode} · {row.source.eventName}</strong><small>{subscriptionLabel(row.source)}</small></div> : "—" },
+    { key: "source", header: "Program Sumber", minWidth: "210px", render: row => row.sourceType === "CAMPAIGN" && row.sourceCampaign
+      ? <div className={styles.name}><strong>{row.sourceCampaign.eventCode} · {row.sourceCampaign.eventName}</strong><small>{row.sourceCampaign.campaignName} · Campaign wallet</small></div>
+      : row.source
+        ? <div className={styles.name}><strong>{row.source.eventCode} · {row.source.eventName}</strong><small>{subscriptionLabel(row.source)}</small></div> : "—" },
     { key: "destination", header: "Program Tujuan", minWidth: "210px", render: row => row.destination
       ? <div className={styles.name}><strong>{row.destination.eventCode} · {row.destination.eventName}</strong><small>{subscriptionLabel(row.destination)}</small></div>
       : row.destinationCampaign ? <div className={styles.name}><strong>{row.destinationCampaign.eventCode} · {row.destinationCampaign.eventName}</strong><small>{row.destinationCampaign.campaignName} · Campaign</small></div> : "—" },
@@ -47,7 +45,8 @@ export function TransferHistoryPanel({ history, loading, error, canMutate, busy,
     { key: "createdAt", header: "Dibuat", minWidth: "150px", render: row => formatDateTime(row.createdAt) }
   ];
   if (canMutate) columns.push({ key: "actions", header: "Aksi", sticky: "right", minWidth: "160px", render: row =>
-    isReversible(row) ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => onReverse(row)}>Reverse Transfer</Button> : null });
+    // The backend read model owns the decision; status alone is never enough.
+    row.isReversible ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => onReverse(row)}>Reverse Transfer</Button> : null });
 
   return <section className={styles.section} aria-labelledby="pa-transfer-history-title">
     <div className={styles.sectionHead}>

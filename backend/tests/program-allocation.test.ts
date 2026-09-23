@@ -4,7 +4,7 @@ import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { campaignAcceptsNewParticipation, createCampaignParticipationRecord, eligibleCampaignParticipationOptions, initialTimeBasedSubscriptionState, sponsorshipStatus, summarizeCampaignAllocations, summarizeContributions, summarizeSubscriptionLedger } from "../src/modules/member/data/member-data.service.js";
 import { campaignParticipationCreateSchema, subscriptionCreateSchema, subscriptionUpdateSchema } from "../src/modules/member/data/member-data.schema.js";
-import { canOfferTransfer, centsToMoney, coverageSourceLabel, createIdempotencyKey, dependencyConflictHint, ledgerEntryKind, ledgerEntryLabel, moneyToCents, subscriptionLabel, transferDestinationCandidates, transferEstimate, validateTransferAmount } from "../../frontend/src/features/member/data/program-allocation.utils.js";
+import { canOfferCampaignTransfer, canOfferTransfer, centsToMoney, coverageSourceLabel, createIdempotencyKey, dependencyConflictHint, destinationUnitRequirement, ledgerEntryKind, ledgerEntryLabel, moneyToCents, subscriptionLabel, transferDestinationCandidates, transferEstimate, validateTransferAmount } from "../../frontend/src/features/member/data/program-allocation.utils.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -160,15 +160,13 @@ test("Campaign participation options exclude existing cards and require a curren
   assert.equal(campaignAcceptsNewParticipation({ activeFlag: true, startDate: null, endDate: null }, false, "2026-09-19"), false);
 });
 
-test("Campaign section adds participation while carry allocation stays on TIME BASED source cards", () => {
+test("Campaign section is participation-first and only its own card can source carry", () => {
   const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
   const section = screen.slice(screen.indexOf("function CampaignSection"), screen.indexOf("export function ProgramAllocation"));
   const timeBasedCard = read("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx");
   const api = read("../../frontend/src/features/member/data/api/member-data.api.ts");
   assert.match(section, /Belum ada Campaign/);
   assert.match(section, /Tambah Campaign/);
-  assert.match(section, /const canAddCampaign = canMutate/);
-  assert.doesNotMatch(section, /Alokasikan Carry/);
   assert.match(screen, /api\.createCampaignParticipation\(memberId/);
   assert.match(screen, /campaignParticipationOptions/);
   assert.match(screen, /Belum ada Campaign aktif yang dapat diikuti saat ini/);
@@ -176,6 +174,15 @@ test("Campaign section adds participation while carry allocation stays on TIME B
   assert.match(screen, /tidak membuat transaksi bank atau alokasi dana/i);
   assert.match(api, /\/campaign-participations/);
   assert.match(timeBasedCard, /Alokasikan Carry/);
+  // Campaign carry is a real wallet source, but the action is explicit per card and gated.
+  assert.match(section, /Kontribusi langsung/);
+  assert.match(section, /Terpakai untuk Campaign/);
+  assert.match(section, /Alokasi dari Carry/);
+  assert.match(section, /Saldo Carry/);
+  assert.match(section, /canOfferCampaignTransfer\(/);
+  assert.match(section, /onCarry\(row\)/);
+  assert.doesNotMatch(section.slice(0, section.indexOf("campaigns.length ?")), /Alokasikan Carry/);
+  assert.match(screen, /createCampaignWalletTransfer\(memberId, transferSource\.campaign\.campaignId/);
 });
 
 test("ledger labels cover every known entry type and never mislabel unknown types as Coverage Use", () => {
@@ -215,16 +222,28 @@ test("transfer estimate pools destination carry, computes whole units, and keeps
   assert.equal(transferEstimate({ amount: "1000", destinationCarry: "0.00", unitAmount: "0.00", durationMonths: 2 }), null);
 });
 
-test("transfer destinations exclude the source, inactive programs, non-TIME_BASED programs, and programs without an active rule", () => {
+test("transfer destinations exclude the source, inactive programs, inactive Events, non-TIME_BASED programs, and programs without an active rule", () => {
   const candidates = transferDestinationCandidates([
     { subscriptionId: "source", activeFlag: true, event: { eventType: "TIME_BASED" }, timeRule: { unitAmount: "100000", durationMonths: 2 } },
     { subscriptionId: "inactive", activeFlag: false, event: { eventType: "TIME_BASED" }, timeRule: { unitAmount: "100000", durationMonths: 2 } },
     { subscriptionId: "no-rule", activeFlag: true, event: { eventType: "TIME_BASED" }, timeRule: null },
+    { subscriptionId: "inactive-event", activeFlag: true, eventActiveFlag: false, event: { eventType: "TIME_BASED" }, timeRule: { unitAmount: "100000", durationMonths: 1 } },
     { subscriptionId: "standard", activeFlag: true, event: { eventType: "STANDARD" }, timeRule: { unitAmount: "100000", durationMonths: 1 } },
     { subscriptionId: "campaign", activeFlag: true, event: { eventType: "CAMPAIGN" }, timeRule: { unitAmount: "100000", durationMonths: 1 } },
     { subscriptionId: "eligible", activeFlag: true, event: { eventType: "TIME_BASED" }, timeRule: { unitAmount: "500000", durationMonths: 1 } }
   ], "source");
   assert.deepEqual(candidates.map(row => row.subscriptionId), ["eligible"]);
+});
+
+test("wallet transfers into TIME BASED must satisfy the destination minimum unit", () => {
+  assert.equal(destinationUnitRequirement("100000.00", "0.00", "150000.00"), "50000.00");
+  assert.equal(destinationUnitRequirement("100000.00", "100000.00", "150000.00"), null);
+  assert.equal(destinationUnitRequirement("50000.00", "100000.00", "150000.00"), null);
+  assert.equal(destinationUnitRequirement("0.00", "0.00", "150000.00"), "150000.00");
+  assert.equal(destinationUnitRequirement("abc", "0.00", "150000.00"), null);
+  assert.equal(canOfferCampaignTransfer({ canMutate: true, memberActive: true, carry: "50006.00", destinationCount: 1 }), true);
+  assert.equal(canOfferCampaignTransfer({ canMutate: true, memberActive: true, carry: "0.00", destinationCount: 1 }), false);
+  assert.equal(canOfferCampaignTransfer({ canMutate: true, memberActive: true, carry: "50006.00", destinationCount: 0 }), false);
 });
 
 test("Transfer Carry is offered only for mutable, active, positive-carry programs with a destination", () => {
@@ -262,7 +281,7 @@ test("STANDARD and CAMPAIGN contributions render without TIME_BASED entitlement 
   assert.match(overview, /TYPE_ORDER/);
   assert.match(overview, /Time-based/);
   assert.match(screen, /<CampaignSection/);
-  assert.match(screen, /Partisipasi Campaign dan alokasi carry donatur/);
+  assert.match(screen, /Partisipasi Campaign, target, dan carry donatur/);
   assert.match(screen, /allocatedFromCarry/);
   assert.doesNotMatch(overview, /Transfer Carry/);
   assert.doesNotMatch(overview, /carryBalance/);
@@ -325,9 +344,9 @@ test("TIME BASED program status follows system participation state, not coverage
   assert.deepEqual(emptyFinancialState.get("manual"), { principal: 0n, consumed: 0n, transferIn: 0n, transferOut: 0n, carry: 0n });
 });
 
-test("Transfer Carry modal validates amount, reason, destination, previews the estimate, and states the invariants", () => {
+test("Transfer Carry modal requires an explicit destination and validates amount, reason, and the destination unit minimum", () => {
   const modal = read("../../frontend/src/features/member/data/components/TransferCarryModal.tsx");
-  assert.match(modal, /validateTransferAmount\(amount, source\.carryBalance\)/);
+  assert.match(modal, /validateTransferAmount\(amount, sourceCarry\)/);
   assert.match(modal, /reason\.trim\(\)\.length < 3/);
   assert.match(modal, /transferEstimate\(/);
   assert.match(modal, /This moves only unused carry\./);
@@ -337,6 +356,16 @@ test("Transfer Carry modal validates amount, reason, destination, previews the e
   assert.match(modal, /disabled=\{busy \|\| invalid\}/);
   assert.match(modal, /createIdempotencyKey\(\)/);
   assert.doesNotMatch(modal, /getSponsorship/);
+  // No implicit financial routing: destination starts unselected with a placeholder.
+  assert.match(modal, /useState\(""\)/);
+  assert.match(modal, /Pilih tujuan…/);
+  assert.match(modal, /Pilih tujuan alokasi terlebih dahulu\./);
+  assert.match(modal, /Belum ada tujuan alokasi yang valid untuk donatur ini\./);
+  assert.match(modal, /destinationUnitRequirement\(/);
+  assert.match(modal, /Source Wallet/);
+  assert.match(modal, /Campaign wallet/);
+  assert.doesNotMatch(modal, /destinations\[0\]/);
+  assert.doesNotMatch(modal, /campaigns\[0\]/);
 });
 
 test("reversal UI uses danger styling, requires a reason, and renders dependency conflicts", () => {
@@ -360,14 +389,17 @@ test("Program and Allocation refresh after idempotent transfer commands without 
   assert.match(screen, /<TransferHistoryPanel/);
 });
 
-test("transfer history panel is server-paginated and reverses only eligible forward transfers", () => {
+test("transfer history panel is server-paginated and reverses only backend-approved transfers", () => {
   const panel = read("../../frontend/src/features/member/data/components/TransferHistoryPanel.tsx");
   const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
   assert.match(panel, /mode: "server"/);
   assert.match(panel, /onPageChange/);
-  assert.match(panel, /row\.status === "ACTIVE" && !row\.reversal && !row\.reversalOf/);
+  assert.match(panel, /row\.isReversible \?/);
+  assert.match(panel, /The backend read model owns the decision/);
+  assert.doesNotMatch(panel, /row\.status === "ACTIVE"/);
   assert.match(panel, /formatMoney\(row\.amount\)/);
   assert.match(panel, /row\.createdBy/);
+  assert.match(panel, /sourceType === "CAMPAIGN" && row\.sourceCampaign/);
   assert.match(screen, /api\.getCarryTransfers\(memberId, historyPage, historyPageSize\)/);
   assert.match(screen, /onPageSizeChange/);
 });
@@ -376,6 +408,7 @@ test("carry transfer API calls use the bounded backend endpoints", () => {
   const api = read("../../frontend/src/features/member/data/api/member-data.api.ts");
   assert.match(api, /\/carry-transfers\?/);
   assert.match(api, /subscriptions\/\$\{encodeURIComponent\(sourceSubscriptionId\)\}\/carry-transfers/);
+  assert.match(api, /campaigns\/\$\{encodeURIComponent\(sourceCampaignId\)\}\/carry-transfers/);
   assert.match(api, /carry-transfers\/\$\{encodeURIComponent\(transferId\)\}\/reverse/);
   assert.match(api, /page: String\(page\)/);
   assert.match(api, /pageSize: String\(pageSize\)/);

@@ -116,6 +116,7 @@ export type CarryTransferRecord = {
   reversalOf: { transferId: string; status: string; effectiveDate: string } | null;
   reversal: { transferId: string; status: string; effectiveDate: string } | null;
   isReversible: boolean;
+  reversalBlockedReason: string | null;
 };
 export type CarryTransferHistory = {
   rows: CarryTransferRecord[];
@@ -135,9 +136,10 @@ export type CarryTransferReversalResult = {
   original: CarryTransferView; reversal: CarryTransferView;
   restoringDestination: CarryTransferWalletBalance | CarryTransferCampaignWalletBalance; reversingSource: CarryTransferWalletBalance | CarryTransferCampaignWalletBalance | CarryTransferCampaignAllocation;
 };
-export type CarryTransferSource = {
-  type: "TIME_BASED" | "CAMPAIGN"; sourceId: string; eventCode: string; eventName: string; label: string; carryBalance: string;
-};
+export type CampaignCard = SponsorshipWorkspace["campaigns"][number];
+export type TransferModalSource =
+  | { type: "TIME_BASED"; subscription: SponsorshipSubscription }
+  | { type: "CAMPAIGN"; campaign: CampaignCard };
 export type CarryTransferInput = { destinationSubscriptionId?: string; destinationCampaignId?: string; amount: string; reason: string; idempotencyKey: string };
 export type CarryTransferReverseInput = { reason: string; idempotencyKey: string };
 export type SubscriptionInput = { eventCodeId: string; referenceNo: string | null; displayName: string | null; remark: string | null };

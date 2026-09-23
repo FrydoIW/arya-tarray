@@ -9,7 +9,8 @@ export type TransferEntryType = (typeof TRANSFER_ENTRY_TYPES)[number];
 export type CarryTransferRecord = {
   id: string;
   memberId: string;
-  sourceSubscriptionId: string;
+  sourceSubscriptionId: string | null;
+  sourceCampaignId?: string | null;
   destinationSubscriptionId: string | null;
   destinationCampaignId?: string | null;
   amount: { toString(): string };
@@ -70,10 +71,13 @@ export function validateCarryTransferIntegrity(input: {
       violations.push({ code: "same_subscription_transfer", transferId: transfer.id, detail: "Source and destination subscriptions must differ." });
     if (cents(transfer.amount) <= 0n)
       violations.push({ code: "non_positive_transfer_amount", transferId: transfer.id, detail: "Transfer amount must be positive." });
-    const source = subscriptionById.get(transfer.sourceSubscriptionId);
+    const source = transfer.sourceSubscriptionId ? subscriptionById.get(transfer.sourceSubscriptionId) : null;
     const destination = transfer.destinationSubscriptionId ? subscriptionById.get(transfer.destinationSubscriptionId) : null;
-    if (!source || (transfer.destinationCampaignId ? false : !destination) || source.memberId !== transfer.memberId || (destination && destination.memberId !== transfer.memberId))
-      violations.push({ code: "transfer_member_subscription_mismatch", transferId: transfer.id, detail: "Transfer subscriptions must belong to the transfer Member." });
+    const sourceOwned = transfer.sourceCampaignId ? true : Boolean(source && source.memberId === transfer.memberId);
+    const destinationOwned = transfer.destinationCampaignId ? true : Boolean(destination && destination.memberId === transfer.memberId);
+    if (!sourceOwned || !destinationOwned
+      || (!transfer.sourceCampaignId && !source) || (!transfer.destinationCampaignId && !destination))
+      violations.push({ code: "transfer_member_subscription_mismatch", transferId: transfer.id, detail: "Transfer endpoints must belong to the transfer Member." });
     const prior = idempotency.get(transfer.idempotencyKey);
     if (prior) {
       const sameRequest = prior.requestHash === transfer.requestHash;
@@ -83,29 +87,33 @@ export function validateCarryTransferIntegrity(input: {
     const legs = (entriesByTransfer.get(transfer.id) ?? []).filter(entry => entry.entryStatus === "ACTIVE");
     const out = legs.filter(entry => entry.entryType === "TRANSFER_OUT");
     const incoming = legs.filter(entry => entry.entryType === "TRANSFER_IN");
-    const campaignDestination = Boolean(transfer.destinationCampaignId);
-    const campaignReversal = campaignDestination && Boolean(transfer.reversalOfTransferId);
-    if (campaignDestination ? (campaignReversal ? (out.length !== 0 || incoming.length !== 1) : (out.length !== 1 || incoming.length !== 0)) : (out.length !== 1 || incoming.length !== 1)) {
-      violations.push({ code: "transfer_leg_pair_invalid", transferId: transfer.id, detail: "An active transfer requires exactly one TRANSFER_OUT and one TRANSFER_IN leg." });
+    // Subscription-side legs live in the balance ledger; Campaign wallet legs live in
+    // the Campaign wallet ledger and are verified separately. A header describes the
+    // real money direction, including for reversals.
+    const expectedOut = transfer.sourceSubscriptionId ? 1 : 0;
+    const expectedIn = transfer.destinationSubscriptionId ? 1 : 0;
+    if (out.length !== expectedOut || incoming.length !== expectedIn) {
+      violations.push({ code: "transfer_leg_pair_invalid", transferId: transfer.id, detail: "An active transfer requires exactly one leg per subscription endpoint." });
     } else {
-      if ((!campaignReversal && out[0] && out[0].subscriptionId !== transfer.sourceSubscriptionId)
-        || (campaignReversal && incoming[0] && incoming[0].subscriptionId !== transfer.sourceSubscriptionId)
-        || (!campaignDestination && incoming[0].subscriptionId !== transfer.destinationSubscriptionId))
+      if ((expectedOut && out[0].subscriptionId !== transfer.sourceSubscriptionId)
+        || (expectedIn && incoming[0].subscriptionId !== transfer.destinationSubscriptionId))
         violations.push({ code: "transfer_leg_subscription_mismatch", transferId: transfer.id, detail: "Transfer legs do not match header subscriptions." });
       const expected = cents(transfer.amount);
-      if ((!campaignReversal && out[0] && cents(out[0].amountDelta) !== -expected)
-        || (campaignReversal && incoming[0] && cents(incoming[0].amountDelta) !== expected)
-        || (!campaignDestination && (cents(incoming[0].amountDelta) !== expected || cents(out[0].amountDelta) + cents(incoming[0].amountDelta) !== 0n)))
+      if ((expectedOut && cents(out[0].amountDelta) !== -expected)
+        || (expectedIn && cents(incoming[0].amountDelta) !== expected)
+        || (out[0] && incoming[0] && cents(out[0].amountDelta) + cents(incoming[0].amountDelta) !== 0n))
         violations.push({ code: "transfer_leg_amount_mismatch", transferId: transfer.id, detail: "Transfer legs must be equal, opposite, and match the header amount." });
     }
     if (transfer.reversalOfTransferId) {
       const original = transferById.get(transfer.reversalOfTransferId);
-      const campaignReversalValid = Boolean(original?.destinationCampaignId) && original?.sourceSubscriptionId === transfer.sourceSubscriptionId
-        && original?.destinationSubscriptionId === transfer.destinationSubscriptionId && original?.destinationCampaignId === transfer.destinationCampaignId;
-      const subscriptionReversalValid = !original?.destinationCampaignId && original?.sourceSubscriptionId === transfer.destinationSubscriptionId
-        && original?.destinationSubscriptionId === transfer.sourceSubscriptionId;
-      if (!original || cents(original.amount) !== cents(transfer.amount) || (!campaignReversalValid && !subscriptionReversalValid))
-        violations.push({ code: "transfer_reversal_mismatch", transferId: transfer.id, detail: "Reversal must swap subscriptions and preserve amount." });
+      // Reversal endpoints are the original endpoints swapped.
+      const swapped = Boolean(original)
+        && transfer.sourceSubscriptionId === (original!.destinationSubscriptionId ?? null)
+        && (transfer.sourceCampaignId ?? null) === (original!.destinationCampaignId ?? null)
+        && transfer.destinationSubscriptionId === (original!.sourceSubscriptionId ?? null)
+        && (transfer.destinationCampaignId ?? null) === (original!.sourceCampaignId ?? null);
+      if (!original || cents(original.amount) !== cents(transfer.amount) || !swapped)
+        violations.push({ code: "transfer_reversal_mismatch", transferId: transfer.id, detail: "Reversal must swap endpoints and preserve amount." });
     }
   }
   return violations;
@@ -186,4 +194,70 @@ export async function assertRebuildHasNoActiveTransferRelation(tx: Tx, subscript
   });
   if (liveReversal && liveReversal.reversalOf?.status !== "REVERSED")
     throw new HttpError(409, "TIME_BASED rebuild is blocked because active Carry Transfer dependencies must be unwound first.");
+}
+
+type LaterDependency = { id: string; entryType: string; carryTransferId: string | null; postingSequence: bigint; resolved: boolean };
+
+/**
+ * Later ACTIVE negative ledger rows that depend on a transfer-in posting. A later
+ * TRANSFER_OUT is resolved only when its downstream transfer is REVERSED; every other
+ * negative action stays unresolved.
+ */
+export async function laterSubscriptionDependencies(tx: Tx, subscriptionId: string, afterPostingSequence: bigint): Promise<LaterDependency[]> {
+  const laterNegatives = await tx.memberEventBalanceLedger.findMany({
+    where: { subscriptionId, entryStatus: "ACTIVE", postingSequence: { gt: afterPostingSequence }, amountDelta: { lt: 0 } },
+    orderBy: { postingSequence: "asc" },
+    select: { id: true, entryType: true, carryTransferId: true, postingSequence: true }
+  });
+  if (!laterNegatives.length) return [];
+  const downstreamIds = [...new Set(laterNegatives.flatMap(row => row.carryTransferId ? [row.carryTransferId] : []))];
+  const downstream = downstreamIds.length
+    ? await tx.memberEventCarryTransfer.findMany({ where: { id: { in: downstreamIds } }, select: { id: true, status: true } })
+    : [];
+  const statusById = new Map(downstream.map(row => [row.id, row.status]));
+  return laterNegatives.map(row => ({ ...row,
+    resolved: row.entryType === "TRANSFER_OUT" && Boolean(row.carryTransferId) && statusById.get(row.carryTransferId!) === "REVERSED" }));
+}
+
+export function assertNoUnresolvedDependencies(dependencies: Array<{ resolved: boolean }>) {
+  if (dependencies.some(row => !row.resolved))
+    throw new HttpError(409, "Later balance actions depend on this Carry Transfer. Unwind the downstream transfers first.");
+}
+
+export type TransferReversibilityInput = {
+  status: string;
+  hasReversal: boolean;
+  isReversal: boolean;
+  destinationSubscriptionId: string | null;
+  destinationCampaignId: string | null;
+  amountCents: bigint;
+  inbound: { postingSequence: bigint } | null;
+  laterNegativeEntries?: Array<{ entryType: string; carryTransferId: string | null; postingSequence: bigint }>;
+  downstreamStatusById?: Map<string, string>;
+  destinationCarryCents?: bigint | null;
+  destinationAllocationStatus?: string | null;
+};
+
+/**
+ * Single source of truth for whether reversal is actually permitted. The history read
+ * model and the reversal command must agree on this decision.
+ */
+export function resolveTransferReversibility(input: TransferReversibilityInput): { reversible: boolean; reversalBlockedReason: string | null } {
+  const blocked = (reversalBlockedReason: string) => ({ reversible: false, reversalBlockedReason });
+  if (input.status !== "ACTIVE") return blocked("Transfer is not active.");
+  if (input.hasReversal) return blocked("This Carry Transfer already has a reversal.");
+  if (input.isReversal) return blocked("A reversal transfer cannot be reversed again.");
+  if (input.destinationCampaignId) {
+    if (input.destinationAllocationStatus !== "ACTIVE") return blocked("Campaign allocation evidence is incomplete.");
+    return { reversible: true, reversalBlockedReason: null };
+  }
+  if (!input.destinationSubscriptionId) return blocked("Carry Transfer destination evidence is incomplete.");
+  if (!input.inbound) return blocked("Carry Transfer ledger evidence is incomplete.");
+  const inbound = input.inbound;
+  const unresolved = (input.laterNegativeEntries ?? []).some(row => row.postingSequence > inbound.postingSequence
+    && (row.entryType !== "TRANSFER_OUT" || !row.carryTransferId || input.downstreamStatusById?.get(row.carryTransferId) !== "REVERSED"));
+  if (unresolved) return blocked("Later balance actions depend on this Carry Transfer. Unwind the downstream transfers first.");
+  if (input.destinationCarryCents !== null && input.destinationCarryCents !== undefined && input.amountCents > input.destinationCarryCents)
+    return blocked("The subscription that received the transfer no longer has enough carry to reverse it.");
+  return { reversible: true, reversalBlockedReason: null };
 }
