@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js";
 import { assertCorrectionApprovalCampaignValid } from "../../reconciliation/correction-approval-campaign.js";
 import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-time-based.service.js";
+import { synchronizeCampaignContribution } from "../../member/campaign/member-campaign-wallet.service.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
@@ -582,6 +583,12 @@ export async function decideSignApprovalAtomic(input: {
       for (const transaction of timeBasedTransactions) {
         await synchronizeTimeBasedTransaction(tx, transaction.id, input.userId, { recalculate: changedTimeBasedTransactionIds.has(transaction.id) });
       }
+      const campaignTransactions = await tx.bankTransaction.findMany({
+        where: { statementUploadId: current.statementUploadId, status: "FINALIZED",
+          eventCode: { is: { eventType: "CAMPAIGN" } } },
+        select: { id: true }
+      });
+      for (const transaction of campaignTransactions) await synchronizeCampaignContribution(tx, transaction.id, input.userId);
     }
 
     await tx.reconciliationApprovalHistory.create({

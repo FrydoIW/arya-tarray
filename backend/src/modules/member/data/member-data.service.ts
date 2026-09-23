@@ -154,10 +154,13 @@ export function summarizeCampaignAllocations(input: {
   contributions: ReturnType<typeof summarizeContributions>;
   participations?: Array<{ eventCampaignId: string }>;
   allocations: Array<{ id: string; eventCampaignId: string; amountDelta: { toString(): string }; allocationType: string; allocationStatus: string; effectiveDate: Date; reason: string;
-    eventCampaign: { id: string; campaignName: string; eventCodeId: string; activeFlag: boolean; startDate: Date | null; endDate: Date | null;
+    eventCampaign: { id: string; campaignName: string; eventCodeId: string; targetAmount: { toString(): string } | null; activeFlag: boolean; startDate: Date | null; endDate: Date | null;
       eventCode: { code: string; eventName: string; eventType: string; activeFlag: boolean } } }>;
-  campaignMasters: Array<{ id: string; campaignName: string; eventCodeId: string; activeFlag: boolean; startDate: Date | null; endDate: Date | null;
+  campaignMasters: Array<{ id: string; campaignName: string; eventCodeId: string; targetAmount: { toString(): string } | null; activeFlag: boolean; startDate: Date | null; endDate: Date | null;
     eventCode: { code: string; eventName: string; eventType: string; activeFlag: boolean } }>;
+  walletEntries?: Array<{ eventCampaignId: string; amountDelta: { toString(): string }; entryStatus: string }>;
+  legacyContributionGroups?: Array<{ eventCampaignId: string | null; _sum: { originalAmount: { toString(): string } | null } }>;
+  targetState?: Map<string, { target: bigint | null; applied: bigint }>;
   today?: string;
 }) {
   const masterById = new Map(input.campaignMasters.map(campaign => [campaign.id, campaign]));
@@ -165,40 +168,64 @@ export function summarizeCampaignAllocations(input: {
     const master = masterById.get(id);
     return master ? campaignDisplayStatus({ ...master, activeFlag: master.activeFlag && master.eventCode.activeFlag }, input.today) : fallback;
   };
-  const byId = new Map<string, { campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string; status: string; directContribution: bigint; allocatedFromCarry: bigint; allocationHistory: Array<{ allocationId: string; amountDelta: string; allocationType: string; allocationStatus: string; effectiveDate: string; reason: string }> }>();
+  type CampaignMaster = (typeof input.campaignMasters)[number];
+  type Card = { campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string; status: string;
+    targetAmount: bigint | null; directContribution: bigint; directApplied: bigint; allocatedFromCarry: bigint; legacyApplied: bigint; carryBalance: bigint;
+    allocationHistory: Array<{ allocationId: string; amountDelta: string; allocationType: string; allocationStatus: string; effectiveDate: string; reason: string }> };
+  const makeCard = (campaign: CampaignMaster, status: string): Card => ({ campaignId: campaign.id, campaignName: campaign.campaignName,
+    eventCodeId: campaign.eventCodeId, eventCode: campaign.eventCode.code, eventName: campaign.eventCode.eventName, status,
+    targetAmount: campaign.targetAmount ? decimalStringToCents(campaign.targetAmount.toString()) : null,
+    directContribution: 0n, directApplied: 0n, allocatedFromCarry: 0n, legacyApplied: 0n, carryBalance: 0n, allocationHistory: [] });
+  const byId = new Map<string, Card>();
+  const ensure = (campaignId: string, fallback: string, known?: CampaignMaster) => {
+    const campaign = known ?? masterById.get(campaignId);
+    if (!campaign) return null;
+    const current = byId.get(campaignId) ?? makeCard(campaign, campaignStatus(campaignId, fallback));
+    byId.set(campaignId, current);
+    return current;
+  };
   for (const participation of input.participations ?? []) {
     const campaign = masterById.get(participation.eventCampaignId);
     if (!campaign) continue;
-    byId.set(participation.eventCampaignId, {
-      campaignId: campaign.id, campaignName: campaign.campaignName, eventCodeId: campaign.eventCodeId,
-      eventCode: campaign.eventCode.code, eventName: campaign.eventCode.eventName,
-      status: campaignStatus(campaign.id, "CLOSED"), directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: []
-    });
+    ensure(participation.eventCampaignId, "CLOSED", campaign);
   }
   for (const row of input.contributions) {
     if (row.eventType !== "CAMPAIGN" || !row.campaign) continue;
     const master = masterById.get(row.campaign.campaignId);
-    const current = byId.get(row.campaign.campaignId) ?? { campaignId: row.campaign.campaignId,
-      campaignName: master?.campaignName ?? row.campaign.campaignName, eventCodeId: row.eventCodeId,
-      eventCode: master?.eventCode.code ?? row.eventCode, eventName: master?.eventCode.eventName ?? row.eventName,
-      status: campaignStatus(row.campaign.campaignId, row.campaign.displayStatus), directContribution: 0n,
-      allocatedFromCarry: 0n, allocationHistory: [] };
-    current.directContribution += decimalStringToCents(row.totalAmount); byId.set(row.campaign.campaignId, current);
+    const current = ensure(row.campaign.campaignId, row.campaign.displayStatus, master);
+    if (current) current.directContribution += decimalStringToCents(row.totalAmount);
   }
   for (const row of input.allocations) {
     const campaign = masterById.get(row.eventCampaignId) ?? row.eventCampaign;
-    const current = byId.get(row.eventCampaignId) ?? { campaignId: row.eventCampaignId, campaignName: campaign.campaignName,
-      eventCodeId: campaign.eventCodeId, eventCode: campaign.eventCode.code, eventName: campaign.eventCode.eventName,
-      status: campaignStatus(row.eventCampaignId, "CLOSED"), directContribution: 0n,
-      allocatedFromCarry: 0n, allocationHistory: [] };
+    const current = ensure(row.eventCampaignId, "CLOSED", campaign);
+    if (!current) continue;
     const amount = decimalStringToCents(row.amountDelta.toString());
-    if (row.allocationStatus === "ACTIVE") current.allocatedFromCarry += amount;
+    if (row.allocationStatus === "ACTIVE") {
+      if (row.allocationType === "DIRECT_CONTRIBUTION") current.directApplied += amount;
+      else current.allocatedFromCarry += amount;
+    }
     current.allocationHistory.push({ allocationId: row.id, amountDelta: centsToDecimal(amount), allocationType: row.allocationType,
       allocationStatus: row.allocationStatus, effectiveDate: dateOnly(row.effectiveDate)!, reason: row.reason });
-    byId.set(row.eventCampaignId, current);
+  }
+  for (const row of input.legacyContributionGroups ?? []) {
+    if (!row.eventCampaignId) continue;
+    const current = ensure(row.eventCampaignId, "CLOSED");
+    if (current) current.legacyApplied += decimalStringToCents(row._sum.originalAmount?.toString() ?? "0");
+  }
+  for (const row of input.walletEntries ?? []) {
+    if (row.entryStatus !== "ACTIVE") continue;
+    const current = ensure(row.eventCampaignId, "CLOSED");
+    if (current) current.carryBalance += decimalStringToCents(row.amountDelta.toString());
   }
   for (const row of byId.values()) row.status = campaignStatus(row.campaignId, row.status);
-  return [...byId.values()].map(row => ({ ...row, directContribution: centsToDecimal(row.directContribution), allocatedFromCarry: centsToDecimal(row.allocatedFromCarry), totalAllocation: centsToDecimal(row.directContribution + row.allocatedFromCarry) })).sort((a, b) => a.eventCode.localeCompare(b.eventCode) || a.campaignName.localeCompare(b.campaignName));
+  return [...byId.values()].map(row => {
+    const target = input.targetState?.get(row.campaignId) ?? { target: row.targetAmount, applied: row.directApplied + row.allocatedFromCarry + row.legacyApplied };
+    const totalAllocation = row.directApplied + row.allocatedFromCarry + row.legacyApplied;
+    return { ...row, targetAmount: target.target === null ? null : centsToDecimal(target.target), targetApplied: centsToDecimal(target.applied),
+      targetRemaining: target.target === null ? null : centsToDecimal(target.target > target.applied ? target.target - target.applied : 0n),
+      directContribution: centsToDecimal(row.directContribution), allocatedFromCarry: centsToDecimal(row.allocatedFromCarry),
+      carryBalance: centsToDecimal(row.carryBalance), totalAllocation: centsToDecimal(totalAllocation), appliedToCampaign: centsToDecimal(totalAllocation) };
+  }).sort((a, b) => a.eventCode.localeCompare(b.eventCode) || a.campaignName.localeCompare(b.campaignName));
 }
 
 export function eligibleCampaignParticipationOptions<T extends { id: string; activeFlag: boolean; startDate: Date | null; endDate: Date | null; eventCode: { activeFlag: boolean } }>(
@@ -233,7 +260,9 @@ export async function getSponsorship(memberId: string) {
       subscriptionId: item.id, event: { eventCodeId: item.eventCode.id, code: item.eventCode.code, eventName: item.eventCode.eventName, eventType: item.eventCode.eventType }, referenceNo: item.referenceNo,
       displayName: item.displayName, startDate: dateOnly(resolvedStartDate), validUntil: dateOnly(item.validUntil), activeFlag: item.activeFlag, remark: item.remark,
       status: sponsorshipStatus(item),
-      timeRule: item.eventCode.timeRule ? { unitAmount: item.eventCode.timeRule.unitAmount.toString(), durationMonths: item.eventCode.timeRule.durationMonths } : null,
+      eventActiveFlag: item.eventCode.activeFlag,
+      timeRule: item.eventCode.activeFlag && item.eventCode.timeRule?.activeFlag
+        ? { unitAmount: item.eventCode.timeRule.unitAmount.toString(), durationMonths: item.eventCode.timeRule.durationMonths } : null,
       carryBalance: centsToDecimal(totals.carry),
       principal: centsToDecimal(totals.principal),
       consumed: centsToDecimal(totals.consumed),
@@ -252,13 +281,26 @@ export async function getSponsorship(memberId: string) {
   const contributions = summarizeContributions({
     groups: result.contributionGroups, events: result.contributionEvents, campaigns: result.contributionCampaigns
   });
+  const capacityMasterById = new Map([...result.campaignMasters, ...result.campaignOptions].map(campaign => [campaign.id, campaign]));
+  const appliedByCampaign = new Map(result.campaignAppliedGroups.map(row => [row.eventCampaignId, decimalStringToCents(row._sum.amountDelta?.toString() ?? "0")]));
+  const legacyAppliedByCampaign = new Map(result.campaignLegacyAppliedGroups.flatMap(row => row.eventCampaignId
+    ? [[row.eventCampaignId, decimalStringToCents(row._sum.originalAmount?.toString() ?? "0")] as const] : []));
+  const targetState = new Map([...capacityMasterById.values()].map(campaign => {
+    const target = campaign.targetAmount ? decimalStringToCents(campaign.targetAmount.toString()) : null;
+    const applied = (appliedByCampaign.get(campaign.id) ?? 0n) + (legacyAppliedByCampaign.get(campaign.id) ?? 0n);
+    return [campaign.id, { target, applied }] as const;
+  }));
   const campaigns = summarizeCampaignAllocations({ contributions, participations: result.campaignParticipations,
-    allocations: result.campaignAllocations, campaignMasters: result.campaignMasters });
+    allocations: result.campaignAllocations, campaignMasters: result.campaignMasters, walletEntries: result.campaignWalletEntries,
+    legacyContributionGroups: result.legacyCampaignContributionGroups, targetState });
   const campaignParticipationOptions = eligibleCampaignParticipationOptions(result.campaignOptions, [
     ...result.contributionGroups.flatMap(row => row.eventCampaignId ? [row.eventCampaignId] : []),
     ...result.campaignAllocations.map(row => row.eventCampaignId),
     ...result.campaignParticipations.map(row => row.eventCampaignId)
-  ]);
+  ]).filter(campaign => {
+    const state = targetState.get(campaign.id);
+    return !state?.target || state.applied < state.target;
+  });
   const totalsByType = contributions.reduce((totals, row) => {
     const current = totals.get(row.eventType) ?? { amount: 0n, transactionCount: 0 };
     current.amount += decimalStringToCents(row.totalAmount); current.transactionCount += row.transactionCount;
@@ -269,11 +311,15 @@ export async function getSponsorship(memberId: string) {
     return [type, { amount: centsToDecimal(value.amount), transactionCount: value.transactionCount }];
   }));
   return { subscriptions, contributions, campaigns,
-    availableCampaigns: result.campaignOptions.map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName, eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName })),
+    availableCampaigns: result.campaignOptions.filter(campaign => {
+      const state = targetState.get(campaign.id);
+      return !state?.target || state.applied < state.target;
+    }).map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName, eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName })),
     campaignParticipationOptions: campaignParticipationOptions.map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName,
       eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName,
       startDate: dateOnly(campaign.startDate), endDate: dateOnly(campaign.endDate) })), contributionTotals,
-    eventOptions: result.eventOptions.map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })),
+    eventOptions: result.eventOptions.filter(event => !subscriptions.some(subscription => subscription.event.eventCodeId === event.id))
+      .map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })),
     pendingPayments: result.pending.map(payment => pendingTimeBasedPaymentPreview(payment, subscriptions)) };
 }
 

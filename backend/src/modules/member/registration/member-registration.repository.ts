@@ -5,6 +5,7 @@ import { HttpError } from "../../../lib/http.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
 import { recordMemberIdentityHistory } from "../member-identity/member-identity-history.js";
 import { synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
+import { synchronizePendingCampaignContributionsForMember } from "../campaign/member-campaign-wallet.service.js";
 import type { MemberInput, WorkspaceQuery } from "./member-registration.schema.js";
 
 const memberSelect = { id: true, memberCode: true, memberName: true, initialName: true, city: true, activeFlag: true } as const;
@@ -78,6 +79,7 @@ export function registerMember(input: MemberInput, userId: string, identityId?: 
         actionById: userId, actionAt: now
       });
       await synchronizePendingTimeBasedForMember(tx, member.id, userId);
+      await synchronizePendingCampaignContributionsForMember(tx, member.id, userId);
     }
     return member;
   });
@@ -100,6 +102,7 @@ export function linkMember(identityId: string, memberId: string, userId: string)
       actionById: userId, actionAt: now
     });
     await synchronizePendingTimeBasedForMember(tx, memberId, userId);
+    await synchronizePendingCampaignContributionsForMember(tx, memberId, userId);
     return member;
   });
 }

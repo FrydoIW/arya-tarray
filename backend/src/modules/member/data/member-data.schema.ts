@@ -90,6 +90,7 @@ export const openingCoverageSchema = z.object({
 }).refine(value => value.coverageFrom <= value.coverageTo, { path: ["coverageTo"], message: "Coverage end must not precede start" });
 
 export const carryTransferParamsSchema = z.object({ memberId: z.string().uuid(), sourceSubscriptionId: z.string().uuid() });
+export const campaignWalletTransferParamsSchema = z.object({ memberId: z.string().uuid(), sourceCampaignId: z.string().uuid() });
 export const carryTransferCreateSchema = z.object({
   destinationSubscriptionId: z.string().uuid().optional(),
   destinationCampaignId: z.string().uuid().optional(),

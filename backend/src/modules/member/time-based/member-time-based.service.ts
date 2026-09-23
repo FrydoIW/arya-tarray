@@ -170,19 +170,72 @@ function earliestDate(values: Array<Date | null | undefined>) {
   return values.filter((value): value is Date => Boolean(value)).reduce<Date | null>((earliest, value) =>
     !earliest || value.getTime() < earliest.getTime() ? utcDay(value) : earliest, null);
 }
-export function resolveEffectiveStartDate(input: { coverageFrom: Date[]; paymentDates: Date[] }) {
-  return earliestDate([...input.coverageFrom, ...input.paymentDates]);
+export function resolveEffectiveStartDate(input: { coverageFrom: Date[]; paymentDates: Date[]; transferInDates?: Date[] }) {
+  return earliestDate([...input.coverageFrom, ...input.paymentDates, ...(input.transferInDates ?? [])]);
 }
 /** Re-resolves the system-managed participation start from surviving financial evidence. */
 export async function refreshSubscriptionStartDate(tx: Tx, subscriptionId: string) {
   const [payments, coverages] = await Promise.all([
-    tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryStatus: "ACTIVE", entryType: { in: ["PAYMENT", "TRANSFER_IN"] } },
+    tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryStatus: "ACTIVE", OR: [
+      { entryType: "PAYMENT" },
+      { entryType: "TRANSFER_IN", carryTransfer: { is: { status: "ACTIVE" } } }
+    ] },
       select: { effectiveDate: true } }),
     tx.memberEventCoverage.findMany({ where: { subscriptionId, ...activeCoverage }, select: { coverageFrom: true } })
   ]);
   const startDate = earliestDate([...payments.map(row => row.effectiveDate), ...coverages.map(row => row.coverageFrom)]);
   await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { startDate } });
   return startDate;
+}
+
+/**
+ * Appends a genuinely later finalized bank payment without replaying pre-existing
+ * Carry Transfer economics. Historical corrections still fall back to the guarded
+ * rebuild path below.
+ */
+async function appendForwardTimeBasedPayment(tx: Tx, subscriptionId: string, payment: Payment, userId: string, recalculate: boolean) {
+  if (recalculate || !payment.transactionDate) return false;
+  await lockSubscriptionsForPosting(tx, [subscriptionId]);
+  const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId },
+    select: { id: true, memberId: true, eventCodeId: true } });
+  if (!sub || !eligible(payment, sub)) return false;
+  const existing = await tx.memberEventBalanceLedger.findFirst({ where: { subscriptionId, bankTransactionId: payment.id,
+    entryType: "PAYMENT", ...activeEntry }, select: { id: true } });
+  if (existing) return true;
+  const latestEconomic = await tx.memberEventBalanceLedger.findFirst({ where: { subscriptionId, ...activeEntry },
+    orderBy: [{ effectiveDate: "desc" }, { postingSequence: "desc" }], select: { effectiveDate: true } });
+  if (latestEconomic && latestEconomic.effectiveDate.getTime() > payment.transactionDate.getTime()) return false;
+  const rate = await snapshot(tx, payment, false);
+  const unitAmount = decimalStringToCents(rate.unitAmount);
+  const balance = await tx.memberEventBalanceLedger.aggregate({ where: { subscriptionId, ...activeEntry }, _sum: { amountDelta: true } });
+  const grant = calculateCarryGrant(decimalStringToCents(balance._sum.amountDelta?.toString() ?? "0"), cents(payment.originalAmount), unitAmount);
+  const months = grant.grantedUnits * rate.durationMonths;
+  if (!Number.isSafeInteger(months)) throw new HttpError(400, "TIME_BASED coverage duration is too large");
+  const sequences = await allocatePostingSequences(tx, subscriptionId, months ? 2 : 1);
+  await tx.memberEventBalanceLedger.create({ data: {
+    subscriptionId, bankTransactionId: payment.id, entryType: "PAYMENT", entryStatus: "ACTIVE",
+    amountDelta: money(cents(payment.originalAmount)), effectiveDate: payment.transactionDate,
+    unitAmountSnapshot: rate.unitAmount, durationMonthsSnapshot: rate.durationMonths,
+    postingSequence: sequences[0], createdById: userId
+  } });
+  if (months) {
+    const latestCoverage = await tx.memberEventCoverage.findFirst({ where: { subscriptionId, ...activeCoverage },
+      orderBy: [{ coverageTo: "desc" }, { id: "desc" }], select: { coverageTo: true } });
+    const coverageFrom = resolveCoverageStart({ latestCoverageTo: latestCoverage?.coverageTo ?? null,
+      startDate: payment.transactionDate, transactionDate: payment.transactionDate });
+    const coverage = await tx.memberEventCoverage.create({ data: {
+      subscriptionId, bankTransactionId: payment.id, coverageSource: "TRANSACTION", coverageStatus: "ACTIVE",
+      unitAmountSnapshot: rate.unitAmount, durationMonthsSnapshot: rate.durationMonths, grantedUnits: grant.grantedUnits,
+      amountApplied: money(grant.amountConsumed), coverageFrom, coverageTo: addCalendarMonthsInclusive(coverageFrom, months), createdById: userId
+    } });
+    await tx.memberEventBalanceLedger.create({ data: {
+      subscriptionId, bankTransactionId: payment.id, coverageId: coverage.id, entryType: "COVERAGE_USE", entryStatus: "ACTIVE",
+      amountDelta: money(-grant.amountConsumed), effectiveDate: payment.transactionDate,
+      unitAmountSnapshot: rate.unitAmount, durationMonthsSnapshot: rate.durationMonths, postingSequence: sequences[1], createdById: userId
+    } });
+  }
+  await Promise.all([refreshSubscriptionValidity(tx, subscriptionId), refreshSubscriptionStartDate(tx, subscriptionId)]);
+  return true;
 }
 async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: string, reason: string,
   addition?: { payment: Payment; recalculate: boolean }) {
@@ -352,6 +405,12 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
   for (const oldId of oldIds.filter(id => id !== destination))
     await rebuildSubscription(tx, oldId, userId, "Official allocation or Member ownership changed");
   if (destination) {
+    // A new later finalized payment is normal forward activity. It must be
+    // appended against the live wallet rather than attempting an unsafe replay
+    // through already-posted Carry Transfer relationships.
+    if (!active && !options?.recalculate
+      && await appendForwardTimeBasedPayment(tx, destination, payment, userId, false))
+      return { state: "ALLOCATED" as const, subscriptionId: destination };
     await rebuildSubscription(tx, destination, userId, "Official TIME_BASED payment allocation rebuilt",
       { payment, recalculate: options?.recalculate ?? false });
     return { state: "ALLOCATED" as const, subscriptionId: destination };

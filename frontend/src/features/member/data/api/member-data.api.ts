@@ -34,6 +34,10 @@ export function createCarryTransfer(memberId: string, sourceSubscriptionId: stri
   return apiFetch<CarryTransferResult>(`${base}/${encodeURIComponent(memberId)}/subscriptions/${encodeURIComponent(sourceSubscriptionId)}/carry-transfers`,
     { method: "POST", body: JSON.stringify(input) });
 }
+export function createCampaignWalletTransfer(memberId: string, sourceCampaignId: string, input: CarryTransferInput) {
+  return apiFetch<CarryTransferResult>(`${base}/${encodeURIComponent(memberId)}/campaigns/${encodeURIComponent(sourceCampaignId)}/carry-transfers`,
+    { method: "POST", body: JSON.stringify(input) });
+}
 export function reverseCarryTransfer(memberId: string, transferId: string, input: CarryTransferReverseInput) {
   return apiFetch<CarryTransferReversalResult>(`${base}/${encodeURIComponent(memberId)}/carry-transfers/${encodeURIComponent(transferId)}/reverse`,
     { method: "POST", body: JSON.stringify(input) });

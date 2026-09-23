@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import * as schema from "./member-data.schema.js";
 import * as service from "./member-data.service.js";
-import { createCarryTransfer as executeCarryTransfer, getCarryTransfers as loadCarryTransfers, reverseCarryTransfer as executeCarryTransferReversal } from "../time-based/member-carry-transfer.service.js";
+import { createCampaignWalletTransfer as executeCampaignWalletTransfer, createCarryTransfer as executeCarryTransfer, getCarryTransfers as loadCarryTransfers, reverseCarryTransfer as executeCarryTransferReversal } from "../time-based/member-carry-transfer.service.js";
 
 export async function workspace(req: Request, res: Response) { res.json(await service.getWorkspace(schema.memberDataWorkspaceQuerySchema.parse(req.query))); }
 export async function detail(req: Request, res: Response) { res.json(await service.getDetail(schema.memberDataParamsSchema.parse(req.params).memberId)); }
@@ -75,6 +75,10 @@ export async function carryTransfers(req: Request, res: Response) {
 export async function createCarryTransfer(req: Request, res: Response) {
   const { memberId, sourceSubscriptionId } = schema.carryTransferParamsSchema.parse(req.params);
   res.json(await executeCarryTransfer(memberId, sourceSubscriptionId, schema.carryTransferCreateSchema.parse(req.body), req.auth!.userId));
+}
+export async function createCampaignWalletTransfer(req: Request, res: Response) {
+  const { memberId, sourceCampaignId } = schema.campaignWalletTransferParamsSchema.parse(req.params);
+  res.json(await executeCampaignWalletTransfer(memberId, sourceCampaignId, schema.carryTransferCreateSchema.parse(req.body), req.auth!.userId));
 }
 export async function reverseCarryTransfer(req: Request, res: Response) {
   const { memberId, transferId } = schema.carryTransferReverseParamsSchema.parse(req.params);
