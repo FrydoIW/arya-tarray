@@ -35,6 +35,7 @@ model Member {
   eventSubscriptions MemberEventSubscription[]
   carryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferMember")
   campaignAllocations MemberEventCampaignAllocation[]
+  campaignParticipations MemberEventCampaignParticipation[]
   @@index([memberName], map: "idx_member_name")
   @@index([initialName], map: "idx_member_initial_name")
   @@index([city], map: "idx_member_city")
@@ -151,6 +152,7 @@ model User {
   createdMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferCreatedBy")
   reversedMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferReversedBy")
   createdMemberEventCampaignAllocations MemberEventCampaignAllocation[] @relation("MemberEventCampaignAllocationCreatedBy")
+  createdMemberEventCampaignParticipations MemberEventCampaignParticipation[] @relation("MemberEventCampaignParticipationCreatedBy")
   id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
   fullName     String   @map("full_name") @db.VarChar(150)
   email        String   @db.VarChar(150)
@@ -295,6 +297,7 @@ model EventCampaign {
   correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCampaign")
   correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCampaign")
   memberCampaignAllocations MemberEventCampaignAllocation[]
+  memberParticipations MemberEventCampaignParticipation[]
   destinationCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationCampaign")
 
   @@index([eventCodeId, activeFlag], map: "idx_event_campaign_event_active")
@@ -494,6 +497,26 @@ model MemberEventCampaignAllocation {
   @@index([eventCampaignId, allocationStatus, effectiveDate], map: "idx_member_event_campaign_allocation_campaign")
   @@index([createdById], map: "idx_member_event_campaign_allocation_created_by")
   @@map("arya_member_event_campaign_allocation")
+}
+
+model MemberEventCampaignParticipation {
+  id String @id @default(uuid()) @map("member_event_campaign_participation_id") @db.Char(36)
+  memberId String @map("member_id") @db.Char(36)
+  eventCampaignId String @map("event_campaign_id") @db.Char(36)
+  activeFlag Boolean @default(true) @map("active_flag")
+  remark String? @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById String @map("created_by") @db.Char(36)
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_member")
+  eventCampaign EventCampaign @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_campaign")
+  createdBy User @relation("MemberEventCampaignParticipationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_created_by")
+
+  @@unique([memberId, eventCampaignId], map: "uq_member_event_campaign_participation_member_campaign")
+  @@index([memberId, activeFlag], map: "idx_member_event_campaign_participation_member_active")
+  @@index([eventCampaignId, activeFlag], map: "idx_member_event_campaign_participation_campaign_active")
+  @@index([createdById], map: "idx_member_event_campaign_participation_created_by")
+  @@map("arya_member_event_campaign_participation")
 }
 
 model BankAccount {

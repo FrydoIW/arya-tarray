@@ -47,6 +47,10 @@ export async function sponsorship(req: Request, res: Response) { res.json(await 
 export async function createSubscription(req: Request, res: Response) {
   const { memberId } = schema.memberDataParamsSchema.parse(req.params); res.json(await service.createSubscription(memberId, schema.subscriptionCreateSchema.parse(req.body), req.auth!.userId));
 }
+export async function createCampaignParticipation(req: Request, res: Response) {
+  const { memberId } = schema.memberDataParamsSchema.parse(req.params);
+  res.json(await service.createCampaignParticipation(memberId, schema.campaignParticipationCreateSchema.parse(req.body), req.auth!.userId));
+}
 export async function updateSubscription(req: Request, res: Response) {
   const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params); res.json(await service.updateSubscription(memberId, subscriptionId, schema.subscriptionUpdateSchema.parse(req.body), req.auth!.userId));
 }

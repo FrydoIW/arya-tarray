@@ -21,6 +21,7 @@ memberDataRouter.post("/:memberId/identities/:identityId/move", requireMemberMut
 memberDataRouter.post("/:memberId/identities/:identityId/detach", requireMemberMutationAccess, asyncHandler(controller.detach));
 memberDataRouter.patch("/:memberId/identities/:identityId", requireMemberMutationAccess, asyncHandler(controller.identityMetadata));
 memberDataRouter.post("/:memberId/subscriptions", requireMemberMutationAccess, asyncHandler(controller.createSubscription));
+memberDataRouter.post("/:memberId/campaign-participations", requireMemberMutationAccess, asyncHandler(controller.createCampaignParticipation));
 memberDataRouter.patch("/:memberId/subscriptions/:subscriptionId", requireMemberMutationAccess, asyncHandler(controller.updateSubscription));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/allocate", requireMemberMutationAccess, asyncHandler(controller.allocateSubscription));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage", requireMemberMutationAccess, asyncHandler(controller.openingCoverage));

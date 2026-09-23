@@ -196,7 +196,7 @@ export async function loadTransactionInquiryDetailRecord(transactionId: string) 
       suggestedEventCode: { select: eventCodeSelect },
       eventCode: { select: eventCodeSelect },
       eventCampaign: { select: { id: true, campaignName: true, eventCodeId: true, activeFlag: true } },
-      memberEventCoverages: { where: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" }, select: { subscription: { select: { memberId: true, referenceNo: true, displayName: true } }, coverageFrom: true, coverageTo: true, unitAmountSnapshot: true, grantedUnits: true, durationMonthsSnapshot: true }, take: 1 },
+      memberEventCoverages: { where: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" }, select: { subscription: { select: { id: true, memberId: true, referenceNo: true, displayName: true } }, coverageFrom: true, coverageTo: true, unitAmountSnapshot: true, grantedUnits: true, durationMonthsSnapshot: true }, take: 1 },
       memberEventBalanceLedger: { where: { entryType: "PAYMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: { entryStatus: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true,
           subscription: { select: { id: true, memberId: true, eventCodeId: true, referenceNo: true, displayName: true } } } },

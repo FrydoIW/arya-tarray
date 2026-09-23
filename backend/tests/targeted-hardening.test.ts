@@ -39,17 +39,35 @@ test("historical preview includes actual carry-funded grants and zero-unit alloc
 test("preview recalculates using current entitlement after event/principal change or explicit recalc", () => {
   const original = historicalPayment();
   for (const preview of [timeBasedPaymentPreview(original, true), timeBasedPaymentPreview({ ...original, eventCodeId: "new" }),
-    timeBasedPaymentPreview({ ...original, baseAmount: d("240000") })]) {
+    timeBasedPaymentPreview({ ...original, originalAmount: d("240000"), baseAmount: d("240000") })]) {
     assert.equal(preview?.unitAmount, "60000");
     assert.equal(preview?.historical, false);
   }
-  assert.equal(timeBasedPaymentPreview({ ...original, baseAmount: d("240000") })?.grantedMonths, 4);
+  assert.equal(timeBasedPaymentPreview({ ...original, originalAmount: d("240000"), baseAmount: d("240000") })?.grantedMonths, 4);
 });
 
 test("legacy coverage-only history remains readable without an active current rule", () => {
   const original = historicalPayment("VOIDED"); original.memberEventBalanceLedger = [];
   original.eventCode.timeRule.activeFlag = false;
   assert.equal(timeBasedPaymentPreview(original)?.grantedMonths, 4);
+});
+
+test("TIME_BASED preview uses the complete original payment for carry and safely reads legacy base snapshots", () => {
+  const payment = historicalPayment("ACTIVE", "250004", 1);
+  payment.baseAmount = d("250000");
+  payment.eventCode.timeRule = { unitAmount: d("150000"), durationMonths: 3, activeFlag: true };
+  payment.memberEventBalanceLedger[0].amountDelta = d("250000");
+  payment.memberEventBalanceLedger[0].unitAmountSnapshot = d("150000");
+  payment.memberEventBalanceLedger[0].durationMonthsSnapshot = 3;
+  payment.memberEventCoverages[0].amountApplied = d("150000");
+  payment.memberEventCoverages[0].unitAmountSnapshot = d("150000");
+  payment.memberEventCoverages[0].durationMonthsSnapshot = 3;
+  const preview = timeBasedPaymentPreview(payment)!;
+  assert.equal(preview.principalAmount, "250004.00");
+  assert.equal(preview.grantedMonths, 3);
+  assert.equal(preview.paymentOnlyRemainder, "100004.00");
+  assert.equal(preview.paymentCredited, "250000");
+  assert.deepEqual(paymentOnlyTimePreview("250004", "150000", 3), { months: 3, remainder: "100004.00" });
 });
 
 test("Edit Income accepts compatible historical display and rejects changed event or principal", () => {
@@ -111,6 +129,7 @@ test("Statement readiness requires usable active Time Rule, preserves outgoing a
 
 test("three-month rule preview accepts partial payments without integer conversion failure", () => {
   assert.deepEqual(paymentOnlyTimePreview("225000", "50000", 3), { months: 12, remainder: "25000.00" });
+  assert.deepEqual(paymentOnlyTimePreview("250004", "150000", 3), { months: 3, remainder: "100004.00" });
 });
 
 test("Member carry filter uses positive ACTIVE sums per subscription, including members with offsetting subscriptions", async () => {

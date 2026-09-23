@@ -72,9 +72,13 @@ test("Event Type transition blocks historical transactions while allowing a clea
   assert.doesNotThrow(() => assertEventTypeTransition({ currentType: "STANDARD", nextType: "TIME_BASED", transactionCount: 0, subscriptionCount: 0 }));
 });
 
-test("subscription without coverage is PENDING instead of funded ACTIVE", () => {
-  assert.equal(sponsorshipStatus({ activeFlag: true, startDate: null, validUntil: null }), "PENDING");
-  assert.equal(sponsorshipStatus({ activeFlag: true, startDate: null, validUntil: new Date("2099-12-31T00:00:00Z") }), "ACTIVE");
+test("active TIME_BASED program stays ACTIVE without coverage and inactive program stays INACTIVE", () => {
+  const noCoverageProgram = { activeFlag: true, startDate: null, validUntil: null };
+  const datedActiveProgram = { activeFlag: true, startDate: null, validUntil: new Date("2099-12-31T00:00:00Z") };
+  const inactiveProgram = { activeFlag: false, startDate: null, validUntil: null };
+  assert.equal(sponsorshipStatus(noCoverageProgram), "ACTIVE");
+  assert.equal(sponsorshipStatus(datedActiveProgram), "ACTIVE");
+  assert.equal(sponsorshipStatus(inactiveProgram), "INACTIVE");
 });
 
 test("Opening coverage and subscription resync remain connected", () => {

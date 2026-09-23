@@ -73,7 +73,7 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
         </section>
         {transaction.sponsorship ? <section className={styles.detailSection}><h3>Rupang sponsorship</h3><div className={styles.detailGrid}>
           <DetailItem label="Rule snapshot / rate" value={`${formatMoney(transaction.sponsorship.unitAmount)} = ${transaction.sponsorship.durationMonths} month`} />
-          <DetailItem label="Principal (base amount)" value={formatMoney(transaction.sponsorship.principalAmount)} />
+          <DetailItem label="Dana masuk (full payment)" value={formatMoney(transaction.sponsorship.principalAmount)} />
           <DetailItem label="Payment credited to subscription" value={transaction.sponsorship.paymentCredited ? formatMoney(transaction.sponsorship.paymentCredited) : "Pending allocation"} />
           <DetailItem label="Allocation" value={transaction.sponsorship.allocation ? transaction.sponsorship.allocation.referenceNo || transaction.sponsorship.allocation.displayName || "Allocated" : "Pending allocation"} />
           <DetailItem label={transaction.sponsorship.allocation ? "Coverage generated after this payment" : "Months from payment alone"} value={`${transaction.sponsorship.grantedMonths} months`} />

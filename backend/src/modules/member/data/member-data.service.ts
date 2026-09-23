@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
@@ -7,10 +7,11 @@ import { lockActiveTimeBasedProgram, manuallyAllocateTimeBasedPayment, rebuildTi
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { campaignDisplayStatus } from "../../configuration/event-code/event-campaign.service.js";
+import { canonicalMemberDonationWhere } from "../member-donation.rules.js";
 import { deriveAge } from "./member-data.domain.js";
 import { aggregateCategories, centsToDecimal } from "./member-donation.domain.js";
 import * as repository from "./member-data.repository.js";
-import type { IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput, OpeningCoverageInput, SubscriptionCreateInput, SubscriptionUpdateInput } from "./member-data.schema.js";
+import type { CampaignParticipationCreateInput, IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput, OpeningCoverageInput, SubscriptionCreateInput, SubscriptionUpdateInput } from "./member-data.schema.js";
 
 type SubscriptionMetadataUpdateInput = SubscriptionUpdateInput & {
   /** Legacy callers may still provide lifecycle fields; normal API validation rejects them. */
@@ -66,13 +67,12 @@ export async function getDetail(memberId: string) {
     identities: identities.map(({ id: identityId, _count, ...identity }) => ({ ...identity, memberIdentityId: identityId, transactionCount: _count.transactions })) };
 }
 
-export function sponsorshipStatus(item: { activeFlag: boolean; startDate: Date | null; validUntil: Date | null }) {
-  const today = currentBusinessDayValue();
-  if (!item.activeFlag) return "INACTIVE";
-  if (!item.validUntil) return "PENDING";
-  if (item.startDate && dateOnly(item.startDate)! > today) return "SCHEDULED";
-  if (item.validUntil && dateOnly(item.validUntil)! < today) return "EXPIRED";
-  return "ACTIVE";
+export function sponsorshipStatus(item: { activeFlag: boolean }) {
+  return item.activeFlag ? "ACTIVE" : "INACTIVE";
+}
+
+export function initialTimeBasedSubscriptionState() {
+  return { activeFlag: true as const, startDate: null };
 }
 
 export function pendingTimeBasedPaymentPreview(payment: {
@@ -85,13 +85,21 @@ export function pendingTimeBasedPaymentPreview(payment: {
   let estimate: ReturnType<typeof resolveTimeBasedUnits> = null;
   const ledgerSnapshot = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCode?.id ?? null,
     principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false, entries: payment.memberEventBalanceLedger ?? [] });
-  const coverageSnapshot = selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCode?.id ?? null, principalAmount: payment.baseAmount ?? payment.originalAmount, recalculate: false,
+  const coverageSnapshot = selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCode?.id ?? null,
+    principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false,
     coverages: payment.memberEventCoverages.map(row => ({ coverageStatus: row.coverageStatus, subscriptionEventCodeId: row.subscription.eventCodeId, unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot, grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });
   try {
     const historical = ledgerSnapshot ?? coverageSnapshot;
-    estimate = historical
+    const resolved = historical
       ? resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: { unitAmount: { toString: () => historical.unitAmount }, durationMonths: historical.durationMonths, activeFlag: true }, transaction: payment, requiresClassification: true })
       : resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true });
+    if (resolved) {
+      const unit = decimalStringToCents(resolved.unitAmount);
+      const amount = decimalStringToCents(payment.originalAmount.toString());
+      const units = amount / unit;
+      if (units > 2_147_483_647n) throw new Error("TIME_BASED amount resolves to an invalid number of units");
+      estimate = { ...resolved, grantedUnits: Number(units), amountApplied: payment.originalAmount.toString() };
+    }
   }
   catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: payment.originalAmount.toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: null, grantedUnits: null, durationMonths: null, reason }; }
   const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === payment.eventCode?.id && subscription.activeFlag);
@@ -144,26 +152,65 @@ export function summarizeContributions(input: {
 
 export function summarizeCampaignAllocations(input: {
   contributions: ReturnType<typeof summarizeContributions>;
+  participations?: Array<{ eventCampaignId: string }>;
   allocations: Array<{ id: string; eventCampaignId: string; amountDelta: { toString(): string }; allocationType: string; allocationStatus: string; effectiveDate: Date; reason: string;
-    eventCampaign: { id: string; campaignName: string; eventCodeId: string; eventCode: { code: string; eventName: string; eventType: string } } }>;
-  campaigns: Array<{ id: string; campaignName: string; eventCodeId: string; startDate: Date | null; endDate: Date | null; eventCode: { code: string; eventName: string } }>;
+    eventCampaign: { id: string; campaignName: string; eventCodeId: string; activeFlag: boolean; startDate: Date | null; endDate: Date | null;
+      eventCode: { code: string; eventName: string; eventType: string; activeFlag: boolean } } }>;
+  campaignMasters: Array<{ id: string; campaignName: string; eventCodeId: string; activeFlag: boolean; startDate: Date | null; endDate: Date | null;
+    eventCode: { code: string; eventName: string; eventType: string; activeFlag: boolean } }>;
+  today?: string;
 }) {
-  const byId = new Map<string, { campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string; status: string; directContribution: bigint; allocatedFromCarry: bigint; allocationHistory: Array<{ allocationId: string; amountDelta: string; allocationType: string; effectiveDate: string; reason: string }> }>();
+  const masterById = new Map(input.campaignMasters.map(campaign => [campaign.id, campaign]));
+  const campaignStatus = (id: string, fallback: string) => {
+    const master = masterById.get(id);
+    return master ? campaignDisplayStatus({ ...master, activeFlag: master.activeFlag && master.eventCode.activeFlag }, input.today) : fallback;
+  };
+  const byId = new Map<string, { campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string; status: string; directContribution: bigint; allocatedFromCarry: bigint; allocationHistory: Array<{ allocationId: string; amountDelta: string; allocationType: string; allocationStatus: string; effectiveDate: string; reason: string }> }>();
+  for (const participation of input.participations ?? []) {
+    const campaign = masterById.get(participation.eventCampaignId);
+    if (!campaign) continue;
+    byId.set(participation.eventCampaignId, {
+      campaignId: campaign.id, campaignName: campaign.campaignName, eventCodeId: campaign.eventCodeId,
+      eventCode: campaign.eventCode.code, eventName: campaign.eventCode.eventName,
+      status: campaignStatus(campaign.id, "CLOSED"), directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: []
+    });
+  }
   for (const row of input.contributions) {
     if (row.eventType !== "CAMPAIGN" || !row.campaign) continue;
-    const current = byId.get(row.campaign.campaignId) ?? { campaignId: row.campaign.campaignId, campaignName: row.campaign.campaignName, eventCodeId: row.eventCodeId, eventCode: row.eventCode, eventName: row.eventName, status: row.campaign.displayStatus, directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: [] };
+    const master = masterById.get(row.campaign.campaignId);
+    const current = byId.get(row.campaign.campaignId) ?? { campaignId: row.campaign.campaignId,
+      campaignName: master?.campaignName ?? row.campaign.campaignName, eventCodeId: row.eventCodeId,
+      eventCode: master?.eventCode.code ?? row.eventCode, eventName: master?.eventCode.eventName ?? row.eventName,
+      status: campaignStatus(row.campaign.campaignId, row.campaign.displayStatus), directContribution: 0n,
+      allocatedFromCarry: 0n, allocationHistory: [] };
     current.directContribution += decimalStringToCents(row.totalAmount); byId.set(row.campaign.campaignId, current);
   }
-  for (const row of input.campaigns) {
-    if (!byId.has(row.id)) byId.set(row.id, { campaignId: row.id, campaignName: row.campaignName, eventCodeId: row.eventCodeId, eventCode: row.eventCode.code, eventName: row.eventCode.eventName, status: "ACTIVE", directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: [] });
-  }
   for (const row of input.allocations) {
-    const current = byId.get(row.eventCampaignId) ?? { campaignId: row.eventCampaignId, campaignName: row.eventCampaign.campaignName, eventCodeId: row.eventCampaign.eventCodeId, eventCode: row.eventCampaign.eventCode.code, eventName: row.eventCampaign.eventCode.eventName, status: "ACTIVE", directContribution: 0n, allocatedFromCarry: 0n, allocationHistory: [] };
-    const amount = decimalStringToCents(row.amountDelta.toString()); current.allocatedFromCarry += amount;
-    current.allocationHistory.push({ allocationId: row.id, amountDelta: centsToDecimal(amount), allocationType: row.allocationType, effectiveDate: dateOnly(row.effectiveDate)!, reason: row.reason });
+    const campaign = masterById.get(row.eventCampaignId) ?? row.eventCampaign;
+    const current = byId.get(row.eventCampaignId) ?? { campaignId: row.eventCampaignId, campaignName: campaign.campaignName,
+      eventCodeId: campaign.eventCodeId, eventCode: campaign.eventCode.code, eventName: campaign.eventCode.eventName,
+      status: campaignStatus(row.eventCampaignId, "CLOSED"), directContribution: 0n,
+      allocatedFromCarry: 0n, allocationHistory: [] };
+    const amount = decimalStringToCents(row.amountDelta.toString());
+    if (row.allocationStatus === "ACTIVE") current.allocatedFromCarry += amount;
+    current.allocationHistory.push({ allocationId: row.id, amountDelta: centsToDecimal(amount), allocationType: row.allocationType,
+      allocationStatus: row.allocationStatus, effectiveDate: dateOnly(row.effectiveDate)!, reason: row.reason });
     byId.set(row.eventCampaignId, current);
   }
+  for (const row of byId.values()) row.status = campaignStatus(row.campaignId, row.status);
   return [...byId.values()].map(row => ({ ...row, directContribution: centsToDecimal(row.directContribution), allocatedFromCarry: centsToDecimal(row.allocatedFromCarry), totalAllocation: centsToDecimal(row.directContribution + row.allocatedFromCarry) })).sort((a, b) => a.eventCode.localeCompare(b.eventCode) || a.campaignName.localeCompare(b.campaignName));
+}
+
+export function eligibleCampaignParticipationOptions<T extends { id: string; activeFlag: boolean; startDate: Date | null; endDate: Date | null; eventCode: { activeFlag: boolean } }>(
+  options: T[], participatingCampaignIds: Iterable<string>, today?: string
+) {
+  const alreadyParticipating = new Set(participatingCampaignIds);
+  return options.filter(option => !alreadyParticipating.has(option.id)
+    && campaignAcceptsNewParticipation(option, option.eventCode.activeFlag, today));
+}
+
+export function campaignAcceptsNewParticipation(campaign: { activeFlag: boolean; startDate: Date | null; endDate: Date | null }, parentEventActive: boolean, today?: string) {
+  return campaignDisplayStatus({ ...campaign, activeFlag: campaign.activeFlag && parentEventActive }, today) === "ACTIVE";
 }
 
 export async function getSponsorship(memberId: string) {
@@ -205,7 +252,13 @@ export async function getSponsorship(memberId: string) {
   const contributions = summarizeContributions({
     groups: result.contributionGroups, events: result.contributionEvents, campaigns: result.contributionCampaigns
   });
-  const campaigns = summarizeCampaignAllocations({ contributions, allocations: result.campaignAllocations, campaigns: result.campaignOptions });
+  const campaigns = summarizeCampaignAllocations({ contributions, participations: result.campaignParticipations,
+    allocations: result.campaignAllocations, campaignMasters: result.campaignMasters });
+  const campaignParticipationOptions = eligibleCampaignParticipationOptions(result.campaignOptions, [
+    ...result.contributionGroups.flatMap(row => row.eventCampaignId ? [row.eventCampaignId] : []),
+    ...result.campaignAllocations.map(row => row.eventCampaignId),
+    ...result.campaignParticipations.map(row => row.eventCampaignId)
+  ]);
   const totalsByType = contributions.reduce((totals, row) => {
     const current = totals.get(row.eventType) ?? { amount: 0n, transactionCount: 0 };
     current.amount += decimalStringToCents(row.totalAmount); current.transactionCount += row.transactionCount;
@@ -215,7 +268,11 @@ export async function getSponsorship(memberId: string) {
     const value = totalsByType.get(type) ?? { amount: 0n, transactionCount: 0 };
     return [type, { amount: centsToDecimal(value.amount), transactionCount: value.transactionCount }];
   }));
-  return { subscriptions, contributions, campaigns, availableCampaigns: result.campaignOptions.map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName, eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName })), contributionTotals,
+  return { subscriptions, contributions, campaigns,
+    availableCampaigns: result.campaignOptions.map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName, eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName })),
+    campaignParticipationOptions: campaignParticipationOptions.map(campaign => ({ campaignId: campaign.id, campaignName: campaign.campaignName,
+      eventCodeId: campaign.eventCodeId, code: campaign.eventCode.code, eventName: campaign.eventCode.eventName,
+      startDate: dateOnly(campaign.startDate), endDate: dateOnly(campaign.endDate) })), contributionTotals,
     eventOptions: result.eventOptions.map(event => ({ eventCodeId: event.id, code: event.code, eventName: event.eventName })),
     pendingPayments: result.pending.map(payment => pendingTimeBasedPaymentPreview(payment, subscriptions)) };
 }
@@ -226,14 +283,52 @@ export async function createSubscription(memberId: string, input: SubscriptionCr
     if (!member?.activeFlag) throw new HttpError(400, "Active Member is required for a sponsorship subscription");
     if (!event || event.eventType !== "TIME_BASED" || !event.activeFlag) throw new HttpError(400, "Choose an active TIME_BASED Event Code");
     if (!event.timeRule?.activeFlag) throw new HttpError(400, "Configure an active Time Rule before adding a subscription");
-    if (input.activeFlag) {
-      await lockActiveTimeBasedProgram(tx, memberId, input.eventCodeId);
-      const active = await tx.memberEventSubscription.findMany({ where: { memberId, eventCodeId: input.eventCodeId, activeFlag: true }, select: { id: true } });
-      if (active.length) throw new HttpError(409, "An active TIME_BASED program already exists for this Member and Event Code");
-    }
-    await tx.memberEventSubscription.create({ data: { memberId, eventCodeId: input.eventCodeId, referenceNo: input.referenceNo, displayName: input.displayName, startDate: input.startDate ? new Date(`${input.startDate}T00:00:00.000Z`) : null, activeFlag: input.activeFlag, remark: input.remark, createdById: userId, updatedById: userId } });
-    if (input.activeFlag) await synchronizePendingTimeBasedForMember(tx, memberId, userId, input.eventCodeId);
+    await lockActiveTimeBasedProgram(tx, memberId, input.eventCodeId);
+    const active = await tx.memberEventSubscription.findMany({ where: { memberId, eventCodeId: input.eventCodeId, activeFlag: true }, select: { id: true } });
+    if (active.length) throw new HttpError(409, "An active TIME_BASED program already exists for this Member and Event Code");
+    // A new program is system-active, but its effective start remains unset
+    // until a finalized payment or explicit Opening Coverage supplies evidence.
+    await tx.memberEventSubscription.create({ data: { memberId, eventCodeId: input.eventCodeId, referenceNo: input.referenceNo,
+      displayName: input.displayName, ...initialTimeBasedSubscriptionState(), remark: input.remark, createdById: userId, updatedById: userId } });
+    await synchronizePendingTimeBasedForMember(tx, memberId, userId, input.eventCodeId);
   });
+  return getSponsorship(memberId);
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
+export async function createCampaignParticipationRecord(tx: Prisma.TransactionClient, memberId: string, input: CampaignParticipationCreateInput, userId: string) {
+  const [member, campaign] = await Promise.all([
+    tx.member.findUnique({ where: { id: memberId }, select: { activeFlag: true } }),
+    tx.eventCampaign.findUnique({ where: { id: input.eventCampaignId }, select: { id: true, activeFlag: true, startDate: true, endDate: true,
+      eventCode: { select: { eventType: true, activeFlag: true } } } })
+  ]);
+  if (!member?.activeFlag) throw new HttpError(400, "Active Member is required for Campaign participation.");
+  if (!campaign || campaign.eventCode.eventType !== "CAMPAIGN"
+    || !campaignAcceptsNewParticipation(campaign, campaign.eventCode.activeFlag))
+    throw new HttpError(400, "Choose a Campaign that is active and within its participation period.");
+
+  const [existing, directContribution, allocationHistory] = await Promise.all([
+    tx.memberEventCampaignParticipation.findUnique({ where: { memberId_eventCampaignId: { memberId, eventCampaignId: campaign.id } }, select: { id: true } }),
+    tx.bankTransaction.findFirst({ where: { ...canonicalMemberDonationWhere(memberId), eventCampaignId: campaign.id }, select: { id: true } }),
+    tx.memberEventCampaignAllocation.findFirst({ where: { memberId, eventCampaignId: campaign.id }, select: { id: true } })
+  ]);
+  if (existing || directContribution || allocationHistory)
+    throw new HttpError(409, "Donatur sudah berpartisipasi pada Campaign ini.");
+
+  try {
+    await tx.memberEventCampaignParticipation.create({ data: { memberId, eventCampaignId: campaign.id,
+      activeFlag: true, remark: input.remark, createdById: userId } });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) throw new HttpError(409, "Donatur sudah berpartisipasi pada Campaign ini.");
+    throw error;
+  }
+}
+
+export async function createCampaignParticipation(memberId: string, input: CampaignParticipationCreateInput, userId: string) {
+  await memberTransaction(tx => createCampaignParticipationRecord(tx, memberId, input, userId));
   return getSponsorship(memberId);
 }
 

@@ -67,11 +67,14 @@ export const identityHistoryQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(25)
 });
 
-const sponsorshipDate = z.string().refine(isValidPeriodDate, "Date must use YYYY-MM-DD format").nullable();
 export const subscriptionCreateSchema = z.object({
   eventCodeId: z.string().uuid(), referenceNo: z.string().trim().max(100).nullable(), displayName: z.string().trim().max(200).nullable(),
-  startDate: sponsorshipDate, activeFlag: z.boolean().default(true), remark: z.string().trim().max(1000).nullable()
-});
+  remark: z.string().trim().max(1000).nullable()
+}).strict();
+export const campaignParticipationCreateSchema = z.object({
+  eventCampaignId: z.string().uuid(),
+  remark: z.string().trim().max(1000).nullable()
+}).strict();
 export const subscriptionUpdateSchema = z.object({
   referenceNo: z.string().trim().max(100).nullable(), displayName: z.string().trim().max(200).nullable(),
   remark: z.string().trim().max(1000).nullable()
@@ -115,5 +118,6 @@ export type IdentityMetadataInput = z.infer<typeof identityMetadataSchema>;
 export type MemberDonationQuery = z.infer<typeof memberDonationQuerySchema>;
 export type IdentityHistoryQuery = z.infer<typeof identityHistoryQuerySchema>;
 export type SubscriptionCreateInput = z.infer<typeof subscriptionCreateSchema>;
+export type CampaignParticipationCreateInput = z.infer<typeof campaignParticipationCreateSchema>;
 export type SubscriptionUpdateInput = z.infer<typeof subscriptionUpdateSchema>;
 export type OpeningCoverageInput = z.infer<typeof openingCoverageSchema>;

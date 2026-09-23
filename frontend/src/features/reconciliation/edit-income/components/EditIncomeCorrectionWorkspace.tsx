@@ -126,13 +126,13 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       render: (row) => {
         const event = getEventCode(detail.eventCodes, row.eventCodeId);
         if (event?.eventType === "TIME_BASED") {
-          const historical = compatibleHistoricalTimePreview(row.sponsorship, row.eventCodeId, row.baseAmount);
+          const historical = compatibleHistoricalTimePreview(row.sponsorship, row.eventCodeId, row.originalAmount);
           if (historical) return <span className={styles.finalEvent}>
             Applied rate: {formatMoney(historical.unitAmount)} / {historical.durationMonths} month · {historical.grantedMonths} months {historical.allocated ? "granted" : "from payment alone"} · {formatMoney(historical.principalAmount)} payment
           </span>;
           const rule = event.timeRule;
           if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>Rule needed</span>;
-          const preview = paymentOnlyTimePreview(row.baseAmount, rule.unitAmount, rule.durationMonths);
+          const preview = paymentOnlyTimePreview(row.originalAmount, rule.unitAmount, rule.durationMonths);
           return preview
             ? <span className={styles.finalEvent}>{formatMoney(rule.unitAmount)} / {rule.durationMonths} month · payment alone: {preview.months} month + {formatMoney(preview.remainder)} carry</span>
             : <span className={styles.noMatch}>Positive principal required</span>;

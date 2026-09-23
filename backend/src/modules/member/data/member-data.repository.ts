@@ -148,7 +148,7 @@ export function pendingTimeBasedPaymentsWhere(memberId: string): Prisma.BankTran
 
 export function loadMemberSponsorship(memberId: string) {
   return prisma.$transaction(async tx => {
-    const [member, subscriptions, pending, eventOptions, contributionGroups, campaignAllocations, campaignOptions] = await Promise.all([
+    const [member, subscriptions, pending, eventOptions, contributionGroups, campaignAllocations, campaignParticipations, campaignOptions] = await Promise.all([
       tx.member.findUnique({ where: { id: memberId }, select: { id: true } }),
       tx.memberEventSubscription.findMany({ where: { memberId }, include: {
         eventCode: { select: { id: true, code: true, eventName: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
@@ -167,15 +167,20 @@ export function loadMemberSponsorship(memberId: string) {
         _sum: { originalAmount: true }, _count: { _all: true }
       }),
       tx.memberEventCampaignAllocation.findMany({
-        where: { memberId, allocationStatus: "ACTIVE" }, orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        where: { memberId }, orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         select: { id: true, eventCampaignId: true, amountDelta: true, allocationType: true, allocationStatus: true, effectiveDate: true, reason: true,
-          eventCampaign: { select: { id: true, campaignName: true, eventCodeId: true, eventCode: { select: { code: true, eventName: true, eventType: true } } } } }
+          eventCampaign: { select: { id: true, campaignName: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true,
+            eventCode: { select: { code: true, eventName: true, eventType: true, activeFlag: true } } } } }
+      }),
+      tx.memberEventCampaignParticipation.findMany({
+        where: { memberId }, orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        select: { id: true, eventCampaignId: true, activeFlag: true, remark: true, createdAt: true }
       }),
       tx.eventCampaign.findMany({
         where: { activeFlag: true, eventCode: { eventType: "CAMPAIGN", activeFlag: true }, OR: [
           { startDate: null }, { startDate: { lte: new Date(`${currentBusinessDayValue()}T00:00:00.000Z`) } }
         ], AND: [{ OR: [{ endDate: null }, { endDate: { gte: new Date(`${currentBusinessDayValue()}T00:00:00.000Z`) } }] }] },
-        select: { id: true, campaignName: true, eventCodeId: true, startDate: true, endDate: true, eventCode: { select: { code: true, eventName: true } } },
+        select: { id: true, campaignName: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true, eventCode: { select: { code: true, eventName: true, activeFlag: true } } },
         orderBy: [{ campaignName: "asc" }, { id: "asc" }]
       })
     ]);
@@ -189,13 +194,20 @@ export function loadMemberSponsorship(memberId: string) {
     }) : [];
     const contributionEventIds = [...new Set(contributionGroups.flatMap(row => row.eventCodeId ? [row.eventCodeId] : []))];
     const contributionCampaignIds = [...new Set(contributionGroups.flatMap(row => row.eventCampaignId ? [row.eventCampaignId] : []))];
+    const participatingCampaignIds = [...new Set([
+      ...contributionCampaignIds,
+      ...campaignAllocations.map(row => row.eventCampaignId),
+      ...campaignParticipations.map(row => row.eventCampaignId)
+    ])];
     const [contributionEvents, contributionCampaigns] = await Promise.all([
       contributionEventIds.length ? tx.eventCode.findMany({ where: { id: { in: contributionEventIds } },
         select: { id: true, code: true, eventName: true, eventType: true, category: true } }) : [],
-      contributionCampaignIds.length ? tx.eventCampaign.findMany({ where: { id: { in: contributionCampaignIds } },
-        select: { id: true, eventCodeId: true, campaignName: true, activeFlag: true, startDate: true, endDate: true } }) : []
+      participatingCampaignIds.length ? tx.eventCampaign.findMany({ where: { id: { in: participatingCampaignIds } },
+        select: { id: true, eventCodeId: true, campaignName: true, activeFlag: true, startDate: true, endDate: true,
+          eventCode: { select: { code: true, eventName: true, eventType: true, activeFlag: true } } } }) : []
     ]);
-    return { member, subscriptions, paymentDates, pending, eventOptions, balances, contributionGroups, contributionEvents, contributionCampaigns, campaignAllocations, campaignOptions };
+    return { member, subscriptions, paymentDates, pending, eventOptions, balances, contributionGroups, contributionEvents,
+      contributionCampaigns, campaignMasters: contributionCampaigns, campaignAllocations, campaignParticipations, campaignOptions };
   });
 }
 

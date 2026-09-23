@@ -25,11 +25,13 @@ type CoverageRow = { id: string; subscriptionId: string; bankTransactionId: stri
   coverageStatus: string; unitAmountSnapshot: Prisma.Decimal | null; durationMonthsSnapshot: number | null;
   grantedUnits: number | null; amountApplied: Prisma.Decimal | null; coverageFrom: Date; coverageTo: Date;
   createdAt: Date; createdById: string | null; voidReason: string | null; remark: string | null };
-type TransferRow = { id: string; memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string;
+type TransferRow = { id: string; memberId: string; sourceSubscriptionId: string; destinationSubscriptionId: string | null; destinationCampaignId: string | null;
   amount: Prisma.Decimal; effectiveDate: Date; reason: string; status: string; idempotencyKey: string;
   requestHash: string; reversalOfTransferId: string | null; destinationUnitAmountSnapshot: Prisma.Decimal;
   destinationDurationMonthsSnapshot: number; createdAt: Date; createdById: string; reversedAt: Date | null;
   reversedById: string | null };
+type CampaignAllocationRow = { id: string; memberId: string; eventCampaignId: string; carryTransferId: string; amountDelta: Prisma.Decimal;
+  allocationType: string; allocationStatus: string; effectiveDate: Date; reason: string; createdById: string; reversalOfAllocationId: string | null };
 type PaymentRow = { id: string; transactionDate: Date; referenceNo: string | null; originalAmount: Prisma.Decimal;
   baseAmount: Prisma.Decimal; status: string; reconciliationExcludedAt: Date | null; eventCodeId: string;
   eventCode: { id: string; code: string; eventName: string; eventType: string; activeFlag: boolean;
@@ -55,9 +57,12 @@ function fixture() {
     { id: "sub-clean", memberId: "member-a", eventCodeId: "event-004", activeFlag: true, startDate: null, validUntil: null, referenceNo: "004-CLEAN", displayName: null },
     { id: "sub-other", memberId: "member-b", eventCodeId: "event-005", activeFlag: true, startDate: null, validUntil: null, referenceNo: "005-B", displayName: null }
   ];
+  const campaigns = [{ id: "campaign-1", eventCodeId: "event-campaign", campaignName: "Campaign 2026", activeFlag: true,
+    startDate: null as Date | null, endDate: null as Date | null, eventCode: { eventType: "CAMPAIGN", activeFlag: true } }];
   const entries: EntryRow[] = [];
   const coverages: CoverageRow[] = [];
   const transfers: TransferRow[] = [];
+  const campaignAllocations: CampaignAllocationRow[] = [];
   const payments: PaymentRow[] = [];
   let paymentWrites = 0;
   let sequence = 0;
@@ -101,9 +106,11 @@ function fixture() {
     Object.entries(where).every(([key, value]) => {
       if (value === null) return row[key] === null;
       if (typeof value === "object" && value !== null) {
-        const operator = value as { gt?: bigint; lt?: number | Prisma.Decimal; in?: string[] };
+        const operator = value as { gt?: bigint; lt?: bigint | number | Prisma.Decimal; lte?: bigint; in?: string[] };
         if ("in" in operator) return (operator.in ?? []).includes(String(row[key]));
-        if (operator.gt !== undefined) return (row[key] as bigint) > operator.gt;
+        if (operator.gt !== undefined && typeof operator.gt === "bigint") return (row[key] as bigint) > operator.gt;
+        if (operator.lte !== undefined) return (row[key] as bigint) <= operator.lte;
+        if (operator.lt !== undefined && typeof operator.lt === "bigint") return (row[key] as bigint) < operator.lt;
         if (operator.lt !== undefined && typeof operator.lt === "number") return (row[key] as Prisma.Decimal).lessThan(operator.lt);
         return true;
       }
@@ -122,6 +129,7 @@ function fixture() {
       }
     },
     eventCode: { findUnique: async ({ where }: { where: { id: string } }) => { const row = events.find(item => item.id === where.id); return row ? { ...row } : null; } },
+    eventCampaign: { findUnique: async ({ where }: { where: { id: string } }) => { const row = campaigns.find(item => item.id === where.id); return row ? { ...row } : null; } },
     memberEventBalanceLedger: {
       aggregate: async ({ where }: { where: Record<string, unknown> }) => {
         const rows = entries.filter(row => matches(row as unknown as Record<string, unknown>, where));
@@ -159,6 +167,9 @@ function fixture() {
           .sort((a, b) => a.postingSequence < b.postingSequence ? -1 : 1).map(decorateEntry)
     },
     memberEventCoverage: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const row = coverages.find(item => item.id === where.id); return row ? { ...row } : null;
+      },
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         const row = coverages.filter(item => matches(item as unknown as Record<string, unknown>, where))
           .sort((a, b) => b.coverageTo.getTime() - a.coverageTo.getTime() || b.id.localeCompare(a.id))[0];
@@ -232,6 +243,19 @@ function fixture() {
         const row = transfers.find(item => item.id === where.id)!; Object.assign(row, data); return { ...row };
       }
     },
+    memberEventCampaignAllocation: {
+      findUnique: async ({ where }: { where: { carryTransferId: string } }) =>
+        campaignAllocations.find(row => row.carryTransferId === where.carryTransferId) ?? null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        if (campaignAllocations.some(row => row.carryTransferId === data.carryTransferId)) throw unique();
+        const row: CampaignAllocationRow = { id: nextId("campaign-allocation"), allocationStatus: "ACTIVE",
+          reversalOfAllocationId: null, ...data, amountDelta: d(String(data.amountDelta)),
+          memberId: String(data.memberId), eventCampaignId: String(data.eventCampaignId), carryTransferId: String(data.carryTransferId),
+          allocationType: String(data.allocationType), effectiveDate: data.effectiveDate as Date,
+          reason: String(data.reason), createdById: String(data.createdById) } as CampaignAllocationRow;
+        campaignAllocations.push(row); return { ...row };
+      }
+    },
     bankTransaction: {
       findUnique: async ({ where }: { where: { id: string } }) => payments.find(row => row.id === where.id) ?? null,
       findMany: async ({ where }: { where: { id?: { in?: string[] }; memberIdentityId?: string } }) =>
@@ -245,7 +269,7 @@ function fixture() {
       deleteMany: async () => { paymentWrites += 1; throw new Error("Carry Transfer and rebuild must not delete financial records."); }
     }
   } as unknown as Prisma.TransactionClient;
-  return { tx, members, events, subs, entries, coverages, transfers, payments,
+  return { tx, members, events, subs, campaigns, entries, coverages, transfers, campaignAllocations, payments,
     seedCarry, seedConsumption, seedCoverage, seedPayment, nextSequence,
     paymentWrites: () => paymentWrites };
 }
@@ -266,6 +290,10 @@ const forward = (f: Fixture, options: Partial<{ memberId: string; sourceSubscrip
     idempotencyKey: options.idempotencyKey ?? nextKey(),
     userId: "admin"
   });
+const forwardCampaign = (f: Fixture, options: Partial<{ memberId: string; sourceSubscriptionId: string; destinationCampaignId: string; amount: string; reason: string; idempotencyKey: string }> = {}) =>
+  forwardCarryTransferRecord(f.tx, { memberId: options.memberId ?? "member-a", sourceSubscriptionId: options.sourceSubscriptionId ?? "sub-004",
+    destinationCampaignId: options.destinationCampaignId ?? "campaign-1", amount: options.amount ?? "100000.00",
+    reason: options.reason ?? "Member requested Campaign allocation", idempotencyKey: options.idempotencyKey ?? nextKey(), userId: "admin" });
 const reverse = (f: Fixture, transferId: string, options: Partial<{ memberId: string; reason: string; idempotencyKey: string }> = {}) =>
   reverseCarryTransferRecord(f.tx, {
     memberId: options.memberId ?? "member-a", transferId,
@@ -279,8 +307,7 @@ const activeBalance = (f: Fixture, subscriptionId: string) => f.entries
 test("forward transfer moves all unused carry and allocates destination coverage", async () => {
   const f = fixture(); f.seedCarry("sub-004", "100000.00");
   const result = await forward(f);
-  assert.equal(result.replayed, false);
-  assert.equal(result.transfer.status, "ACTIVE");
+  assert.equal(f.transfers[0].status, "ACTIVE");
   assert.equal(result.source.carryBefore, "100000.00");
   assert.equal(result.source.carryAfter, "0.00");
   assert.equal(result.destination.carryBefore, "0.00");
@@ -432,8 +459,7 @@ test("same idempotency key with the same payload returns the existing transfer",
   const key = nextKey();
   const first = await forward(f, { idempotencyKey: key });
   const second = await forward(f, { idempotencyKey: key });
-  assert.equal(second.replayed, true);
-  assert.equal(second.transfer.transferId, first.transfer.transferId);
+  assert.deepEqual(second, first);
   assert.equal(f.transfers.length, 1);
 });
 
@@ -453,6 +479,108 @@ test("idempotent retry does not create duplicate ledger legs", async () => {
   await forward(f, { idempotencyKey: key });
   assert.equal(f.entries.length, legCount);
   assert.equal(f.transfers.length, transferCount);
+});
+
+test("TIME_BASED to CAMPAIGN allocates full carry including suffix and records only allocation history", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100004.00");
+  const paymentsBefore = f.payments.slice();
+  const result = await forwardCampaign(f, { amount: "100004.00" });
+  assert.equal(result.source.carryBefore, "100004.00");
+  assert.equal(result.source.carryAfter, "0.00");
+  assert.equal(result.destination.type, "CAMPAIGN");
+  if (result.destination.type !== "CAMPAIGN") throw new Error("Expected Campaign destination");
+  assert.equal(result.destination.campaignId, "campaign-1");
+  assert.equal(result.destination.allocation.amountDelta, "100004.00");
+  assert.equal(f.campaignAllocations.length, 1);
+  assert.equal(f.campaignAllocations[0].allocationType, "CARRY_TRANSFER");
+  assert.deepEqual(f.payments, paymentsBefore);
+  assert.equal(f.paymentWrites(), 0);
+});
+
+test("partial TIME_BASED to CAMPAIGN allocation preserves every remaining rupiah", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100004.00");
+  const result = await forwardCampaign(f, { amount: "55000.00" });
+  assert.equal(result.source.carryAfter, "45004.00");
+  assert.equal(result.destination.type, "CAMPAIGN");
+  if (result.destination.type !== "CAMPAIGN") throw new Error("Expected Campaign destination");
+  assert.equal(result.destination.allocation.amountDelta, "55000.00");
+});
+
+test("same Campaign transfer idempotency key returns an identical response without double posting", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100004.00");
+  const key = nextKey();
+  const first = await forwardCampaign(f, { amount: "100004.00", idempotencyKey: key });
+  const second = await forwardCampaign(f, { amount: "100004.00", idempotencyKey: key });
+  assert.deepEqual(second, first);
+  assert.equal(f.transfers.length, 1);
+  assert.equal(f.entries.filter(row => row.carryTransferId === first.transfer.transferId).length, 1);
+  assert.equal(f.campaignAllocations.length, 1);
+});
+
+test("Campaign transfer rejects reuse of an idempotency key for a different request", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100004.00");
+  const key = nextKey();
+  await forwardCampaign(f, { amount: "50000.00", idempotencyKey: key });
+  await assert.rejects(() => forwardCampaign(f, { amount: "50001.00", idempotencyKey: key }), /different Carry Transfer request/);
+  assert.equal(f.campaignAllocations.length, 1);
+});
+
+test("Campaign reversal restores source carry and appends compensation without deleting forward history", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100004.00");
+  const first = await forwardCampaign(f, { amount: "100004.00" });
+  const result = await reverse(f, first.transfer.transferId);
+  assert.equal(result.restoringDestination.carryAfter, "100004.00");
+  assert.equal(result.restoringDestination.type, "TIME_BASED");
+  assert.equal(result.reversingSource.type, "CAMPAIGN");
+  if (result.reversingSource.type !== "CAMPAIGN") throw new Error("Expected Campaign reversal source");
+  assert.equal(result.reversingSource.campaignId, "campaign-1");
+  assert.equal(result.reversingSource.allocation.amountDelta, "-100004.00");
+  assert.equal(f.transfers.length, 2);
+  assert.equal(f.transfers.find(row => row.id === first.transfer.transferId)?.status, "REVERSED");
+  assert.deepEqual(f.campaignAllocations.map(row => row.amountDelta.toFixed(2)), ["100004.00", "-100004.00"]);
+  assert.equal(f.campaignAllocations[1].allocationType, "CARRY_REVERSAL");
+  assert.equal(f.campaignAllocations[1].reversalOfAllocationId, f.campaignAllocations[0].id);
+});
+
+test("Campaign reversal idempotency replay is identical and double reversal is rejected", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100004.00");
+  const first = await forwardCampaign(f, { amount: "100004.00" });
+  const key = nextKey();
+  const reversal = await reverse(f, first.transfer.transferId, { idempotencyKey: key });
+  const replay = await reverse(f, first.transfer.transferId, { idempotencyKey: key });
+  assert.deepEqual(replay, reversal);
+  await assert.rejects(() => reverse(f, first.transfer.transferId), /already has a reversal/);
+  assert.equal(f.campaignAllocations.length, 2);
+});
+
+test("TIME_BASED transfer replay after later activity preserves its original response snapshot", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100000.00");
+  const key = nextKey();
+  const first = await forward(f, { idempotencyKey: key });
+  f.seedCarry("sub-004", "250.00", "2026-03-01");
+  f.seedCarry("sub-005", "125.00", "2026-03-01");
+  assert.deepEqual(await forward(f, { idempotencyKey: key }), first);
+});
+
+test("TIME_BASED reversal replay returns the same snapshot and prevents a second reversal", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100000.00"); setRule(f, "event-005", "500000.00", 1);
+  const first = await forward(f);
+  const key = nextKey();
+  const reversal = await reverse(f, first.transfer.transferId, { idempotencyKey: key });
+  const replay = await reverse(f, first.transfer.transferId, { idempotencyKey: key });
+  assert.deepEqual(replay, reversal);
+  await assert.rejects(() => reverse(f, first.transfer.transferId), /already has a reversal/);
+});
+
+test("inactive, inactive-parent, and expired Campaign destinations are rejected", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100004.00");
+  f.campaigns[0].activeFlag = false;
+  await assert.rejects(() => forwardCampaign(f), /not active/);
+  f.campaigns[0].activeFlag = true; f.campaigns[0].eventCode.activeFlag = false;
+  await assert.rejects(() => forwardCampaign(f), /not active/);
+  f.campaigns[0].eventCode.activeFlag = true; f.campaigns[0].endDate = day("2026-09-01");
+  await assert.rejects(() => forwardCampaign(f), /outside its valid period/);
+  assert.equal(f.transfers.length, 0);
 });
 
 test("a second transfer cannot double-spend the same source carry", async () => {
@@ -476,8 +604,8 @@ test("an unused transfer reverses successfully and restores carry only", async (
   const f = fixture(); f.seedCarry("sub-004", "100000.00"); setRule(f, "event-005", "500000.00", 1);
   const first = await forward(f);
   const result = await reverse(f, first.transfer.transferId);
-  assert.equal(result.original.status, "REVERSED");
-  assert.equal(result.reversal.status, "ACTIVE");
+  assert.equal(f.transfers.find(row => row.id === first.transfer.transferId)?.status, "REVERSED");
+  assert.equal(f.transfers.find(row => row.id === result.reversal.transferId)?.status, "ACTIVE");
   assert.equal(result.reversal.amount, "100000.00");
   assert.equal(result.restoringDestination.subscriptionId, "sub-004");
   assert.equal(result.restoringDestination.carryAfter, "100000.00");
@@ -545,8 +673,8 @@ test("reversing the downstream transfer first allows the parent reversal", async
   const downstream = await forward(f, { sourceSubscriptionId: "sub-005", destinationSubscriptionId: "sub-clean", amount: "100000.00" });
   await reverse(f, downstream.transfer.transferId);
   const parent = await reverse(f, first.transfer.transferId);
-  assert.equal(parent.original.status, "REVERSED");
-  assert.equal(parent.reversal.status, "ACTIVE");
+  assert.equal(f.transfers.find(row => row.id === first.transfer.transferId)?.status, "REVERSED");
+  assert.equal(f.transfers.find(row => row.id === parent.reversal.transferId)?.status, "ACTIVE");
   assert.equal(activeBalance(f, "sub-004"), "100000.00");
   assert.equal(activeBalance(f, "sub-005"), "0.00");
   assert.equal(activeBalance(f, "sub-clean"), "0.00");

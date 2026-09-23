@@ -190,7 +190,7 @@ export function DraftTransactionReview({
         if (event?.eventType === "TIME_BASED") {
           const rule = event.timeRule;
           if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>Rule needed</span>;
-          const preview = paymentOnlyTimePreview(row.baseAmount, rule.unitAmount, rule.durationMonths);
+          const preview = paymentOnlyTimePreview(row.originalAmount, rule.unitAmount, rule.durationMonths);
           return preview
             ? <span className={styles.entitlementCell}>
                 <small>Rule: {formatMoney(rule.unitAmount)} / {rule.durationMonths} bln</small>

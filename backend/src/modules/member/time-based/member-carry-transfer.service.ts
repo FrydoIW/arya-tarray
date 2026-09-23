@@ -48,9 +48,9 @@ export type CarryTransferReverseInput = {
 
 export type CarryTransferView = {
   transferId: string;
-  status: string;
   memberId: string;
   sourceSubscriptionId: string;
+  destinationType: "TIME_BASED" | "CAMPAIGN";
   destinationSubscriptionId: string | null;
   destinationCampaignId: string | null;
   amount: string;
@@ -59,15 +59,13 @@ export type CarryTransferView = {
   destinationRule: { unitAmount: string; durationMonths: number };
   reversalOfTransferId: string | null;
   createdAt: string;
-  reversedAt: string | null;
 };
 
-export type CarryTransferBalanceView = {
-  subscriptionId: string | null;
-  campaignId?: string | null;
-  carryBefore: string | null;
-  carryAfter: string;
-};
+export type CarryTransferWalletBalanceView = { type: "TIME_BASED"; subscriptionId: string; carryBefore: string; carryAfter: string };
+export type CarryTransferCampaignAllocationView = { type: "CAMPAIGN"; campaignId: string;
+  allocation: { allocationId: string; amountDelta: string; allocationType: string } };
+export type CarryTransferDestinationView = CarryTransferWalletBalanceView & { allocation: CarryTransferAllocationView | null }
+  | CarryTransferCampaignAllocationView;
 
 export type CarryTransferAllocationView = {
   units: number;
@@ -78,18 +76,16 @@ export type CarryTransferAllocationView = {
 };
 
 export type CarryTransferResult = {
-  replayed: boolean;
   transfer: CarryTransferView;
-  source: CarryTransferBalanceView;
-  destination: CarryTransferBalanceView & { allocation: CarryTransferAllocationView | null };
+  source: CarryTransferWalletBalanceView;
+  destination: CarryTransferDestinationView;
 };
 
 export type CarryTransferReversalResult = {
-  replayed: boolean;
   original: CarryTransferView;
   reversal: CarryTransferView;
-  restoringDestination: CarryTransferBalanceView;
-  reversingSource: CarryTransferBalanceView;
+  restoringDestination: CarryTransferWalletBalanceView;
+  reversingSource: CarryTransferWalletBalanceView | CarryTransferCampaignAllocationView;
 };
 
 type TransferHeader = {
@@ -138,9 +134,9 @@ function isUniqueConstraintError(error: unknown) {
 function toTransferView(row: TransferHeader): CarryTransferView {
   return {
     transferId: row.id,
-    status: row.status,
     memberId: row.memberId,
     sourceSubscriptionId: row.sourceSubscriptionId,
+    destinationType: row.destinationCampaignId ? "CAMPAIGN" : "TIME_BASED",
     destinationSubscriptionId: row.destinationSubscriptionId,
     destinationCampaignId: row.destinationCampaignId,
     amount: row.amount.toFixed(2),
@@ -148,8 +144,7 @@ function toTransferView(row: TransferHeader): CarryTransferView {
     reason: row.reason,
     destinationRule: { unitAmount: row.destinationUnitAmountSnapshot.toFixed(2), durationMonths: row.destinationDurationMonthsSnapshot },
     reversalOfTransferId: row.reversalOfTransferId,
-    createdAt: row.createdAt.toISOString(),
-    reversedAt: row.reversedAt?.toISOString() ?? null
+    createdAt: row.createdAt.toISOString()
   };
 }
 
@@ -159,6 +154,49 @@ async function activeCarryCents(tx: Tx, subscriptionId: string) {
     _sum: { amountDelta: true }
   });
   return decimalStringToCents(row._sum.amountDelta?.toString() ?? "0");
+}
+
+/** Stable ledger snapshot for an idempotent response, even after later postings. */
+async function walletSnapshot(tx: Tx, subscriptionId: string, transferId: string,
+  allocationRule?: { unitAmount: string; durationMonths: number }) {
+  const legs = await tx.memberEventBalanceLedger.findMany({
+    where: { subscriptionId, carryTransferId: transferId },
+    select: { entryType: true, postingSequence: true, coverageId: true },
+    orderBy: { postingSequence: "asc" }
+  });
+  if (!legs.length) throw new HttpError(409, "Carry Transfer ledger evidence is incomplete.");
+  const firstSequence = legs[0].postingSequence;
+  const lastSequence = legs[legs.length - 1].postingSequence;
+  const [beforeRow, afterRow] = await Promise.all([
+    // Reconstruct the ledger as it stood at posting time. A later void marks
+    // its original row VOIDED and appends a compensating row with a later
+    // sequence; filtering current status here would rewrite this response.
+    tx.memberEventBalanceLedger.aggregate({ where: { subscriptionId, postingSequence: { lt: firstSequence } }, _sum: { amountDelta: true } }),
+    tx.memberEventBalanceLedger.aggregate({ where: { subscriptionId, postingSequence: { lte: lastSequence } }, _sum: { amountDelta: true } })
+  ]);
+  const coverageId = legs.find(row => row.entryType === "COVERAGE_USE")?.coverageId;
+  const coverage = coverageId ? await tx.memberEventCoverage.findUnique({ where: { id: coverageId },
+    select: { id: true, coverageFrom: true, coverageTo: true, grantedUnits: true, amountApplied: true,
+      unitAmountSnapshot: true, durationMonthsSnapshot: true } }) : null;
+  const allocation = coverage ? {
+    units: coverage.grantedUnits ?? 0,
+    amountApplied: centsToDecimal(decimalStringToCents(coverage.amountApplied?.toString() ?? "0")),
+    unitAmount: centsToDecimal(decimalStringToCents(coverage.unitAmountSnapshot?.toString() ?? "0")),
+    durationMonths: coverage.durationMonthsSnapshot ?? 0,
+    coverage: { coverageId: coverage.id, coverageFrom: dateOnly(coverage.coverageFrom), coverageTo: dateOnly(coverage.coverageTo) }
+  } : allocationRule ? { units: 0, amountApplied: "0.00", ...allocationRule, coverage: null } : null;
+  return {
+    carryBefore: centsToDecimal(decimalStringToCents(beforeRow._sum.amountDelta?.toString() ?? "0")),
+    carryAfter: centsToDecimal(decimalStringToCents(afterRow._sum.amountDelta?.toString() ?? "0")),
+    allocation
+  };
+}
+
+async function campaignAllocationSnapshot(tx: Tx, transferId: string): Promise<CarryTransferCampaignAllocationView["allocation"]> {
+  const row = await tx.memberEventCampaignAllocation.findUnique({ where: { carryTransferId: transferId },
+    select: { id: true, amountDelta: true, allocationType: true } });
+  if (!row) throw new HttpError(409, "Campaign allocation evidence is incomplete.");
+  return { allocationId: row.id, amountDelta: centsToDecimal(decimalStringToCents(row.amountDelta.toString())), allocationType: row.allocationType };
 }
 
 type SubscriptionRow = { id: string; memberId: string; eventCodeId: string; activeFlag: boolean };
@@ -187,14 +225,20 @@ async function replayForwardTransfer(tx: Tx, row: TransferHeader,
   command: { memberId: string; requestHash: string }): Promise<CarryTransferResult> {
   if (row.requestHash !== command.requestHash || row.memberId !== command.memberId)
     throw new HttpError(409, "This idempotency key was already used for a different Carry Transfer request.");
-  const [sourceCarry, destinationCarry] = await Promise.all([
-    activeCarryCents(tx, row.sourceSubscriptionId), row.destinationSubscriptionId ? activeCarryCents(tx, row.destinationSubscriptionId) : Promise.resolve(0n)
-  ]);
+  const source = await walletSnapshot(tx, row.sourceSubscriptionId, row.id);
+  let resultDestination: CarryTransferDestinationView;
+  if (row.destinationCampaignId) {
+    resultDestination = { type: "CAMPAIGN", campaignId: row.destinationCampaignId,
+      allocation: await campaignAllocationSnapshot(tx, row.id) };
+  } else if (row.destinationSubscriptionId) {
+    const destination = await walletSnapshot(tx, row.destinationSubscriptionId, row.id,
+      { unitAmount: row.destinationUnitAmountSnapshot.toFixed(2), durationMonths: row.destinationDurationMonthsSnapshot });
+    resultDestination = { type: "TIME_BASED", subscriptionId: row.destinationSubscriptionId, ...destination };
+  } else throw new HttpError(409, "Carry Transfer destination evidence is incomplete.");
   return {
-    replayed: true,
     transfer: toTransferView(row),
-    source: { subscriptionId: row.sourceSubscriptionId, carryBefore: null, carryAfter: centsToDecimal(sourceCarry) },
-    destination: { subscriptionId: row.destinationSubscriptionId, campaignId: row.destinationCampaignId, carryBefore: null, carryAfter: centsToDecimal(destinationCarry), allocation: null }
+    source: { type: "TIME_BASED", subscriptionId: row.sourceSubscriptionId, carryBefore: source.carryBefore, carryAfter: source.carryAfter },
+    destination: resultDestination
   };
 }
 
@@ -264,7 +308,10 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
       amountDelta: centsToDecimal(amountCents), allocationType: "CARRY_TRANSFER", allocationStatus: "ACTIVE",
       effectiveDate, reason, createdById: input.userId
     } });
-    return { replayed: false, transfer: toTransferView(created), source: { subscriptionId: source.id, carryBefore: centsToDecimal(sourceCarryBefore), carryAfter: centsToDecimal(sourceCarryBefore - amountCents) }, destination: { subscriptionId: null, campaignId: campaign.id, carryBefore: null, carryAfter: centsToDecimal(amountCents), allocation: null } };
+    const sourceSnapshot = await walletSnapshot(tx, source.id, created.id);
+    return { transfer: toTransferView(created),
+      source: { type: "TIME_BASED", subscriptionId: source.id, carryBefore: sourceSnapshot.carryBefore, carryAfter: sourceSnapshot.carryAfter },
+      destination: { type: "CAMPAIGN", campaignId: campaign.id, allocation: await campaignAllocationSnapshot(tx, created.id) } };
   }
 
   const destination = await tx.memberEventSubscription.findUnique({ where: { id: input.destinationSubscriptionId! }, select: subscriptionSelect });
@@ -348,7 +395,7 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
       select: { id: true, coverageFrom: true, coverageTo: true }
     });
     await tx.memberEventBalanceLedger.create({ data: {
-      subscriptionId: destination.id, coverageId: coverage.id, entryType: "COVERAGE_USE", entryStatus: "ACTIVE",
+      subscriptionId: destination.id, coverageId: coverage.id, carryTransferId: created.id, entryType: "COVERAGE_USE", entryStatus: "ACTIVE",
       amountDelta: centsToDecimal(-amountConsumedCents), effectiveDate,
       unitAmountSnapshot: rule.unitAmount.toString(), durationMonthsSnapshot: rule.durationMonths,
       postingSequence: destinationSequences[1], createdById: input.userId
@@ -358,22 +405,14 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
   await refreshSubscriptionValidity(tx, destination.id);
   await refreshSubscriptionStartDate(tx, destination.id);
 
+  const [sourceSnapshot, destinationSnapshot] = await Promise.all([
+    walletSnapshot(tx, source.id, created.id), walletSnapshot(tx, destination.id, created.id,
+      { unitAmount: centsToDecimal(decimalStringToCents(rule.unitAmount.toString())), durationMonths: rule.durationMonths })
+  ]);
   return {
-    replayed: false,
     transfer: toTransferView(created),
-    source: { subscriptionId: source.id, carryBefore: centsToDecimal(sourceCarryBefore), carryAfter: centsToDecimal(sourceCarryBefore - amountCents) },
-    destination: {
-      subscriptionId: destination.id,
-      carryBefore: centsToDecimal(destinationCarryBefore),
-      carryAfter: centsToDecimal(availableCents - amountConsumedCents),
-      allocation: {
-        units,
-        amountApplied: centsToDecimal(amountConsumedCents),
-        unitAmount: rule.unitAmount.toFixed(2),
-        durationMonths: rule.durationMonths,
-        coverage: coverage ? { coverageId: coverage.id, coverageFrom: dateOnly(coverage.coverageFrom), coverageTo: dateOnly(coverage.coverageTo) } : null
-      }
-    }
+    source: { type: "TIME_BASED", subscriptionId: source.id, carryBefore: sourceSnapshot.carryBefore, carryAfter: sourceSnapshot.carryAfter },
+    destination: { type: "TIME_BASED", subscriptionId: destination.id, ...destinationSnapshot }
   };
 }
 
@@ -382,16 +421,23 @@ async function replayReversal(tx: Tx, existing: TransferHeader,
   if (existing.requestHash !== command.requestHash || existing.memberId !== command.memberId || existing.reversalOfTransferId !== command.transferId)
     throw new HttpError(409, "This idempotency key was already used for a different Carry Transfer reversal request.");
   const original = await tx.memberEventCarryTransfer.findUnique({ where: { id: command.transferId }, select: transferHeaderSelect });
-  if (!original) throw new HttpError(404, "Carry Transfer was not found for this Member.");
-  const [restoringCarry, reversingCarry] = await Promise.all([
-    activeCarryCents(tx, original.sourceSubscriptionId), original.destinationSubscriptionId ? activeCarryCents(tx, original.destinationSubscriptionId) : Promise.resolve(0n)
-  ]);
+  if (!original || original.memberId !== command.memberId) throw new HttpError(404, "Carry Transfer was not found for this Member.");
+  const restoring = await walletSnapshot(tx, original.sourceSubscriptionId, existing.id);
+  let reversingSource: CarryTransferReversalResult["reversingSource"];
+  if (original.destinationCampaignId) {
+    reversingSource = { type: "CAMPAIGN", campaignId: original.destinationCampaignId,
+      allocation: await campaignAllocationSnapshot(tx, existing.id) };
+  } else if (original.destinationSubscriptionId) {
+    const reversing = await walletSnapshot(tx, original.destinationSubscriptionId, existing.id);
+    reversingSource = { type: "TIME_BASED", subscriptionId: original.destinationSubscriptionId,
+      carryBefore: reversing.carryBefore, carryAfter: reversing.carryAfter };
+  } else throw new HttpError(409, "Carry Transfer destination evidence is incomplete.");
   return {
-    replayed: true,
     original: toTransferView(original),
     reversal: toTransferView(existing),
-    restoringDestination: { subscriptionId: original.sourceSubscriptionId, carryBefore: null, carryAfter: centsToDecimal(restoringCarry) },
-    reversingSource: { subscriptionId: original.destinationSubscriptionId, campaignId: original.destinationCampaignId, carryBefore: null, carryAfter: centsToDecimal(reversingCarry) }
+    restoringDestination: { type: "TIME_BASED", subscriptionId: original.sourceSubscriptionId,
+      carryBefore: restoring.carryBefore, carryAfter: restoring.carryAfter },
+    reversingSource
   };
 }
 
@@ -447,7 +493,12 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
       effectiveDate, reason, createdById: input.userId, reversalOfAllocationId: allocation.id
     } });
     const reversedOriginal = await tx.memberEventCarryTransfer.update({ where: { id: original.id }, data: { status: "REVERSED", reversedAt: new Date(), reversedById: input.userId }, select: transferHeaderSelect });
-    return { replayed: false, original: toTransferView(reversedOriginal), reversal: toTransferView(reversal), restoringDestination: { subscriptionId: original.sourceSubscriptionId, carryBefore: centsToDecimal(restoringCarryBefore), carryAfter: centsToDecimal(restoringCarryBefore + amountCents) }, reversingSource: { subscriptionId: original.sourceSubscriptionId, carryBefore: centsToDecimal(restoringCarryBefore), carryAfter: centsToDecimal(restoringCarryBefore + amountCents) } };
+    const restored = await walletSnapshot(tx, original.sourceSubscriptionId, reversal.id);
+    return { original: toTransferView(reversedOriginal), reversal: toTransferView(reversal),
+      restoringDestination: { type: "TIME_BASED", subscriptionId: original.sourceSubscriptionId,
+        carryBefore: restored.carryBefore, carryAfter: restored.carryAfter },
+      reversingSource: { type: "CAMPAIGN", campaignId: original.destinationCampaignId,
+        allocation: await campaignAllocationSnapshot(tx, reversal.id) } };
   }
 
   const { source: reversingSource, destination: restoringDestination } = await loadOwnedSubscriptions(
@@ -534,12 +585,16 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
   });
   await refreshSubscriptionStartDate(tx, restoringDestination.id);
 
+  const [restored, reversed] = await Promise.all([
+    walletSnapshot(tx, restoringDestination.id, reversal.id), walletSnapshot(tx, reversingSource.id, reversal.id)
+  ]);
   return {
-    replayed: false,
     original: toTransferView(reversedOriginal),
     reversal: toTransferView(reversal),
-    restoringDestination: { subscriptionId: restoringDestination.id, carryBefore: centsToDecimal(restoringCarryBefore), carryAfter: centsToDecimal(restoringCarryBefore + amountCents) },
-    reversingSource: { subscriptionId: reversingSource.id, carryBefore: centsToDecimal(reversingCarryBefore), carryAfter: centsToDecimal(reversingCarryBefore - amountCents) }
+    restoringDestination: { type: "TIME_BASED", subscriptionId: restoringDestination.id,
+      carryBefore: restored.carryBefore, carryAfter: restored.carryAfter },
+    reversingSource: { type: "TIME_BASED", subscriptionId: reversingSource.id,
+      carryBefore: reversed.carryBefore, carryAfter: reversed.carryAfter }
   };
 }
 

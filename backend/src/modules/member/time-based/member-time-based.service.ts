@@ -45,13 +45,19 @@ export function historicalCoverageEntitlement(input: { eventCodeId: string; subs
   return { unitAmount: input.unitAmount.toString(), durationMonths: input.durationMonths, grantedUnits: input.grantedUnits, amountApplied: input.amountApplied.toString() };
 }
 export function selectHistoricalCoverageEntitlement(input: {
-  eventCodeId: string | null; principalAmount: { toString(): string }; recalculate: boolean;
+  eventCodeId: string | null; principalAmount: { toString(): string }; alternativePrincipalAmount?: { toString(): string } | null; recalculate: boolean;
   coverages: Array<{ coverageStatus: string; subscriptionEventCodeId: string; unitAmount: { toString(): string } | null;
     durationMonths: number | null; grantedUnits: number | null; amountApplied: { toString(): string } | null }>;
 }) {
   if (!input.eventCodeId || input.recalculate) return null;
-  const historical = input.coverages.find(row => row.subscriptionEventCodeId === input.eventCodeId
-    && row.amountApplied && cents(row.amountApplied) === cents(input.principalAmount));
+  const matches = (amount: { toString(): string } | null) => amount
+    ? input.coverages.find(row => row.subscriptionEventCodeId === input.eventCodeId
+      && row.amountApplied && cents(row.amountApplied) === cents(amount)) : undefined;
+  // Prefer the full PAYMENT amount. The alternative is only a legacy snapshot
+  // fallback, and remains constrained to this Event Code and transaction.
+  const historical = matches(input.principalAmount)
+    ?? (input.alternativePrincipalAmount && cents(input.alternativePrincipalAmount) !== cents(input.principalAmount)
+      ? matches(input.alternativePrincipalAmount) : undefined);
   return historical ? historicalCoverageEntitlement({ eventCodeId: input.eventCodeId,
     subscriptionEventCodeId: historical.subscriptionEventCodeId, unitAmount: historical.unitAmount,
     durationMonths: historical.durationMonths, grantedUnits: historical.grantedUnits,
@@ -63,9 +69,12 @@ export function selectHistoricalPaymentSnapshot(input: {
     durationMonthsSnapshot: number | null; subscription: { eventCodeId: string } }>;
 }) {
   if (!input.eventCodeId || input.recalculate) return null;
-  const acceptedAmounts = new Set([cents(input.principalAmount), ...(input.alternativePrincipalAmount ? [cents(input.alternativePrincipalAmount)] : [])]);
-  const row = input.entries.find(item => item.entryType === "PAYMENT" && item.subscription.eventCodeId === input.eventCodeId
-    && acceptedAmounts.has(cents(item.amountDelta)) && item.unitAmountSnapshot && item.durationMonthsSnapshot);
+  const matches = (amount: { toString(): string }) => input.entries.find(item => item.entryType === "PAYMENT"
+    && item.subscription.eventCodeId === input.eventCodeId && cents(item.amountDelta) === cents(amount)
+    && item.unitAmountSnapshot && item.durationMonthsSnapshot);
+  const row = matches(input.principalAmount)
+    ?? (input.alternativePrincipalAmount && cents(input.alternativePrincipalAmount) !== cents(input.principalAmount)
+      ? matches(input.alternativePrincipalAmount) : undefined);
   return row ? { unitAmount: row.unitAmountSnapshot!.toString(), durationMonths: row.durationMonthsSnapshot! } : null;
 }
 export function resolveCoverageStart(input: { latestCoverageTo: Date | null; startDate: Date | null; transactionDate: Date }) {
@@ -141,7 +150,7 @@ async function snapshot(tx: Tx, payment: Payment, recalculate: boolean) {
     const old = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId,
       principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false, entries })
       ?? selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCodeId,
-        principalAmount: payment.baseAmount, recalculate: false,
+        principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false,
         coverages: coverages.map(row => ({ coverageStatus: row.coverageStatus,
           subscriptionEventCodeId: row.subscription.eventCodeId, unitAmount: row.unitAmountSnapshot,
           durationMonths: row.durationMonthsSnapshot, grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });

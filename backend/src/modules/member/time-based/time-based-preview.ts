@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { centsToDecimal } from "../data/member-donation.domain.js";
@@ -31,12 +32,15 @@ type PreviewPayment = {
 /** Read-only display of the same historical rate selection used by allocation. */
 export function timeBasedPaymentPreview(payment: PreviewPayment, recalculate = false) {
   if (payment.eventCode?.eventType !== "TIME_BASED" || !payment.baseAmount) return null;
-  const principal = decimalStringToCents(payment.baseAmount.toString());
+  // Classification still requires baseAmount, but all wallet/remainder display
+  // follows the complete bank PAYMENT amount including its suffix rupiah.
+  const principal = decimalStringToCents(payment.originalAmount.toString());
   if (principal <= 0n) return null;
   const entries = payment.memberEventBalanceLedger.slice().sort((a, b) => Number(b.entryStatus === "ACTIVE") - Number(a.entryStatus === "ACTIVE"));
-  const historical = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId, principalAmount: payment.baseAmount, recalculate, entries });
+  const historical = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId, principalAmount: payment.originalAmount,
+    alternativePrincipalAmount: payment.baseAmount, recalculate, entries });
   const legacy = historical ? null : selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCodeId,
-    principalAmount: payment.baseAmount, recalculate, coverages: payment.memberEventCoverages.map(row => ({
+    principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate, coverages: payment.memberEventCoverages.map(row => ({
       coverageStatus: row.coverageStatus, subscriptionEventCodeId: row.subscription.eventCodeId,
       unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot,
       grantedUnits: row.grantedUnits, amountApplied: row.amountApplied
@@ -45,14 +49,19 @@ export function timeBasedPaymentPreview(payment: PreviewPayment, recalculate = f
     const rate = historical ?? legacy ?? resolveTimeBasedUnits({ eventCode: payment.eventCode,
       rule: payment.eventCode.timeRule, transaction: payment, requiresClassification: true });
     if (!rate) return null;
-    const activePayment = !recalculate && entries.find(row => row.entryStatus === "ACTIVE"
-      && row.subscription.eventCodeId === payment.eventCodeId && decimalStringToCents(row.amountDelta.toString()) === principal);
-    const snapshotPayment = historical && entries.find(row => row.subscription.eventCodeId === payment.eventCodeId
-      && decimalStringToCents(row.amountDelta.toString()) === principal
-      && row.unitAmountSnapshot?.toString() === historical.unitAmount
-      && row.durationMonthsSnapshot === historical.durationMonths);
-    const actualCoverage = snapshotPayment && payment.memberEventCoverages.find(row =>
-      row.coverageStatus === snapshotPayment.entryStatus && row.subscriptionId === snapshotPayment.subscriptionId
+    const paymentMatches = (amount: bigint) => entries.find(row => row.subscription.eventCodeId === payment.eventCodeId
+      && decimalStringToCents(row.amountDelta.toString()) === amount);
+    const fullPayment = paymentMatches(principal);
+    const legacyPayment = decimalStringToCents(payment.baseAmount.toString()) === principal ? null
+      : paymentMatches(decimalStringToCents(payment.baseAmount.toString()));
+    const activePayment = !recalculate ? (fullPayment?.entryStatus === "ACTIVE" ? fullPayment
+      : legacyPayment?.entryStatus === "ACTIVE" ? legacyPayment : undefined) : undefined;
+    const matchingSnapshotPayment = historical
+      ? [fullPayment, legacyPayment].find(row => row?.unitAmountSnapshot?.toString() === historical.unitAmount
+        && row.durationMonthsSnapshot === historical.durationMonths)
+      : undefined;
+    const actualCoverage = matchingSnapshotPayment && payment.memberEventCoverages.find(row =>
+      row.coverageStatus === matchingSnapshotPayment.entryStatus && row.subscriptionId === matchingSnapshotPayment.subscriptionId
       && row.unitAmountSnapshot && decimalStringToCents(row.unitAmountSnapshot.toString()) === decimalStringToCents(rate.unitAmount)
       && row.durationMonthsSnapshot === rate.durationMonths);
     const unit = decimalStringToCents(rate.unitAmount);
@@ -63,4 +72,3 @@ export function timeBasedPaymentPreview(payment: PreviewPayment, recalculate = f
       paymentOnlyRemainder: centsToDecimal(principal % unit), paymentCredited: activePayment ? activePayment.amountDelta.toString() : null };
   } catch { return null; }
 }
-import type { Prisma } from "@prisma/client";

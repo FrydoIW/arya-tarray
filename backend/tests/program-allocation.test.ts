@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
-import { summarizeContributions, summarizeSubscriptionLedger } from "../src/modules/member/data/member-data.service.js";
-import { subscriptionUpdateSchema } from "../src/modules/member/data/member-data.schema.js";
+import { campaignAcceptsNewParticipation, createCampaignParticipationRecord, eligibleCampaignParticipationOptions, initialTimeBasedSubscriptionState, sponsorshipStatus, summarizeCampaignAllocations, summarizeContributions, summarizeSubscriptionLedger } from "../src/modules/member/data/member-data.service.js";
+import { campaignParticipationCreateSchema, subscriptionCreateSchema, subscriptionUpdateSchema } from "../src/modules/member/data/member-data.schema.js";
 import { canOfferTransfer, centsToMoney, coverageSourceLabel, createIdempotencyKey, dependencyConflictHint, ledgerEntryKind, ledgerEntryLabel, moneyToCents, subscriptionLabel, transferDestinationCandidates, transferEstimate, validateTransferAmount } from "../../frontend/src/features/member/data/program-allocation.utils.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -61,6 +61,121 @@ test("campaign overview status follows the shared campaign semantics", () => {
   assert.equal(status({ activeFlag: true, startDate: new Date("2026-10-01T00:00:00.000Z"), endDate: null }), "SCHEDULED");
   assert.equal(status({ activeFlag: true, startDate: null, endDate: new Date("2026-09-01T00:00:00.000Z") }), "ENDED");
   assert.equal(status({ activeFlag: true, startDate: null, endDate: null }), "ACTIVE");
+});
+
+test("Campaign donor cards show participation only, separate direct and carry amounts, and retain historical status", () => {
+  const events = [{ id: "e-campaign", code: "012", eventName: "Campaign Event", eventType: "CAMPAIGN", category: null }];
+  const campaignMasters = [{ id: "c-historical", eventCodeId: "e-campaign", campaignName: "Past Campaign", activeFlag: true,
+    startDate: null, endDate: new Date("2026-08-31T00:00:00.000Z"),
+    eventCode: { code: "012", eventName: "Campaign Event", eventType: "CAMPAIGN", activeFlag: true } },
+  { id: "c-unrelated", eventCodeId: "e-campaign", campaignName: "Unrelated Active", activeFlag: true,
+    startDate: null, endDate: null, eventCode: { code: "012", eventName: "Campaign Event", eventType: "CAMPAIGN", activeFlag: true } }];
+  const contributions = summarizeContributions({
+    groups: [{ eventCodeId: "e-campaign", eventCampaignId: "c-historical", _sum: { originalAmount: d("120.00") }, _count: { _all: 1 } }],
+    events, campaigns: campaignMasters, today: "2026-09-19"
+  });
+  const allocations = [
+    { id: "a1", eventCampaignId: "c-historical", amountDelta: d("500.00"), allocationType: "CARRY_TRANSFER", allocationStatus: "ACTIVE",
+      effectiveDate: new Date("2026-08-01T00:00:00.000Z"), reason: "Carry", eventCampaign: campaignMasters[0] },
+    { id: "a2", eventCampaignId: "c-historical", amountDelta: d("-100.00"), allocationType: "CARRY_REVERSAL", allocationStatus: "ACTIVE",
+      effectiveDate: new Date("2026-08-02T00:00:00.000Z"), reason: "Reverse", eventCampaign: campaignMasters[0] },
+    { id: "a3", eventCampaignId: "c-historical", amountDelta: d("40.00"), allocationType: "CARRY_TRANSFER", allocationStatus: "VOIDED",
+      effectiveDate: new Date("2026-08-03T00:00:00.000Z"), reason: "Voided", eventCampaign: campaignMasters[0] }
+  ];
+  const result = summarizeCampaignAllocations({ contributions, allocations, campaignMasters, today: "2026-09-19" });
+  assert.equal(result.length, 1, "a configured master alone must not inject a donor card");
+  assert.equal(result[0].status, "ENDED");
+  assert.equal(result[0].directContribution, "120.00");
+  assert.equal(result[0].allocatedFromCarry, "400.00");
+  assert.equal(result[0].totalAllocation, "520.00");
+  assert.equal(result[0].allocationHistory.length, 3, "voided allocation evidence stays discoverable");
+  assert.equal(summarizeCampaignAllocations({ contributions: [], allocations: [], campaignMasters, today: "2026-09-19" }).length, 0);
+});
+
+test("manual Campaign participation persists without financial rows and merges with later allocation", async () => {
+  const participations: Array<{ id: string; memberId: string; eventCampaignId: string; activeFlag: boolean; remark: string | null; createdById: string }> = [];
+  const financialWrites = { bank: 0, allocation: 0, ledger: 0, transfer: 0 };
+  const campaign = { id: "campaign-manual", activeFlag: true, startDate: null, endDate: null,
+    eventCode: { eventType: "CAMPAIGN", activeFlag: true } };
+  const tx = {
+    member: { findUnique: async () => ({ activeFlag: true }) },
+    eventCampaign: { findUnique: async () => campaign },
+    memberEventCampaignParticipation: {
+      findUnique: async () => participations[0] ?? null,
+      create: async ({ data }: { data: Omit<typeof participations[number], "id"> }) => {
+        const row = { id: "participation-1", ...data }; participations.push(row); return row;
+      }
+    },
+    bankTransaction: { findFirst: async () => null, create: async () => { financialWrites.bank++; } },
+    memberEventCampaignAllocation: { findFirst: async () => null, create: async () => { financialWrites.allocation++; } },
+    memberEventBalanceLedger: { create: async () => { financialWrites.ledger++; } },
+    memberEventCarryTransfer: { create: async () => { financialWrites.transfer++; } }
+  } as unknown as Prisma.TransactionClient;
+
+  await createCampaignParticipationRecord(tx, "member-a", { eventCampaignId: campaign.id, remark: "Resident support" }, "admin");
+  assert.deepEqual(participations, [{ id: "participation-1", memberId: "member-a", eventCampaignId: campaign.id,
+    activeFlag: true, remark: "Resident support", createdById: "admin" }]);
+  await assert.rejects(() => createCampaignParticipationRecord(tx, "member-a", { eventCampaignId: campaign.id, remark: null }, "admin"), /sudah berpartisipasi/);
+  assert.deepEqual(financialWrites, { bank: 0, allocation: 0, ledger: 0, transfer: 0 });
+
+  const campaignMaster = [{ id: campaign.id, eventCampaignId: campaign.id, eventCodeId: "e-campaign", campaignName: "Resident Meals",
+    activeFlag: true, startDate: null, endDate: null,
+    eventCode: { code: "006", eventName: "Resident Meals", eventType: "CAMPAIGN", activeFlag: true } }];
+  const contributionInput = { groups: [], events: [{ id: "e-campaign", code: "006", eventName: "Resident Meals", eventType: "CAMPAIGN", category: null }],
+    campaigns: [{ id: campaign.id, eventCodeId: "e-campaign", campaignName: "Resident Meals", activeFlag: true, startDate: null, endDate: null }], today: "2026-09-19" };
+  const contributions = summarizeContributions(contributionInput);
+  const readModelInput = { contributions, participations, allocations: [], campaignMasters: campaignMaster, today: "2026-09-19" };
+  const afterReload = summarizeCampaignAllocations(readModelInput);
+  assert.deepEqual(summarizeCampaignAllocations(readModelInput), afterReload, "reload preserves one participation card");
+  assert.equal(afterReload.length, 1);
+  assert.deepEqual({ status: afterReload[0].status, direct: afterReload[0].directContribution,
+    allocated: afterReload[0].allocatedFromCarry, total: afterReload[0].totalAllocation },
+  { status: "ACTIVE", direct: "0.00", allocated: "0.00", total: "0.00" });
+
+  const afterCarry = summarizeCampaignAllocations({ ...readModelInput, allocations: [{ id: "allocation-1", eventCampaignId: campaign.id,
+    amountDelta: d("50003.00"), allocationType: "CARRY_TRANSFER", allocationStatus: "ACTIVE", effectiveDate: new Date("2026-09-01T00:00:00Z"),
+    reason: "Carry", eventCampaign: { ...campaignMaster[0] } }] });
+  assert.equal(afterCarry.length, 1, "carry allocation merges into the existing participation card");
+  assert.equal(afterCarry[0].directContribution, "0.00");
+  assert.equal(afterCarry[0].allocatedFromCarry, "50003.00");
+  assert.equal(afterCarry[0].totalAllocation, "50003.00");
+  assert.deepEqual(summarizeContributions(contributionInput), contributions, "manual participation and carry do not change contribution totals");
+});
+
+test("Campaign participation options exclude existing cards and require a currently valid Campaign", () => {
+  const active = { activeFlag: true, startDate: null, endDate: null, eventCode: { activeFlag: true } };
+  const options = ["direct", "allocated", "manual", "new", "inactive", "scheduled", "ended", "parent-inactive"]
+    .map(id => ({ id, ...active, eventCode: { ...active.eventCode } }));
+  options.find(row => row.id === "inactive")!.activeFlag = false;
+  options.find(row => row.id === "scheduled")!.startDate = new Date("2026-10-01T00:00:00Z");
+  options.find(row => row.id === "ended")!.endDate = new Date("2026-09-01T00:00:00Z");
+  options.find(row => row.id === "parent-inactive")!.eventCode.activeFlag = false;
+  assert.deepEqual(eligibleCampaignParticipationOptions(options, ["direct", "allocated", "manual"], "2026-09-19").map(row => row.id), ["new"]);
+  assert.equal(campaignParticipationCreateSchema.safeParse({ eventCampaignId: "00000000-0000-0000-0000-000000000006", remark: null }).success, true);
+  assert.equal(campaignParticipationCreateSchema.safeParse({ eventCampaignId: "00000000-0000-0000-0000-000000000006", remark: null, amount: "0.00" }).success, false);
+  assert.equal(campaignAcceptsNewParticipation({ activeFlag: true, startDate: null, endDate: null }, true, "2026-09-19"), true);
+  assert.equal(campaignAcceptsNewParticipation({ activeFlag: false, startDate: null, endDate: null }, true, "2026-09-19"), false);
+  assert.equal(campaignAcceptsNewParticipation({ activeFlag: true, startDate: new Date("2026-10-01T00:00:00Z"), endDate: null }, true, "2026-09-19"), false);
+  assert.equal(campaignAcceptsNewParticipation({ activeFlag: true, startDate: null, endDate: new Date("2026-09-01T00:00:00Z") }, true, "2026-09-19"), false);
+  assert.equal(campaignAcceptsNewParticipation({ activeFlag: true, startDate: null, endDate: null }, false, "2026-09-19"), false);
+});
+
+test("Campaign section adds participation while carry allocation stays on TIME BASED source cards", () => {
+  const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
+  const section = screen.slice(screen.indexOf("function CampaignSection"), screen.indexOf("export function ProgramAllocation"));
+  const timeBasedCard = read("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx");
+  const api = read("../../frontend/src/features/member/data/api/member-data.api.ts");
+  assert.match(section, /Belum ada Campaign/);
+  assert.match(section, /Tambah Campaign/);
+  assert.match(section, /const canAddCampaign = canMutate/);
+  assert.doesNotMatch(section, /Alokasikan Carry/);
+  assert.match(screen, /api\.createCampaignParticipation\(memberId/);
+  assert.match(screen, /campaignParticipationOptions/);
+  assert.match(screen, /Belum ada Campaign aktif yang dapat diikuti saat ini/);
+  assert.match(screen, /Campaign ditambahkan sebagai partisipasi donatur/);
+  assert.match(screen, /tidak membuat transaksi bank atau alokasi dana/i);
+  assert.match(api, /\/campaign-participations/);
+  assert.match(timeBasedCard, /Alokasikan Carry/);
 });
 
 test("ledger labels cover every known entry type and never mislabel unknown types as Coverage Use", () => {
@@ -147,7 +262,7 @@ test("STANDARD and CAMPAIGN contributions render without TIME_BASED entitlement 
   assert.match(overview, /TYPE_ORDER/);
   assert.match(overview, /Time-based/);
   assert.match(screen, /<CampaignSection/);
-  assert.match(screen, /Campaign aktif dapat menerima alokasi carry/);
+  assert.match(screen, /Partisipasi Campaign dan alokasi carry donatur/);
   assert.match(screen, /allocatedFromCarry/);
   assert.doesNotMatch(overview, /Transfer Carry/);
   assert.doesNotMatch(overview, /carryBalance/);
@@ -174,7 +289,7 @@ test("TIME BASED program metadata keeps status and start date system-managed", (
   assert.match(screen, /<h2 id="pa-programs-title">TIME BASED<\/h2>/);
   assert.match(screen, /riwayat alokasi program donatur/);
   assert.match(screen, /statusReadOnly/);
-  assert.match(screen, /formatDate\(form\.startDate\)/);
+  assert.match(screen, /formatDate\(editedSubscription\.startDate\)/);
   assert.doesNotMatch(screen, /type="checkbox"/);
   assert.doesNotMatch(screen, /activeFlag: form\.activeFlag/);
   assert.doesNotMatch(screen, /Mengikuti tanggal pembayaran pertama/);
@@ -182,6 +297,32 @@ test("TIME BASED program metadata keeps status and start date system-managed", (
   assert.equal(subscriptionUpdateSchema.safeParse({ referenceNo: null, displayName: null, remark: null }).success, true);
   assert.equal(subscriptionUpdateSchema.safeParse({ referenceNo: null, displayName: null, remark: null, activeFlag: false }).success, false);
   assert.equal(subscriptionUpdateSchema.safeParse({ referenceNo: null, displayName: null, remark: null, startDate: "2026-09-01" }).success, false);
+  const create = { eventCodeId: "00000000-0000-0000-0000-000000000001", referenceNo: null, displayName: null, remark: null };
+  assert.equal(subscriptionCreateSchema.safeParse(create).success, true);
+  assert.equal(subscriptionCreateSchema.safeParse({ ...create, activeFlag: false }).success, false);
+  assert.equal(subscriptionCreateSchema.safeParse({ ...create, startDate: "2026-09-01" }).success, false);
+  assert.deepEqual(initialTimeBasedSubscriptionState(), { activeFlag: true, startDate: null });
+  assert.match(screen, /mode === "create" \|\| editedSubscription\?\.activeFlag/);
+  assert.match(screen, /Akan ditetapkan dari pembayaran pertama atau Opening Coverage/);
+  assert.doesNotMatch(screen, /type="date" value=\{form\.startDate/);
+});
+
+test("TIME BASED program status follows system participation state, not coverage dates", () => {
+  const manualProgram = initialTimeBasedSubscriptionState();
+  assert.equal(manualProgram.activeFlag, true);
+  assert.equal(manualProgram.startDate, null);
+  assert.equal(sponsorshipStatus(manualProgram), "ACTIVE");
+  const noEvidenceProgram = { ...manualProgram, validUntil: null, paymentCount: 0, coverageCount: 0, ledgerCount: 0, carryBalance: "0.00" };
+  assert.equal(sponsorshipStatus(noEvidenceProgram), "ACTIVE", "null dates and no financial evidence do not make it pending");
+
+  const autoCreatedProgram = { activeFlag: true, startDate: new Date("2026-09-01T00:00:00.000Z"), validUntil: new Date("2026-11-30T00:00:00.000Z") };
+  assert.equal(sponsorshipStatus(autoCreatedProgram), "ACTIVE", "transaction-created programs remain active");
+  assert.equal(sponsorshipStatus({ activeFlag: true, startDate: new Date("2027-01-01T00:00:00.000Z"), validUntil: new Date("2020-01-01T00:00:00.000Z") }),
+    "ACTIVE", "participation status is independent of date-derived coverage state");
+  assert.equal(sponsorshipStatus({ activeFlag: false }), "INACTIVE", "only the system-managed flag controls participation status");
+
+  const emptyFinancialState = summarizeSubscriptionLedger([{ subscriptionId: "manual", entryType: "PAYMENT", _sum: { amountDelta: null } }]);
+  assert.deepEqual(emptyFinancialState.get("manual"), { principal: 0n, consumed: 0n, transferIn: 0n, transferOut: 0n, carry: 0n });
 });
 
 test("Transfer Carry modal validates amount, reason, destination, previews the estimate, and states the invariants", () => {
@@ -207,9 +348,10 @@ test("reversal UI uses danger styling, requires a reason, and renders dependency
   assert.match(modal, /data-tone="danger"/);
 });
 
-test("Program and Allocation refresh and tolerate idempotent replay responses", () => {
+test("Program and Allocation refresh after idempotent transfer commands without response-shape branching", () => {
   const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
-  assert.match(screen, /result\.replayed \? replayedMessage : success/);
+  assert.match(screen, /await action\(\);/);
+  assert.match(screen, /setMessage\(success\)/);
   assert.match(screen, /await Promise\.all\(\[load\(true\), loadHistory\(true\)\]\)/);
   assert.match(screen, /transferDestinationCandidates\(data\.subscriptions, sub\.subscriptionId\)/);
   assert.doesNotMatch(screen, /result\.source\.|result\.destination\./);

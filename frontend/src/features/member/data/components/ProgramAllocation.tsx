@@ -17,25 +17,46 @@ import { TransferHistoryPanel } from "./TransferHistoryPanel";
 import styles from "../styles/program-allocation.module.css";
 
 type FormMode = "create" | "edit" | "opening" | "void-opening" | null;
-const emptySubscription: SubscriptionInput = { eventCodeId: "", referenceNo: null, displayName: null, startDate: null, activeFlag: true, remark: null };
+const emptySubscription: SubscriptionInput = { eventCodeId: "", referenceNo: null, displayName: null, remark: null };
 
-function CampaignSection({ campaigns, canMutate, hasCarry, canAllocate, onAllocate }: { campaigns: SponsorshipWorkspace["campaigns"]; canMutate: boolean; hasCarry: boolean; canAllocate: boolean; onAllocate: () => void }) {
+function campaignPeriodLabel(startDate: string | null, endDate: string | null) {
+  const date = startDate ?? endDate;
+  return date
+    ? new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00.000Z`))
+    : "Periode terbuka";
+}
+
+function campaignStatusLabel(status: string) {
+  if (status === "ACTIVE") return "AKTIF";
+  if (status === "ENDED") return "SELESAI";
+  if (status === "CLOSED") return "NONAKTIF";
+  if (status === "SCHEDULED") return "TERJADWAL";
+  return status;
+}
+
+function CampaignSection({ campaigns, participationOptions, canMutate, onAddCampaign }: {
+  campaigns: SponsorshipWorkspace["campaigns"];
+  participationOptions: SponsorshipWorkspace["campaignParticipationOptions"];
+  canMutate: boolean;
+  onAddCampaign: () => void;
+}) {
+  const canAddCampaign = canMutate;
   return <section className={styles.section} aria-labelledby="pa-campaign-title">
     <div className={styles.sectionHead}>
       <div><h2 id="pa-campaign-title">CAMPAIGN</h2><p>Partisipasi Campaign dan alokasi carry donatur.</p></div>
-      {canMutate && canAllocate && hasCarry ? <Button size="sm" icon={<Gift size={14} />} onClick={onAllocate}>Alokasikan Carry</Button> : null}
+      {campaigns.length && canAddCampaign ? <Button size="sm" icon={<Gift size={14} />} onClick={onAddCampaign}>Tambah Campaign</Button> : null}
     </div>
     {campaigns.length ? <div className={styles.campaignGrid}>
       {campaigns.map(row => <article key={row.campaignId} className={styles.campaignCard}>
         <span className={styles.campaignIcon} aria-hidden="true"><Gift size={17} /></span>
         <div>
           <header><div><strong>{row.eventCode} · {row.eventName}</strong><small>{row.campaignName}</small></div>
-            <em data-status={row.status}>{row.status}</em>
+            <em data-status={row.status}>{campaignStatusLabel(row.status)}</em>
           </header>
-          <footer><span>Langsung {formatMoney(row.directContribution)} · Carry {formatMoney(row.allocatedFromCarry)}</span><strong className={styles.money}>{formatMoney(row.totalAllocation)}</strong></footer>
+          <footer><span>Direct contribution {formatMoney(row.directContribution)} · Allocated from Carry {formatMoney(row.allocatedFromCarry)}</span><strong className={styles.money}>Total allocation {formatMoney(row.totalAllocation)}</strong></footer>
         </div>
       </article>)}
-    </div> : <div className={styles.compactEmpty}><span aria-hidden="true"><Gift size={18} /></span><div><strong>Belum ada alokasi Campaign</strong><p>Campaign aktif dapat menerima alokasi carry tanpa membuat transaksi bank baru.</p></div>{canMutate && canAllocate && hasCarry ? <Button size="sm" onClick={onAllocate}>Tambah Campaign</Button> : null}</div>}
+    </div> : <div className={styles.compactEmpty}><span aria-hidden="true"><Gift size={18} /></span><div><strong>Belum ada Campaign</strong><p>Tambahkan Campaign jika donatur ingin berpartisipasi.</p></div>{canAddCampaign ? <Button size="sm" onClick={onAddCampaign}>Tambah Campaign</Button> : null}</div>}
   </section>;
 }
 
@@ -54,6 +75,10 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
   const [transferError, setTransferError] = useState("");
   const [reverseTarget, setReverseTarget] = useState<CarryTransferRecord | null>(null);
   const [reverseError, setReverseError] = useState("");
+  const [campaignModalOpen, setCampaignModalOpen] = useState(false);
+  const [campaignId, setCampaignId] = useState("");
+  const [campaignRemark, setCampaignRemark] = useState("");
+  const [campaignError, setCampaignError] = useState("");
   const [mode, setMode] = useState<FormMode>(null);
   const [subscriptionId, setSubscriptionId] = useState("");
   const [coverageId, setCoverageId] = useState("");
@@ -95,14 +120,14 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
     finally { lock.current = false; setBusy(false); }
   }
 
-  async function performTransferCommand(action: () => Promise<{ replayed: boolean }>, success: string, replayedMessage: string, onError: (value: string) => void) {
+  async function performTransferCommand(action: () => Promise<unknown>, success: string, onError: (value: string) => void) {
     if (lock.current) return false;
     lock.current = true; setBusy(true); clearFeedback();
     try {
-      const result = await action();
+      await action();
       invalidateWorkspaceCache("member/data/workspace");
       invalidateWorkspaceCache("monitoring/dashboard/workspace");
-      setMessage(result.replayed ? replayedMessage : success);
+      setMessage(success);
       setTransferSource(null); setReverseTarget(null);
       await Promise.all([load(true), loadHistory(true)]);
       return true;
@@ -113,18 +138,30 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
   async function submitTransfer(input: CarryTransferInput) {
     if (!transferSource) return false;
     return performTransferCommand(() => api.createCarryTransfer(memberId, transferSource.subscriptionId, input),
-      "Transfer carry berhasil diproses.", "Transfer carry sudah pernah diproses. Data disegarkan.", setTransferError);
+      "Perintah transfer carry sudah diproses. Data disegarkan.", setTransferError);
   }
   async function submitReverse(input: CarryTransferReverseInput) {
     if (!reverseTarget) return false;
     return performTransferCommand(() => api.reverseCarryTransfer(memberId, reverseTarget.transferId, input),
-      "Transfer berhasil dibalikkan.", "Pembalikan transfer sudah pernah diproses. Data disegarkan.", setReverseError);
+      "Perintah pembalikan transfer sudah diproses. Data disegarkan.", setReverseError);
+  }
+  async function submitCampaignParticipation() {
+    if (lock.current || !campaignId) return false;
+    lock.current = true; setBusy(true); clearFeedback(); setCampaignError("");
+    try {
+      setData(await api.createCampaignParticipation(memberId, { eventCampaignId: campaignId, remark: campaignRemark.trim() || null }));
+      setCampaignModalOpen(false); setMessage("Campaign ditambahkan sebagai partisipasi donatur.");
+      return true;
+    } catch (caught) {
+      setCampaignError(caught instanceof Error ? caught.message : "Gagal menambahkan partisipasi Campaign.");
+      return false;
+    } finally { lock.current = false; setBusy(false); }
   }
 
   function editSubscription(sub: SponsorshipSubscription) {
     setSubscriptionId(sub.subscriptionId);
     setForm({ eventCodeId: sub.event.eventCodeId, referenceNo: sub.referenceNo, displayName: sub.displayName,
-      startDate: sub.startDate, activeFlag: sub.activeFlag, remark: sub.remark });
+      remark: sub.remark });
     setFormError(""); setMode("edit");
   }
 
@@ -135,10 +172,9 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
     setForm({ ...emptySubscription, eventCodeId: eligibleEvent });
     setFormError(""); setMode("create");
   }
-  function openCampaignAllocation() {
-    const source = data?.subscriptions.find(item => item.activeFlag && moneyToCents(item.carryBalance)! > BigInt(0)) ?? null;
-    if (!source) return;
-    setTransferError(""); setTransferSource(source);
+  function openCampaignParticipation() {
+    const first = data?.campaignParticipationOptions[0];
+    setCampaignId(first?.campaignId ?? ""); setCampaignRemark(""); setCampaignError(""); setCampaignModalOpen(true);
   }
 
   if (loading && !data) return <section className={styles.section}><p className={styles.empty}>Memuat Program &amp; Allocation…</p></section>;
@@ -200,7 +236,8 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         </div>
       </section> : null}
 
-      <CampaignSection campaigns={data.campaigns} canMutate={canMutate && memberActive} hasCarry={data.subscriptions.some(item => item.activeFlag && moneyToCents(item.carryBalance)! > BigInt(0))} canAllocate={Boolean(data.availableCampaigns.length)} onAllocate={openCampaignAllocation} />
+      <CampaignSection campaigns={data.campaigns} participationOptions={data.campaignParticipationOptions}
+        canMutate={canMutate && memberActive} onAddCampaign={openCampaignParticipation} />
 
       <TransferHistoryPanel history={history} loading={historyLoading} error={historyError} canMutate={canMutate} busy={busy}
         onReverse={row => { setReverseError(""); setReverseTarget(row); }}
@@ -214,6 +251,32 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
       onClose={() => !busy && setTransferSource(null)} onSubmit={submitTransfer} />
     <ReverseTransferModal open={Boolean(reverseTarget)} transfer={reverseTarget} busy={busy} error={reverseError}
       onClose={() => !busy && setReverseTarget(null)} onSubmit={submitReverse} />
+
+    <Modal open={campaignModalOpen} title="Tambah Campaign"
+      description="Tambahkan partisipasi donatur. Ini tidak membuat transaksi bank atau alokasi dana."
+      onClose={() => { if (!busy) setCampaignModalOpen(false); }}>
+      <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); void submitCampaignParticipation(); }}>
+        {campaignError ? <div className="ui-alert ui-alert-error" role="alert">{campaignError}</div> : null}
+        <label className={styles.field}>Campaign
+          <select required value={campaignId} disabled={busy || !data?.campaignParticipationOptions.length} onChange={event => setCampaignId(event.target.value)}>
+            {!campaignId ? <option value="" disabled>Pilih Campaign</option> : null}
+            {data?.campaignParticipationOptions.map(option => <option key={option.campaignId} value={option.campaignId}>
+              {option.code} · {option.campaignName} — {campaignPeriodLabel(option.startDate, option.endDate)}
+            </option>)}
+          </select>
+          {!data?.campaignParticipationOptions.length ? <small className={styles.helper}>Belum ada Campaign aktif yang dapat diikuti saat ini.</small> : null}
+        </label>
+        <label className={styles.field}>Catatan <span className={styles.helper}>Opsional</span>
+          <textarea rows={3} maxLength={1000} value={campaignRemark} disabled={busy}
+            onChange={event => setCampaignRemark(event.target.value)} />
+          <small className={styles.helper}>Dana masuk, kontribusi, dan carry tetap tidak berubah.</small>
+        </label>
+        <div className={styles.footer}>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => setCampaignModalOpen(false)}>Batal</Button>
+          <Button type="submit" disabled={busy || !campaignId}>{busy ? "Menambahkan…" : "Tambah"}</Button>
+        </div>
+      </form>
+    </Modal>
 
     <Modal open={mode === "create" || mode === "edit"} title={mode === "create" ? "Tambah Program" : "Edit Program"}
       description={mode === "create" ? "Tambahkan metadata program. Coverage dan ledger tersimpan sebagai audit." : "Perbarui metadata program. Riwayat coverage dan ledger tetap tersimpan sebagai audit."} onClose={() => !busy && setMode(null)}>
@@ -233,12 +296,11 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
           <label className={styles.field}>Nama Tampilan<input value={form.displayName ?? ""} maxLength={200} onChange={event => setForm(value => ({ ...value, displayName: event.target.value || null }))} /></label>
           <label className={styles.field}>Referensi<input value={form.referenceNo ?? ""} maxLength={100} onChange={event => setForm(value => ({ ...value, referenceNo: event.target.value || null }))} /></label>
           <label className={styles.field}>Tanggal Mulai
-            {mode === "edit" ? <span className={styles.readOnlyValue}>{form.startDate ? formatDate(form.startDate) : "—"}</span>
-              : <input type="date" value={form.startDate ?? ""} disabled={busy} onChange={event => setForm(value => ({ ...value, startDate: event.target.value || null }))} />}
-            {mode === "edit" ? <small className={styles.helper}>Dikelola otomatis dari riwayat pembayaran dan coverage aktif.</small> : null}</label>
+            <span className={styles.readOnlyValue}>{mode === "edit" ? (editedSubscription?.startDate ? formatDate(editedSubscription.startDate) : "—") : "—"}</span>
+            <small className={styles.helper}>{mode === "edit" ? "Dikelola otomatis dari riwayat pembayaran dan coverage aktif." : "Akan ditetapkan dari pembayaran pertama atau Opening Coverage."}</small></label>
           <div className={styles.statusField}>
             <span className={styles.statusLabel}>Status Program</span>
-            <div className={styles.statusReadOnly}><span className={styles.statusPill} data-status={editedSubscription?.status ?? "ACTIVE"}>{editedSubscription?.activeFlag ? "Aktif" : "Nonaktif"}</span><small>Dikelola otomatis oleh sistem.</small></div>
+            <div className={styles.statusReadOnly}><span className={styles.statusPill} data-status={mode === "create" ? "ACTIVE" : editedSubscription?.status ?? "INACTIVE"}>{mode === "create" || editedSubscription?.activeFlag ? "Aktif" : "Nonaktif"}</span><small>Dikelola otomatis oleh sistem.</small></div>
           </div>
         </div>
         <label className={styles.field}>Catatan<textarea rows={3} maxLength={1000} value={form.remark ?? ""} onChange={event => setForm(value => ({ ...value, remark: event.target.value || null }))} /></label>

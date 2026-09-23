@@ -436,6 +436,8 @@ test("historical PAYMENT snapshot requires same Event Code and unchanged princip
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "other", principalAmount: d("25000"), recalculate: false, entries: [row] }), null);
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("75000"), recalculate: false, entries: [row] }), null);
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("25004"), alternativePrincipalAmount: d("25000"), recalculate: false, entries: [row] })?.unitAmount, "50000");
+  const full = { ...row, amountDelta: d("25004"), unitAmountSnapshot: d("60000") };
+  assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("25004"), alternativePrincipalAmount: d("25000"), recalculate: false, entries: [row, full] })?.unitAmount, "60000");
   assert.equal(selectHistoricalPaymentSnapshot({ eventCodeId: "rupang", principalAmount: d("25000"), recalculate: true, entries: [row] }), null);
 });
 
@@ -472,6 +474,15 @@ test("pending preview handles a partial payment with historical VOIDED rate", ()
   const preview = pendingTimeBasedPaymentPreview(row, []);
   assert.equal(preview.grantedUnits, 0);
   assert.equal(preview.unitAmount, "50000");
+});
+
+test("pending TIME_BASED preview uses full PAYMENT to resolve a unit at the suffix boundary", () => {
+  const row = payment("p-suffix", "150004");
+  row.baseAmount = d("149999");
+  row.eventCode.timeRule.unitAmount = d("150000");
+  const preview = pendingTimeBasedPaymentPreview({ ...row, memberEventCoverages: [], memberEventBalanceLedger: [] }, []);
+  assert.equal(preview.principalAmount, "150004");
+  assert.equal(preview.grantedUnits, 1);
 });
 
 test("Dashboard Time-Based counts exclude unfunded validUntil NULL", async () => {

@@ -185,12 +185,23 @@ export async function getTransactionInquiryDetail(transactionId: string) {
   const campaignLabels = new Map((await loadCampaignLabels(campaignIds)).map((item) => [item.id, item.campaignName]));
   const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
   let sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; principalAmount: string; paymentCredited: string | null; paymentOnlyRemainder: string; carryBalanceAfterPayment: string | null; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: Date | null; coverageTo: Date | null } | null } | null = null;
-  const coverage = transaction.memberEventCoverages.find(item => item.subscription.memberId === member?.id) ?? null;
-  const currentPayment = transaction.memberEventBalanceLedger.find(row => row.entryStatus === "ACTIVE" && row.subscription.memberId === member?.id) ?? null;
+  const relevantPayments = transaction.memberEventBalanceLedger.filter(row => row.subscription.memberId === member?.id
+    && row.subscription.eventCodeId === transaction.eventCodeId);
+  const originalCents = decimalToCents(transaction.originalAmount);
+  const legacyCents = transaction.baseAmount ? decimalToCents(transaction.baseAmount) : null;
+  const matchingPayments = (amount: bigint | null) => amount === null ? []
+    : relevantPayments.filter(row => decimalToCents(row.amountDelta) === amount);
+  const hasRateSnapshot = (row: typeof relevantPayments[number]) => Boolean(row.unitAmountSnapshot && row.durationMonthsSnapshot);
+  const fullPaymentRows = matchingPayments(originalCents);
+  const legacyPaymentRows = legacyCents !== null && legacyCents !== originalCents ? matchingPayments(legacyCents) : [];
+  const currentPayment = fullPaymentRows.find(row => row.entryStatus === "ACTIVE")
+    ?? legacyPaymentRows.find(row => row.entryStatus === "ACTIVE") ?? null;
+  const historicalPayment = fullPaymentRows.find(hasRateSnapshot) ?? legacyPaymentRows.find(hasRateSnapshot) ?? null;
+  const selectedPayment = currentPayment ?? historicalPayment;
+  const coverage = transaction.memberEventCoverages.find(item => item.subscription.memberId === member?.id
+    && (!selectedPayment || item.subscription.id === selectedPayment.subscription.id)) ?? null;
   const carryAfterPayment = currentPayment && transaction.transactionDate
     ? await loadTimeBasedCarryAfterPayment(currentPayment.subscription.id, transaction.transactionDate, transaction.id) : null;
-  const historicalPayment = transaction.memberEventBalanceLedger.find(row => row.subscription.eventCodeId === transaction.eventCodeId
-    && decimalToCents(row.amountDelta) === decimalToCents(transaction.baseAmount)) ?? null;
   try {
     const rule = currentPayment?.unitAmountSnapshot && currentPayment.durationMonthsSnapshot ? {
       unitAmount: currentPayment.unitAmountSnapshot.toString(), durationMonths: currentPayment.durationMonthsSnapshot
@@ -202,7 +213,7 @@ export async function getTransactionInquiryDetail(transactionId: string) {
     const resolved = rule ?? resolveTimeBasedUnits({ eventCode: transaction.eventCode,
       rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
     if (resolved) {
-      const principal = decimalToCents(transaction.baseAmount ?? transaction.originalAmount);
+      const principal = originalCents;
       const unit = decimalToCents(resolved.unitAmount);
       sponsorship = {
         unitAmount: resolved.unitAmount, durationMonths: resolved.durationMonths,
