@@ -9,7 +9,8 @@ import { memberTransaction } from "../member-identity/member-transaction.js";
 import { allocatePostingSequences, assertNoUnresolvedDependencies, laterSubscriptionDependencies, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
 import { loadMemberCarryTransfers } from "./member-carry-transfer.repository.js";
 import { addCalendarMonthsInclusive, refreshSubscriptionStartDate, refreshSubscriptionValidity } from "./member-time-based.service.js";
-import { campaignTransferAmountIsAllowed, campaignWalletCents, requireCampaignCarryDestination } from "../campaign/member-campaign-wallet.service.js";
+import { allocateCampaignWalletPostingSequences, campaignTransferAmountIsAllowed, campaignWalletCents,
+  lockCampaignsForPosting, requireCampaignCarryDestination } from "../campaign/member-campaign-wallet.service.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -209,13 +210,16 @@ async function campaignAllocationSnapshot(tx: Tx, transferId: string): Promise<C
 
 async function campaignWalletSnapshot(tx: Tx, memberId: string, campaignId: string, transferId: string) {
   const entry = await tx.memberEventCampaignWalletLedger.findFirst({ where: { memberId, eventCampaignId: campaignId, carryTransferId: transferId },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { createdAt: true, id: true } });
+    orderBy: { postingSequence: "asc" }, select: { postingSequence: true } });
   if (!entry) throw new HttpError(409, "Campaign wallet transfer evidence is incomplete.");
+  // Reconstruct the ledger as it stood at posting time from the deterministic posting
+  // sequence. Later reconciliation may VOID the original row, but the historical
+  // snapshot must stay stable for idempotent replay.
   const [before, after] = await Promise.all([
-    tx.memberEventCampaignWalletLedger.aggregate({ where: { memberId, eventCampaignId: campaignId, entryStatus: "ACTIVE",
-      OR: [{ createdAt: { lt: entry.createdAt } }, { createdAt: entry.createdAt, id: { lt: entry.id } }] }, _sum: { amountDelta: true } }),
-    tx.memberEventCampaignWalletLedger.aggregate({ where: { memberId, eventCampaignId: campaignId, entryStatus: "ACTIVE",
-      OR: [{ createdAt: { lt: entry.createdAt } }, { createdAt: entry.createdAt, id: { lte: entry.id } }] }, _sum: { amountDelta: true } })
+    tx.memberEventCampaignWalletLedger.aggregate({ where: { memberId, eventCampaignId: campaignId,
+      postingSequence: { lt: entry.postingSequence } }, _sum: { amountDelta: true } }),
+    tx.memberEventCampaignWalletLedger.aggregate({ where: { memberId, eventCampaignId: campaignId,
+      postingSequence: { lte: entry.postingSequence } }, _sum: { amountDelta: true } })
   ]);
   return { type: "CAMPAIGN" as const, campaignId,
     carryBefore: centsToDecimal(decimalStringToCents(before._sum.amountDelta?.toString() ?? "0")),
@@ -224,10 +228,11 @@ async function campaignWalletSnapshot(tx: Tx, memberId: string, campaignId: stri
 
 async function postCampaignWalletEntry(tx: Tx, input: { memberId: string; eventCampaignId: string; carryTransferId: string;
   amountDelta: bigint; entryType: "TRANSFER_IN" | "TRANSFER_OUT"; effectiveDate: Date; reason: string; userId: string }) {
+  const [postingSequence] = await allocateCampaignWalletPostingSequences(tx, input.memberId, input.eventCampaignId, 1);
   return tx.memberEventCampaignWalletLedger.create({ data: {
     memberId: input.memberId, eventCampaignId: input.eventCampaignId, carryTransferId: input.carryTransferId,
     entryType: input.entryType, entryStatus: "ACTIVE", amountDelta: centsToDecimal(input.amountDelta), effectiveDate: input.effectiveDate,
-    remark: input.reason, createdById: input.userId
+    postingSequence, remark: input.reason, createdById: input.userId
   } });
 }
 
@@ -241,8 +246,6 @@ async function loadOwnedSubscriptions(tx: Tx, memberId: string, sourceId: string
   if (!source || source.memberId !== memberId) throw new HttpError(404, "Source subscription was not found for this Member.");
   if (!destination || destination.memberId !== memberId) throw new HttpError(404, "Destination subscription was not found for this Member.");
   if (source.id === destination.id) throw new HttpError(400, "Source and destination subscriptions must differ.");
-  if (!source.activeFlag) throw new HttpError(409, "The source subscription is not active.");
-  if (!destination.activeFlag) throw new HttpError(409, "The destination subscription is not active.");
   return { source, destination };
 }
 
@@ -250,6 +253,16 @@ async function requireTimeBasedEvent(tx: Tx, eventCodeId: string, label: string)
   const event = await tx.eventCode.findUnique({ where: { id: eventCodeId }, select: eventSelect });
   if (!event || event.eventType !== "TIME_BASED") throw new HttpError(409, `${label} must be a TIME_BASED Event Code.`);
   if (!event.activeFlag) throw new HttpError(409, `${label} Event Code is not active.`);
+  return event;
+}
+
+/**
+ * Source-side rule: releasing existing donor money must not require the program to
+ * still be active or to have a current Time Rule. Only destination eligibility does.
+ */
+async function requireTimeBasedProgram(tx: Tx, eventCodeId: string, label: string) {
+  const event = await tx.eventCode.findUnique({ where: { id: eventCodeId }, select: eventSelect });
+  if (!event || event.eventType !== "TIME_BASED") throw new HttpError(409, `${label} must be a TIME_BASED Event Code.`);
   return event;
 }
 
@@ -307,6 +320,8 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
   if (existing) return replayForwardTransfer(tx, existing, { memberId: input.memberId, requestHash });
 
   await lockSubscriptionsForPosting(tx, [...(input.sourceSubscriptionId ? [input.sourceSubscriptionId] : []), ...(input.destinationSubscriptionId ? [input.destinationSubscriptionId] : [])]);
+  await lockCampaignsForPosting(tx, [input.sourceCampaignId, input.destinationCampaignId]
+    .filter((id): id is string => Boolean(id)));
 
   const member = await tx.member.findUnique({ where: { id: input.memberId }, select: { id: true } });
   if (!member) throw new HttpError(404, "Donatur tidak ditemukan.");
@@ -316,8 +331,8 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
   } }) : null;
   if (input.sourceSubscriptionId) {
     if (!source || source.memberId !== input.memberId) throw new HttpError(404, "Source subscription was not found for this Member.");
-    if (!source.activeFlag) throw new HttpError(409, "The source subscription is not active.");
-    await requireTimeBasedEvent(tx, source.eventCodeId, "The source");
+    // Source-side release never requires an active Event or a current Time Rule.
+    await requireTimeBasedProgram(tx, source.eventCodeId, "The source");
   } else {
     if (!sourceCampaign || sourceCampaign.eventCode.eventType !== "CAMPAIGN") throw new HttpError(404, "Campaign wallet source was not found.");
   }
@@ -524,6 +539,8 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
   const found = await tx.memberEventCarryTransfer.findUnique({ where: { id: input.transferId }, select: transferHeaderSelect });
   if (!found || found.memberId !== input.memberId) throw new HttpError(404, "Carry Transfer was not found for this Member.");
   await lockSubscriptionsForPosting(tx, [...(found.sourceSubscriptionId ? [found.sourceSubscriptionId] : []), ...(found.destinationSubscriptionId ? [found.destinationSubscriptionId] : [])]);
+  await lockCampaignsForPosting(tx, [found.sourceCampaignId, found.destinationCampaignId]
+    .filter((id): id is string => Boolean(id)));
 
   const original = await tx.memberEventCarryTransfer.findUnique({ where: { id: found.id }, select: transferHeaderSelect });
   if (!original || original.memberId !== input.memberId) throw new HttpError(404, "Carry Transfer was not found for this Member.");
@@ -630,8 +647,10 @@ export async function reverseCarryTransferRecord(tx: Tx, input: {
   if (!original.sourceSubscriptionId) throw new HttpError(409, "Carry Transfer source evidence is incomplete.");
   const { source: reversingSource, destination: restoringDestination } = await loadOwnedSubscriptions(
     tx, input.memberId, original.destinationSubscriptionId!, original.sourceSubscriptionId);
-  await requireTimeBasedEvent(tx, reversingSource.eventCodeId, "The reversing source");
-  await requireTimeBasedEvent(tx, restoringDestination.eventCodeId, "The restoring destination");
+  // Reversal restores carry only and never creates coverage, so inactive programs on
+  // either side must still be able to unwind and release donor money.
+  await requireTimeBasedProgram(tx, reversingSource.eventCodeId, "The reversing source");
+  await requireTimeBasedProgram(tx, restoringDestination.eventCodeId, "The restoring destination");
   const restoringEvent = await tx.eventCode.findUnique({ where: { id: restoringDestination.eventCodeId }, select: destinationEventSelect });
   if (!restoringEvent || restoringEvent.eventType !== "TIME_BASED")
     throw new HttpError(409, "The restoring destination must be a TIME_BASED Event Code.");

@@ -153,6 +153,7 @@ model User {
   createdMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferCreatedBy")
   reversedMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferReversedBy")
   createdMemberEventCampaignAllocations MemberEventCampaignAllocation[] @relation("MemberEventCampaignAllocationCreatedBy")
+  voidedMemberEventCampaignAllocations MemberEventCampaignAllocation[] @relation("MemberEventCampaignAllocationVoidedBy")
   createdMemberEventCampaignWalletEntries MemberEventCampaignWalletLedger[] @relation("MemberEventCampaignWalletLedgerCreatedBy")
   voidedMemberEventCampaignWalletEntries MemberEventCampaignWalletLedger[] @relation("MemberEventCampaignWalletLedgerVoidedBy")
   createdMemberEventCampaignParticipations MemberEventCampaignParticipation[] @relation("MemberEventCampaignParticipationCreatedBy")
@@ -486,7 +487,7 @@ model MemberEventCampaignAllocation {
   memberId String @map("member_id") @db.Char(36)
   eventCampaignId String @map("event_campaign_id") @db.Char(36)
   carryTransferId String? @unique(map: "uq_member_event_campaign_allocation_transfer") @map("member_event_carry_transfer_id") @db.Char(36)
-  bankTransactionId String? @unique(map: "uq_member_event_campaign_allocation_transaction") @map("bank_transaction_id") @db.Char(36)
+  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
   amountDelta Decimal @map("amount_delta") @db.Decimal(20, 2)
   allocationType String @map("allocation_type") @db.VarChar(30)
   allocationStatus String @default("ACTIVE") @map("allocation_status") @db.VarChar(20)
@@ -495,12 +496,16 @@ model MemberEventCampaignAllocation {
   createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
   createdById String @map("created_by") @db.Char(36)
   reversalOfAllocationId String? @unique(map: "uq_member_event_campaign_allocation_reversal") @map("reversal_of_allocation_id") @db.Char(36)
+  voidedAt DateTime? @map("voided_at") @db.DateTime(3)
+  voidedById String? @map("voided_by") @db.Char(36)
+  voidReason String? @map("void_reason") @db.VarChar(1000)
 
   member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_member")
   eventCampaign EventCampaign @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_campaign")
   carryTransfer MemberEventCarryTransfer? @relation("MemberEventCampaignAllocationTransfer", fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_transfer")
   bankTransaction BankTransaction? @relation("MemberEventCampaignAllocationTransaction", fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_transaction")
   createdBy User @relation("MemberEventCampaignAllocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_created_by")
+  voidedBy User? @relation("MemberEventCampaignAllocationVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_voided_by")
   reversalOf MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal", fields: [reversalOfAllocationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_reversal_of")
   reversal MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal")
 
@@ -508,6 +513,7 @@ model MemberEventCampaignAllocation {
   @@index([eventCampaignId, allocationStatus, effectiveDate], map: "idx_member_event_campaign_allocation_campaign")
   @@index([bankTransactionId], map: "idx_member_event_campaign_allocation_transaction")
   @@index([createdById], map: "idx_member_event_campaign_allocation_created_by")
+  @@index([voidedById], map: "idx_member_event_campaign_allocation_voided_by")
   @@map("arya_member_event_campaign_allocation")
 }
 
@@ -517,12 +523,13 @@ model MemberEventCampaignWalletLedger {
   id String @id @default(uuid()) @map("member_event_campaign_wallet_ledger_id") @db.Char(36)
   memberId String @map("member_id") @db.Char(36)
   eventCampaignId String @map("event_campaign_id") @db.Char(36)
-  bankTransactionId String? @unique(map: "uq_member_event_campaign_wallet_transaction") @map("bank_transaction_id") @db.Char(36)
+  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
   carryTransferId String? @map("member_event_carry_transfer_id") @db.Char(36)
   entryType String @map("entry_type") @db.VarChar(30)
   entryStatus String @default("ACTIVE") @map("entry_status") @db.VarChar(20)
   amountDelta Decimal @map("amount_delta") @db.Decimal(20, 2)
   effectiveDate DateTime @map("effective_date") @db.Date
+  postingSequence BigInt @map("posting_sequence") @db.UnsignedBigInt
   remark String? @db.VarChar(1000)
   createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
   createdById String @map("created_by") @db.Char(36)
@@ -537,8 +544,11 @@ model MemberEventCampaignWalletLedger {
   createdBy User @relation("MemberEventCampaignWalletLedgerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_created_by")
   voidedBy User? @relation("MemberEventCampaignWalletLedgerVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_voided_by")
 
+  @@unique([memberId, eventCampaignId, postingSequence], map: "uq_member_event_campaign_wallet_sequence")
   @@index([memberId, eventCampaignId, entryStatus, effectiveDate], map: "idx_member_event_campaign_wallet_member_campaign")
+  @@index([memberId, eventCampaignId, entryStatus, postingSequence], map: "idx_member_event_campaign_wallet_sequence")
   @@index([eventCampaignId, entryStatus, effectiveDate], map: "idx_member_event_campaign_wallet_campaign")
+  @@index([bankTransactionId], map: "idx_member_event_campaign_wallet_transaction")
   @@index([carryTransferId], map: "idx_member_event_campaign_wallet_transfer")
   @@index([createdById], map: "idx_member_event_campaign_wallet_created_by")
   @@index([voidedById], map: "idx_member_event_campaign_wallet_voided_by")

@@ -420,3 +420,13 @@ test("Member detail tab is renamed and renders Program and Allocation", () => {
   assert.match(detail, /<ProgramAllocation memberId=\{memberId\}/);
   assert.doesNotMatch(detail, /MemberSponsorship/);
 });
+
+test("identity Move and Detach reconcile Campaign economics through the wallet service", () => {
+  const repository = read("../src/modules/member/data/member-data.repository.ts");
+  const move = repository.slice(repository.indexOf("export function moveIdentity"), repository.indexOf("export function detachIdentity"));
+  const detach = repository.slice(repository.indexOf("export function detachIdentity"), repository.indexOf("export function updateIdentityMetadata"));
+  assert.match(move, /reconcileCampaignContributionsForIdentity\(tx, identityId, userId\)/);
+  assert.match(detach, /reconcileCampaignContributionsForIdentity\(tx, identityId, userId\)/);
+  const registration = read("../src/modules/member/registration/member-registration.repository.ts");
+  assert.match(registration, /synchronizePendingCampaignContributionsForMember/);
+});

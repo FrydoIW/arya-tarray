@@ -583,9 +583,14 @@ export async function decideSignApprovalAtomic(input: {
       for (const transaction of timeBasedTransactions) {
         await synchronizeTimeBasedTransaction(tx, transaction.id, input.userId, { recalculate: changedTimeBasedTransactionIds.has(transaction.id) });
       }
+      // Reconcile transactions that are Campaign now OR that still carry Campaign
+      // evidence from before a correction (for example Campaign -> TIME_BASED).
       const campaignTransactions = await tx.bankTransaction.findMany({
-        where: { statementUploadId: current.statementUploadId, status: "FINALIZED",
-          eventCode: { is: { eventType: "CAMPAIGN" } } },
+        where: { statementUploadId: current.statementUploadId, status: "FINALIZED", OR: [
+          { eventCode: { is: { eventType: "CAMPAIGN" } } },
+          { memberEventCampaignAllocations: { some: {} } },
+          { memberEventCampaignWalletEntries: { some: {} } }
+        ] },
         select: { id: true }
       });
       for (const transaction of campaignTransactions) await synchronizeCampaignContribution(tx, transaction.id, input.userId);

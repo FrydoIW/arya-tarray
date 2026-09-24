@@ -6,6 +6,7 @@
   "scripts": {
     "member:backfill": "tsx scripts/backfill-member-identities.ts",
     "member:verify": "tsx scripts/verify-member-integrity.ts",
+    "campaign:backfill": "tsx scripts/backfill-campaign-evidence.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",

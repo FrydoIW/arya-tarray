@@ -35,8 +35,8 @@ type CampaignAllocationRow = { id: string; memberId: string; eventCampaignId: st
   amountDelta: Prisma.Decimal; allocationType: string; allocationStatus: string; effectiveDate: Date; reason: string; createdById: string;
   reversalOfAllocationId: string | null };
 type CampaignWalletRow = { id: string; memberId: string; eventCampaignId: string; bankTransactionId: string | null; carryTransferId: string | null;
-  entryType: string; entryStatus: string; amountDelta: Prisma.Decimal; effectiveDate: Date; remark: string | null; createdAt: Date;
-  createdById: string; voidedAt: Date | null; voidedById: string | null; voidReason: string | null };
+  entryType: string; entryStatus: string; amountDelta: Prisma.Decimal; effectiveDate: Date; postingSequence: bigint;
+  remark: string | null; createdAt: Date; createdById: string; voidedAt: Date | null; voidedById: string | null; voidReason: string | null };
 type PaymentRow = { id: string; transactionDate: Date; referenceNo: string | null; originalAmount: Prisma.Decimal;
   baseAmount: Prisma.Decimal; status: string; reconciliationExcludedAt: Date | null; eventCodeId: string;
   eventCampaignId?: string | null;
@@ -107,11 +107,15 @@ function fixture() {
       postingSequence: nextSequence(subscriptionId), unitAmountSnapshot: d(rule.unitAmount.toString()),
       durationMonthsSnapshot: rule.durationMonths, createdAt: new Date(), createdById: "admin", voidReason: null });
   };
+  const nextWalletSequence = (memberId: string, eventCampaignId: string) => campaignWalletEntries
+    .filter(row => row.memberId === memberId && row.eventCampaignId === eventCampaignId)
+    .reduce((max, row) => row.postingSequence > max ? row.postingSequence : max, 0n) + 1n;
   const seedCampaignWallet = (eventCampaignId: string, amount: string, entryType = "CAMPAIGN_OVERFLOW",
     memberId = "member-a", date = "2026-01-01") => {
     campaignWalletEntries.push({ id: nextId("campaign-wallet"), memberId, eventCampaignId, bankTransactionId: null,
       carryTransferId: null, entryType, entryStatus: "ACTIVE", amountDelta: d(amount), effectiveDate: day(date),
-      remark: null, createdAt: new Date(), createdById: "admin", voidedAt: null, voidedById: null, voidReason: null });
+      postingSequence: nextWalletSequence(memberId, eventCampaignId), remark: null, createdAt: new Date(),
+      createdById: "admin", voidedAt: null, voidedById: null, voidReason: null });
   };
   const seedCampaignAllocation = (eventCampaignId: string, amount: string, allocationType = "DIRECT_CONTRIBUTION",
     memberId = "member-a", date = "2026-01-01") => {
@@ -134,8 +138,8 @@ function fixture() {
       destinationDurationMonthsSnapshot: 1, createdAt: new Date(), createdById: "admin", reversedAt: null, reversedById: null });
     campaignWalletEntries.push({ id: nextId("campaign-wallet"), memberId: "member-a", eventCampaignId: campaignId,
       bankTransactionId: null, carryTransferId: transferId, entryType: "TRANSFER_OUT", entryStatus: "ACTIVE",
-      amountDelta: d(`-${input.amount}`), effectiveDate: day(date), remark: null, createdAt: new Date(),
-      createdById: "admin", voidedAt: null, voidedById: null, voidReason: null });
+      amountDelta: d(`-${input.amount}`), effectiveDate: day(date), postingSequence: nextWalletSequence("member-a", campaignId),
+      remark: null, createdAt: new Date(), createdById: "admin", voidedAt: null, voidedById: null, voidReason: null });
     if (input.destinationCampaignId) {
       campaignAllocations.push({ id: nextId("campaign-allocation"), memberId: "member-a",
         eventCampaignId: input.destinationCampaignId, carryTransferId: transferId, bankTransactionId: null,
@@ -376,21 +380,26 @@ function fixture() {
     memberEventCampaignWalletLedger: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         const row = campaignWalletEntries.filter(item => matches(item as unknown as Record<string, unknown>, where))
-          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))[0];
+          .sort((a, b) => a.postingSequence < b.postingSequence ? -1 : 1)[0];
         return row ? { ...row } : null;
       },
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
-        campaignWalletEntries.filter(row => matches(row as unknown as Record<string, unknown>, where)).map(row => ({ ...row })),
+        campaignWalletEntries.filter(row => matches(row as unknown as Record<string, unknown>, where))
+          .sort((a, b) => a.postingSequence < b.postingSequence ? -1 : 1).map(row => ({ ...row })),
       aggregate: async ({ where }: { where: Record<string, unknown> }) => {
         const rows = campaignWalletEntries.filter(row => matches(row as unknown as Record<string, unknown>, where));
-        return { _sum: { amountDelta: rows.reduce((sum, row) => sum.plus(row.amountDelta), d("0")) } };
+        return {
+          _sum: { amountDelta: rows.reduce((sum, row) => sum.plus(row.amountDelta), d("0")) },
+          _max: { postingSequence: rows.reduce<bigint | null>((max, row) =>
+            max === null || row.postingSequence > max ? row.postingSequence : max, null) }
+        };
       },
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        if (data.bankTransactionId && campaignWalletEntries.some(row => row.bankTransactionId === data.bankTransactionId)) throw unique();
         const row: CampaignWalletRow = { id: nextId("campaign-wallet"), bankTransactionId: null, carryTransferId: null,
           voidedAt: null, voidedById: null, voidReason: null, ...data, amountDelta: d(String(data.amountDelta)),
           memberId: String(data.memberId), eventCampaignId: String(data.eventCampaignId), entryType: String(data.entryType),
           entryStatus: String(data.entryStatus ?? "ACTIVE"), effectiveDate: data.effectiveDate as Date,
+          postingSequence: data.postingSequence as bigint,
           remark: (data.remark as string | undefined) ?? null, createdAt: new Date(), createdById: String(data.createdById) } as CampaignWalletRow;
         campaignWalletEntries.push(row); return { ...row };
       }
@@ -578,13 +587,36 @@ test("different Member ownership is rejected for source and destination", async 
   await assert.rejects(() => forward(f, { sourceSubscriptionId: "sub-other" }), /Source subscription was not found/);
 });
 
-test("inactive source and destination subscriptions are rejected", async () => {
-  const f = fixture(); f.seedCarry("sub-004", "100000.00");
+test("an inactive source program can still release its donor carry", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100000.00"); setRule(f, "event-005", "100000.00", 1);
   f.subs.find(row => row.id === "sub-004")!.activeFlag = false;
-  await assert.rejects(() => forward(f), /source subscription is not active/);
-  f.subs.find(row => row.id === "sub-004")!.activeFlag = true;
+  f.events.find(row => row.id === "event-004")!.activeFlag = false;
+  const result = await forward(f);
+  assert.equal(result.source.carryAfter, "0.00");
+  assert.equal(result.destination.allocation?.units, 1);
+  assert.equal(f.transfers.length, 1);
+});
+
+test("an inactive source program without a current Time Rule can still release its donor carry", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100000.00"); setRule(f, "event-005", "100000.00", 1);
+  f.subs.find(row => row.id === "sub-004")!.activeFlag = false;
+  f.events.find(row => row.id === "event-004")!.timeRule = null;
+  const result = await forward(f);
+  assert.equal(result.source.carryAfter, "0.00");
+  assert.equal(f.transfers[0].sourceSubscriptionId, "sub-004");
+});
+
+test("inactive destination subscription, Event, or Time Rule remains rejected", async () => {
+  const f = fixture(); f.seedCarry("sub-004", "100000.00");
   f.subs.find(row => row.id === "sub-005")!.activeFlag = false;
   await assert.rejects(() => forward(f), /destination subscription is not active/);
+  f.subs.find(row => row.id === "sub-005")!.activeFlag = true;
+  f.events.find(row => row.id === "event-005")!.activeFlag = false;
+  await assert.rejects(() => forward(f), /destination Event Code is not active/);
+  f.events.find(row => row.id === "event-005")!.activeFlag = true;
+  setRule(f, "event-005", "100000.00", 1, false);
+  await assert.rejects(() => forward(f), /active Time Rule/);
+  assert.equal(f.transfers.length, 0);
 });
 
 test("STANDARD and CAMPAIGN destinations are rejected", async () => {
@@ -1217,6 +1249,19 @@ test("Campaign wallet transfer replay is stable and does not double-post", async
   assert.equal(f.transfers.length, 1);
   assert.equal(f.campaignWalletEntries.filter(row => row.entryType === "TRANSFER_OUT").length, 1);
   assert.equal(f.entries.filter(row => row.subscriptionId === "sub-005").length, 2);
+});
+
+test("Campaign wallet transfer replay stays deterministic after later wallet activity", async () => {
+  const f = fixture(); f.seedCampaignWallet("campaign-1", "200006.00"); setRule(f, "event-005", "150000.00", 3);
+  const input = { memberId: "member-a", sourceCampaignId: "campaign-1", destinationSubscriptionId: "sub-005",
+    amount: "150000.00", reason: "Campaign to program", idempotencyKey: nextKey(), userId: "admin" };
+  const first = await forwardCarryTransferRecord(f.tx, input);
+  assert.equal(first.source.carryBefore, "200006.00");
+  assert.equal(first.source.carryAfter, "50006.00");
+  f.seedCampaignWallet("campaign-1", "25000.00");
+  const replay = await forwardCarryTransferRecord(f.tx, input);
+  assert.deepEqual(replay, first);
+  assert.equal(f.transfers.length, 1);
 });
 
 test("reversibility read model matches the backend reversal rules", () => {

@@ -7,7 +7,7 @@ import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInpu
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
 import { canonicalMemberDonationWhere, officialDonationTransactionWhere } from "../member-donation.rules.js";
 import { reconcileTimeBasedCoverageForIdentity, synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
-import { synchronizePendingCampaignContributionsForMember } from "../campaign/member-campaign-wallet.service.js";
+import { reconcileCampaignContributionsForIdentity, synchronizePendingCampaignContributionsForMember } from "../campaign/member-campaign-wallet.service.js";
 import { currentBusinessDayValue } from "../../../lib/business-time.js";
 
 export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string; search?: string };
@@ -340,6 +340,9 @@ export function moveIdentity(sourceMemberId: string, identityId: string, destina
       after: { memberId: destinationMemberId, verificationStatus: "VERIFIED" }, reason, actionById: userId, actionAt: now
     });
     await reconcileTimeBasedCoverageForIdentity(tx, identityId, userId);
+    // Campaign economics must follow the authoritative transaction owner, not the
+    // previous Member; unsafe downstream wallet usage blocks the move with a conflict.
+    await reconcileCampaignContributionsForIdentity(tx, identityId, userId);
     await synchronizePendingTimeBasedForMember(tx, sourceMemberId, userId);
     await synchronizePendingTimeBasedForMember(tx, destinationMemberId, userId);
     await synchronizePendingCampaignContributionsForMember(tx, destinationMemberId, userId);
@@ -361,6 +364,8 @@ export function detachIdentity(memberId: string, identityId: string, reason: str
       after: { memberId: null, verificationStatus: "UNVERIFIED" }, reason, actionById: userId, actionAt: now
     });
     await reconcileTimeBasedCoverageForIdentity(tx, identityId, userId);
+    // Detached identities no longer authoritatively own Campaign economics.
+    await reconcileCampaignContributionsForIdentity(tx, identityId, userId);
     await synchronizePendingTimeBasedForMember(tx, memberId, userId);
   });
 }

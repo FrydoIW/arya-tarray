@@ -45,16 +45,45 @@ export function postingSequenceCompare(a: Pick<CarryTransferLedgerEntry, "postin
   return a.id.localeCompare(b.id);
 }
 
+export type CampaignWalletEvidence = { id: string; carryTransferId: string | null; entryType: string; entryStatus: string;
+  amountDelta: { toString(): string }; memberId?: string; eventCampaignId?: string; postingSequence?: bigint };
+export type CampaignAllocationEvidence = { id: string; carryTransferId: string | null; allocationType: string; allocationStatus: string;
+  amountDelta: { toString(): string } };
+
 export function validateCarryTransferIntegrity(input: {
   transfers: CarryTransferRecord[];
   entries: CarryTransferLedgerEntry[];
   subscriptions: Array<{ id: string; memberId: string }>;
+  campaignWalletEntries?: CampaignWalletEvidence[];
+  campaignAllocations?: CampaignAllocationEvidence[];
 }) {
   const violations: TransferIntegrityViolation[] = [];
   const transferById = new Map(input.transfers.map(row => [row.id, row]));
   const subscriptionById = new Map(input.subscriptions.map(row => [row.id, row]));
   const entriesByTransfer = new Map<string, CarryTransferLedgerEntry[]>();
   const sequenceBySubscription = new Map<string, Set<string>>();
+  const walletByTransfer = new Map<string, CampaignWalletEvidence[]>();
+  const walletSequenceByScope = new Map<string, Set<string>>();
+  for (const entry of input.campaignWalletEntries ?? []) {
+    if (entry.carryTransferId) {
+      const list = walletByTransfer.get(entry.carryTransferId) ?? [];
+      list.push(entry); walletByTransfer.set(entry.carryTransferId, list);
+    }
+    if (!entry.memberId || !entry.eventCampaignId || entry.postingSequence === undefined) continue;
+    const scope = `${entry.memberId}:${entry.eventCampaignId}`;
+    const sequences = walletSequenceByScope.get(scope) ?? new Set<string>();
+    const value = entry.postingSequence.toString();
+    if (sequences.has(value)) violations.push({ code: "duplicate_campaign_wallet_posting_sequence", ledgerId: entry.id,
+      detail: "Campaign wallet posting sequence must be unique per donor wallet." });
+    sequences.add(value); walletSequenceByScope.set(scope, sequences);
+  }
+  const allocationByTransfer = new Map<string, CampaignAllocationEvidence[]>();
+  for (const entry of input.campaignAllocations ?? []) {
+    if (!entry.carryTransferId) continue;
+    const list = allocationByTransfer.get(entry.carryTransferId) ?? [];
+    list.push(entry); allocationByTransfer.set(entry.carryTransferId, list);
+  }
+  const campaignEvidenceEnabled = Boolean(input.campaignWalletEntries || input.campaignAllocations);
   for (const entry of input.entries) {
     const sequences = sequenceBySubscription.get(entry.subscriptionId) ?? new Set<string>();
     const sequence = entry.postingSequence.toString();
@@ -114,6 +143,35 @@ export function validateCarryTransferIntegrity(input: {
         && (transfer.destinationCampaignId ?? null) === (original!.sourceCampaignId ?? null);
       if (!original || cents(original.amount) !== cents(transfer.amount) || !swapped)
         violations.push({ code: "transfer_reversal_mismatch", transferId: transfer.id, detail: "Reversal must swap endpoints and preserve amount." });
+    }
+    if (campaignEvidenceEnabled) {
+      // Campaign evidence depends on direction. Forward Campaign -> X spends the wallet;
+      // forward X -> Campaign consumes target capacity. Reversal swaps both: the
+      // Campaign side restores/compensates rather than repeating the forward posting.
+      const reversal = Boolean(transfer.reversalOfTransferId);
+      const expected = cents(transfer.amount);
+      const walletLegs = (walletByTransfer.get(transfer.id) ?? []).filter(row => row.entryStatus === "ACTIVE");
+      const allocationLegs = (allocationByTransfer.get(transfer.id) ?? []).filter(row => row.allocationStatus === "ACTIVE");
+      if (transfer.sourceCampaignId) {
+        if (reversal) {
+          if (allocationLegs.filter(row => row.allocationType === "CARRY_REVERSAL" && cents(row.amountDelta) === -expected).length !== 1)
+            violations.push({ code: "campaign_reversal_source_allocation_invalid", transferId: transfer.id,
+              detail: "A Campaign reversal source requires one compensating CARRY_REVERSAL allocation." });
+        } else if (walletLegs.filter(row => row.entryType === "TRANSFER_OUT" && cents(row.amountDelta) === -expected).length !== 1) {
+          violations.push({ code: "campaign_source_wallet_invalid", transferId: transfer.id,
+            detail: "A Campaign wallet source requires one TRANSFER_OUT wallet posting equal to the transfer amount." });
+        }
+      }
+      if (transfer.destinationCampaignId) {
+        if (reversal) {
+          if (walletLegs.filter(row => row.entryType === "TRANSFER_IN" && cents(row.amountDelta) === expected).length !== 1)
+            violations.push({ code: "campaign_reversal_destination_wallet_invalid", transferId: transfer.id,
+              detail: "A Campaign reversal destination requires one TRANSFER_IN wallet restoration." });
+        } else if (allocationLegs.filter(row => row.allocationType === "CARRY_TRANSFER" && cents(row.amountDelta) === expected).length !== 1) {
+          violations.push({ code: "campaign_destination_allocation_invalid", transferId: transfer.id,
+            detail: "A Campaign destination requires one CARRY_TRANSFER allocation equal to the transfer amount." });
+        }
+      }
     }
   }
   return violations;
