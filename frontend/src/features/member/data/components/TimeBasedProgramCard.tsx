@@ -1,21 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, BookOpenText, CalendarDays, CalendarPlus, Landmark, Pencil, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BookOpenText, CalendarDays, CalendarPlus, Landmark, Pencil, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatDate, formatMoney } from "@/lib/format";
-import { canOfferTransfer, coverageSourceLabel, ledgerEntryKind, ledgerEntryLabel } from "../program-allocation.utils";
+import { coverageSourceLabel, ledgerEntryKind, ledgerEntryLabel } from "../program-allocation.utils";
 import type { SponsorshipSubscription } from "../types";
 import styles from "../styles/program-allocation.module.css";
 
 type CardProps = {
   subscription: SponsorshipSubscription;
   canMutate: boolean;
-  memberActive: boolean;
-  destinations: SponsorshipSubscription[];
-  hasCampaignDestinations?: boolean;
   busy: boolean;
-  onTransfer: (subscription: SponsorshipSubscription) => void;
   onEdit: (subscription: SponsorshipSubscription) => void;
   onOpeningCoverage: (subscription: SponsorshipSubscription) => void;
   onVoidOpening: (subscription: SponsorshipSubscription, coverageId: string) => void;
@@ -27,12 +23,8 @@ function signedMoney(value: string) {
   return `${negative ? "−" : "+"} ${formatMoney(absolute)}`;
 }
 
-export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActive, destinations, busy,
-  hasCampaignDestinations = false, onTransfer, onEdit, onOpeningCoverage, onVoidOpening }: CardProps) {
+export function TimeBasedProgramCard({ subscription: sub, canMutate, busy, onEdit, onOpeningCoverage, onVoidOpening }: CardProps) {
   const [ledgerOpen, setLedgerOpen] = useState(false);
-  const allocations = sub.balanceHistory.filter(entry => entry.type === "PAYMENT");
-  const canTransfer = canOfferTransfer({ canMutate, memberActive, activeFlag: sub.activeFlag,
-    carry: sub.carryBalance, destinationCount: destinations.length + (hasCampaignDestinations ? 1 : 0) });
 
   return <article className={styles.programCard}>
     <header className={styles.programHead}>
@@ -45,7 +37,6 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
     </header>
 
     {canMutate ? <div className={styles.cardActions}>
-      {canTransfer ? <Button size="sm" icon={<ArrowLeftRight size={14} />} disabled={busy} onClick={() => onTransfer(sub)}>Alokasikan Carry</Button> : null}
       <Button size="sm" variant="ghost" icon={<BookOpenText size={14} />} disabled={busy}
         onClick={() => setLedgerOpen(open => !open)}>{ledgerOpen ? "Hide Ledger" : "View Ledger"}</Button>
       <Button size="sm" variant="ghost" icon={<Pencil size={14} />} disabled={busy} onClick={() => onEdit(sub)}>Edit</Button>
@@ -68,7 +59,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
           <div><span>Dana masuk</span><strong className={styles.money}>{formatMoney(sub.principal)}</strong></div>
           <div><span>Consumed</span><strong className={styles.money}>{formatMoney(sub.consumed)}</strong></div>
         </div>
-        <div className={styles.carryHighlight}><span aria-hidden="true"><WalletCards size={18} /></span><div><small>Carry tersedia</small><strong className={styles.money}>{formatMoney(sub.carryBalance)}</strong></div></div>
+        <div className={styles.carryBalance}><span aria-hidden="true"><WalletCards size={16} /></span><div><small>Saldo Carry Program</small><strong className={styles.money}>{formatMoney(sub.carryBalance)}</strong></div></div>
       </section>
 
       <section className={styles.transferPanel} aria-label="Transfer program">
@@ -77,7 +68,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
           <div><span className={styles.transferIn} aria-hidden="true"><ArrowDownLeft size={15} /></span><small>Transfer in</small><strong>{formatMoney(sub.transferIn)}</strong></div>
           <div><span className={styles.transferOut} aria-hidden="true"><ArrowUpRight size={15} /></span><small>Transfer out</small><strong>{formatMoney(sub.transferOut)}</strong></div>
         </div>
-        <div className={styles.rateNote}><Landmark size={14} aria-hidden="true" /><span>Historical rate follows the ledger below.</span></div>
+        <div className={styles.rateNote}><Landmark size={14} aria-hidden="true" /><span>Historical rate follows recorded coverage consumption.</span></div>
       </section>
 
       <section className={`${styles.subsection} ${styles.coveragePanel}`}>
@@ -97,11 +88,11 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, memberActiv
 
       <section className={`${styles.subsection} ${styles.ratePanel}`}>
         <span className={styles.subsectionTitle}>Applied historical rate</span>
-        {allocations.length ? allocations.map(entry => <div key={entry.ledgerId} className={styles.listRow}>
+        {sub.appliedHistoricalRates.length ? sub.appliedHistoricalRates.map((entry, index) => <div key={`${entry.effectiveDate ?? "undated"}-${index}`} className={styles.listRow}>
           <div>
-            <strong>{entry.unitAmount ? `${formatMoney(entry.unitAmount)} / ${entry.durationMonths ?? 0} bln` : "Snapshot tidak tersedia"}</strong>
-            <span>{formatDate(entry.effectiveDate)}{entry.referenceNo ? ` · ${entry.referenceNo}` : ""}</span>
-            <small>Applied to {formatMoney(entry.amountDelta.replace("-", ""))} · {entry.status}{entry.voidReason ? ` · ${entry.voidReason}` : ""}</small>
+            <strong>{formatMoney(entry.unitAmount)} / {entry.durationMonths} bln</strong>
+            <span>{formatDate(entry.effectiveDate)}{entry.referenceNo ? ` · ${entry.referenceNo}` : entry.source === "CARRY_TRANSFER" ? " · Carry transfer allocation" : ""}</span>
+            <small>Applied to {formatMoney(entry.amountApplied)} · {entry.status}{entry.voidReason ? ` · ${entry.voidReason}` : ""}</small>
           </div>
         </div>) : <p className={styles.emptySmall}>Belum ada alokasi historis.</p>}
       </section>

@@ -78,6 +78,8 @@ export type SponsorshipSubscription = {
   activeFlag: boolean; eventActiveFlag: boolean; remark: string | null; status: "ACTIVE" | "INACTIVE";
   timeRule: { unitAmount: string; durationMonths: number } | null;
   carryBalance: string; principal: string; consumed: string; transferIn: string; transferOut: string;
+  appliedHistoricalRates: Array<{ source: "PAYMENT" | "CARRY_TRANSFER"; status: string; amountApplied: string; effectiveDate: string | null;
+    unitAmount: string; durationMonths: number; referenceNo: string | null; voidReason: string | null }>;
   balanceHistory: Array<{ ledgerId: string; transactionId: string | null; referenceNo: string | null; type: string; status: string; amountDelta: string; effectiveDate: string | null; unitAmount: string | null; durationMonths: number | null; voidReason: string | null }>;
   coverage: Array<{ coverageId: string; source: string; status: string; transactionId: string | null; transactionDate: string | null; referenceNo: string | null; amountApplied: string | null; unitAmount: string | null; durationMonths: number | null; grantedUnits: number | null; coverageFrom: string; coverageTo: string; remark: string | null; voidReason: string | null }>;
 };
@@ -89,6 +91,10 @@ export type SponsorshipWorkspace = {
     targetAmount: string | null; targetApplied: string; targetRemaining: string | null; directContribution: string; allocatedFromCarry: string;
     carryBalance: string; appliedToCampaign: string; totalAllocation: string;
     allocationHistory: Array<{ allocationId: string; amountDelta: string; allocationType: string; allocationStatus: string; effectiveDate: string; reason: string }> }>;
+  carrySummary: { total: string; timeBased: string; campaign: string; sources: Array<{
+    sourceType: "TIME_BASED" | "CAMPAIGN"; sourceSubscriptionId: string | null; sourceCampaignId: string | null;
+    code: string; name: string; detail: string | null; balance: string; activeFlag: boolean; status: string;
+  }> };
   availableCampaigns: Array<{ campaignId: string; campaignName: string; eventCodeId: string; code: string; eventName: string }>;
   campaignParticipationOptions: Array<{ campaignId: string; campaignName: string; eventCodeId: string; code: string; eventName: string; startDate: string | null; endDate: string | null }>;
   contributionTotals: Record<string, { amount: string; transactionCount: number }>;
@@ -136,10 +142,7 @@ export type CarryTransferReversalResult = {
   original: CarryTransferView; reversal: CarryTransferView;
   restoringDestination: CarryTransferWalletBalance | CarryTransferCampaignWalletBalance; reversingSource: CarryTransferWalletBalance | CarryTransferCampaignWalletBalance | CarryTransferCampaignAllocation;
 };
-export type CampaignCard = SponsorshipWorkspace["campaigns"][number];
-export type TransferModalSource =
-  | { type: "TIME_BASED"; subscription: SponsorshipSubscription }
-  | { type: "CAMPAIGN"; campaign: CampaignCard };
+export type CarrySummarySource = SponsorshipWorkspace["carrySummary"]["sources"][number];
 export type CarryTransferInput = { destinationSubscriptionId?: string; destinationCampaignId?: string; amount: string; reason: string; idempotencyKey: string };
 export type CarryTransferReverseInput = { reason: string; idempotencyKey: string };
 export type SubscriptionInput = { eventCodeId: string; referenceNo: string | null; displayName: string | null; remark: string | null };

@@ -142,6 +142,44 @@ export function summarizeSubscriptionLedger(rows: Array<{ subscriptionId: string
   return totals;
 }
 
+export function summarizeAppliedHistoricalRates(rows: Array<{ subscriptionId: string; carryTransferId: string | null; entryStatus: string;
+  amountDelta: { toString(): string }; effectiveDate: Date; unitAmountSnapshot: { toString(): string } | null;
+  durationMonthsSnapshot: number | null; voidReason: string | null; bankTransaction: { referenceNo: string | null } | null }>) {
+  const rates = new Map<string, Array<{ source: "PAYMENT" | "CARRY_TRANSFER"; status: string; amountApplied: string; effectiveDate: string | null;
+    unitAmount: string; durationMonths: number; referenceNo: string | null; voidReason: string | null }>>();
+  for (const row of rows) {
+    if (!row.unitAmountSnapshot || !row.durationMonthsSnapshot) continue;
+    const amount = decimalStringToCents(row.amountDelta.toString());
+    const entries = rates.get(row.subscriptionId) ?? [];
+    entries.push({ source: row.carryTransferId ? "CARRY_TRANSFER" : "PAYMENT", status: row.entryStatus,
+      amountApplied: centsToDecimal(amount < 0n ? -amount : amount), effectiveDate: dateOnly(row.effectiveDate),
+      unitAmount: centsToDecimal(decimalStringToCents(row.unitAmountSnapshot.toString())), durationMonths: row.durationMonthsSnapshot,
+      referenceNo: row.bankTransaction?.referenceNo ?? null, voidReason: row.voidReason });
+    rates.set(row.subscriptionId, entries);
+  }
+  return rates;
+}
+
+export function summarizeCarrySummary(input: {
+  subscriptions: Array<{ subscriptionId: string; event: { code: string; eventName: string }; referenceNo: string | null; displayName: string | null;
+    carryBalance: string; activeFlag: boolean; eventActiveFlag: boolean; status: string }>;
+  campaigns: Array<{ campaignId: string; eventCode: string; eventName: string; campaignName: string; carryBalance: string; status: string }>;
+}) {
+  const sources = [
+    ...input.subscriptions.map(subscription => ({ sourceType: "TIME_BASED" as const, sourceSubscriptionId: subscription.subscriptionId,
+      sourceCampaignId: null, code: subscription.event.code, name: subscription.event.eventName, detail: subscription.referenceNo ?? subscription.displayName,
+      balanceCents: decimalStringToCents(subscription.carryBalance), activeFlag: subscription.activeFlag && subscription.eventActiveFlag, status: subscription.status })),
+    ...input.campaigns.map(campaign => ({ sourceType: "CAMPAIGN" as const, sourceSubscriptionId: null, sourceCampaignId: campaign.campaignId,
+      code: campaign.eventCode, name: campaign.eventName, detail: campaign.campaignName, balanceCents: decimalStringToCents(campaign.carryBalance),
+      activeFlag: campaign.status === "ACTIVE", status: campaign.status }))
+  ].filter(source => source.balanceCents > 0n)
+    .sort((a, b) => a.sourceType.localeCompare(b.sourceType) || a.code.localeCompare(b.code) || (a.detail ?? "").localeCompare(b.detail ?? ""));
+  const timeBased = sources.filter(source => source.sourceType === "TIME_BASED").reduce((sum, source) => sum + source.balanceCents, 0n);
+  const campaign = sources.filter(source => source.sourceType === "CAMPAIGN").reduce((sum, source) => sum + source.balanceCents, 0n);
+  return { total: centsToDecimal(timeBased + campaign), timeBased: centsToDecimal(timeBased), campaign: centsToDecimal(campaign),
+    sources: sources.map(({ balanceCents, ...source }) => ({ ...source, balance: centsToDecimal(balanceCents) })) };
+}
+
 export function summarizeContributions(input: {
   groups: Array<{ eventCodeId: string | null; eventCampaignId: string | null; _sum: { originalAmount: { toString(): string } | null }; _count: { _all: number } }>;
   events: Array<{ id: string; code: string; eventName: string; eventType: string; category: string | null }>;
@@ -240,11 +278,23 @@ export function summarizeCampaignAllocations(input: {
     // keeps its long-standing card meaning (direct contribution + carry allocated), while
     // targetApplied/appliedToCampaign expose the portion actually consumed by the target.
     const totalAllocation = row.directContribution + row.allocatedFromCarry;
-    return { ...row, targetAmount: target.target === null ? null : centsToDecimal(target.target), targetApplied: centsToDecimal(target.applied),
+    return {
+      campaignId: row.campaignId,
+      campaignName: row.campaignName,
+      eventCodeId: row.eventCodeId,
+      eventCode: row.eventCode,
+      eventName: row.eventName,
+      status: row.status,
+      targetAmount: target.target === null ? null : centsToDecimal(target.target),
+      targetApplied: centsToDecimal(target.applied),
       targetRemaining: target.target === null ? null : centsToDecimal(target.target > target.applied ? target.target - target.applied : 0n),
-      directContribution: centsToDecimal(row.directContribution), allocatedFromCarry: centsToDecimal(row.allocatedFromCarry),
-      carryBalance: centsToDecimal(row.carryBalance), totalAllocation: centsToDecimal(totalAllocation),
-      appliedToCampaign: centsToDecimal(appliedToCampaign), directApplied: centsToDecimal(row.directApplied) };
+      directContribution: centsToDecimal(row.directContribution),
+      allocatedFromCarry: centsToDecimal(row.allocatedFromCarry),
+      carryBalance: centsToDecimal(row.carryBalance),
+      totalAllocation: centsToDecimal(totalAllocation),
+      appliedToCampaign: centsToDecimal(appliedToCampaign),
+      allocationHistory: row.allocationHistory
+    };
   }).sort((a, b) => a.eventCode.localeCompare(b.eventCode) || a.campaignName.localeCompare(b.campaignName));
 }
 
@@ -264,6 +314,7 @@ export async function getSponsorship(memberId: string) {
   const result = await repository.loadMemberSponsorship(memberId);
   if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
   const ledgerTotals = summarizeSubscriptionLedger(result.balances);
+  const historicalRatesBySubscription = summarizeAppliedHistoricalRates(result.appliedHistoricalRateEntries);
   const paymentDatesBySubscription = new Map<string, Date[]>();
   for (const row of result.paymentDates) {
     const dates = paymentDatesBySubscription.get(row.subscriptionId) ?? [];
@@ -287,6 +338,7 @@ export async function getSponsorship(memberId: string) {
       consumed: centsToDecimal(totals.consumed),
       transferIn: centsToDecimal(totals.transferIn),
       transferOut: centsToDecimal(totals.transferOut),
+      appliedHistoricalRates: historicalRatesBySubscription.get(item.id) ?? [],
       balanceHistory: item.balanceLedger.map(row => ({ ledgerId: row.id, transactionId: row.bankTransactionId, referenceNo: row.bankTransaction?.referenceNo ?? null,
         type: row.entryType, status: row.entryStatus, amountDelta: row.amountDelta.toString(), effectiveDate: dateOnly(row.effectiveDate),
         unitAmount: row.unitAmountSnapshot?.toString() ?? null, durationMonths: row.durationMonthsSnapshot, voidReason: row.voidReason })),
@@ -329,7 +381,9 @@ export async function getSponsorship(memberId: string) {
     const value = totalsByType.get(type) ?? { amount: 0n, transactionCount: 0 };
     return [type, { amount: centsToDecimal(value.amount), transactionCount: value.transactionCount }];
   }));
+  const carrySummary = summarizeCarrySummary({ subscriptions, campaigns });
   return { subscriptions, contributions, campaigns,
+    carrySummary,
     availableCampaigns: result.campaignOptions.filter(campaign => {
       const state = targetState.get(campaign.id);
       return !state?.target || state.applied < state.target;

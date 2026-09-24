@@ -2,12 +2,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
-import { campaignAcceptsNewParticipation, createCampaignParticipationRecord, eligibleCampaignParticipationOptions, initialTimeBasedSubscriptionState, sponsorshipStatus, summarizeCampaignAllocations, summarizeContributions, summarizeSubscriptionLedger } from "../src/modules/member/data/member-data.service.js";
+import { campaignAcceptsNewParticipation, createCampaignParticipationRecord, eligibleCampaignParticipationOptions, initialTimeBasedSubscriptionState, sponsorshipStatus, summarizeAppliedHistoricalRates, summarizeCampaignAllocations, summarizeCarrySummary, summarizeContributions, summarizeSubscriptionLedger } from "../src/modules/member/data/member-data.service.js";
 import { campaignParticipationCreateSchema, subscriptionCreateSchema, subscriptionUpdateSchema } from "../src/modules/member/data/member-data.schema.js";
-import { canOfferCampaignTransfer, canOfferTransfer, centsToMoney, coverageSourceLabel, createIdempotencyKey, dependencyConflictHint, destinationUnitRequirement, ledgerEntryKind, ledgerEntryLabel, moneyToCents, subscriptionLabel, transferDestinationCandidates, transferEstimate, validateTransferAmount } from "../../frontend/src/features/member/data/program-allocation.utils.js";
+import { centsToMoney, coverageSourceLabel, createIdempotencyKey, dependencyConflictHint, destinationUnitRequirement, ledgerEntryKind, ledgerEntryLabel, moneyToCents, subscriptionLabel, transferDestinationCandidates, transferEstimate, validateTransferAmount } from "../../frontend/src/features/member/data/program-allocation.utils.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+
+function containsBigInt(value: unknown): boolean {
+  if (typeof value === "bigint") return true;
+  if (Array.isArray(value)) return value.some(containsBigInt);
+  return Boolean(value) && typeof value === "object"
+    && Object.values(value as Record<string, unknown>).some(containsBigInt);
+}
 
 test("subscription ledger totals separate principal, coverage consumption, and transfers", () => {
   const totals = summarizeSubscriptionLedger([
@@ -28,6 +35,60 @@ test("carry totals stay the signed sum of every active entry type", () => {
   ]);
   assert.equal(totals.get("sub-a")!.carry, 75000n);
   assert.equal(totals.get("sub-a")!.consumed, 0n);
+});
+
+test("donor carry summary keeps positive TIME_BASED and Campaign source provenance exact", () => {
+  const summary = summarizeCarrySummary({
+    subscriptions: [
+      { subscriptionId: "sub-005", event: { code: "005", eventName: "Rupang Manjushri" }, referenceNo: "005", displayName: null,
+        carryBalance: "150005.00", activeFlag: false, eventActiveFlag: false, status: "INACTIVE" },
+      { subscriptionId: "sub-zero", event: { code: "007", eventName: "Zero" }, referenceNo: null, displayName: null,
+        carryBalance: "0.00", activeFlag: true, eventActiveFlag: true, status: "ACTIVE" }
+    ],
+    campaigns: [{ campaignId: "campaign-006", eventCode: "006", eventName: "Resident Meals", campaignName: "September",
+      carryBalance: "50003.00", status: "ACTIVE" }]
+  });
+
+  assert.deepEqual({ total: summary.total, timeBased: summary.timeBased, campaign: summary.campaign },
+    { total: "200008.00", timeBased: "150005.00", campaign: "50003.00" });
+  assert.deepEqual(summary.sources.map(source => ({ type: source.sourceType, id: source.sourceSubscriptionId ?? source.sourceCampaignId,
+    balance: source.balance, active: source.activeFlag })), [
+    { type: "CAMPAIGN", id: "campaign-006", balance: "50003.00", active: true },
+    { type: "TIME_BASED", id: "sub-005", balance: "150005.00", active: false }
+  ]);
+  assert.equal(summary.sources.reduce((total, source) => total + BigInt(source.balance.replace(".", "")), 0n), 20000800n);
+});
+
+test("donor carry summary reflects transfer and reversal without duplicating buckets", () => {
+  const source = (carryBalance: string) => ({ subscriptionId: "sub-005", event: { code: "005", eventName: "Rupang Manjushri" },
+    referenceNo: null, displayName: null, carryBalance, activeFlag: true, eventActiveFlag: true, status: "ACTIVE" });
+  const destination = (carryBalance: string) => ({ subscriptionId: "sub-001", event: { code: "001", eventName: "Rupang Buddha Shakyamuni" },
+    referenceNo: null, displayName: null, carryBalance, activeFlag: true, eventActiveFlag: true, status: "ACTIVE" });
+  const summarize = (sourceCarry: string, destinationCarry: string) => summarizeCarrySummary({ subscriptions: [source(sourceCarry), destination(destinationCarry)], campaigns: [] });
+  assert.equal(summarize("150005.00", "0.00").total, "150005.00");
+  assert.deepEqual({ total: summarize("0.00", "150005.00").total, sources: summarize("0.00", "150005.00").sources.map(row => row.sourceSubscriptionId) },
+    { total: "150005.00", sources: ["sub-001"] });
+  assert.deepEqual({ total: summarize("150005.00", "0.00").total, sources: summarize("150005.00", "0.00").sources.map(row => row.sourceSubscriptionId) },
+    { total: "150005.00", sources: ["sub-005"] });
+});
+
+test("historical rate uses COVERAGE_USE consumed amounts and immutable snapshots", () => {
+  const rates = summarizeAppliedHistoricalRates([
+    { subscriptionId: "direct", carryTransferId: null, entryStatus: "ACTIVE", amountDelta: d("-1100000.00"),
+      effectiveDate: new Date("2026-09-01T00:00:00.000Z"), unitAmountSnapshot: d("100000.00"), durationMonthsSnapshot: 2,
+      voidReason: null, bankTransaction: { referenceNo: "DIRECT-1" } },
+    { subscriptionId: "carry", carryTransferId: "transfer-1", entryStatus: "ACTIVE", amountDelta: d("-150000.00"),
+      effectiveDate: new Date("2026-09-02T00:00:00.000Z"), unitAmountSnapshot: d("50000.00"), durationMonthsSnapshot: 1,
+      voidReason: null, bankTransaction: null },
+    { subscriptionId: "snapshot", carryTransferId: null, entryStatus: "VOIDED", amountDelta: d("-200000.00"),
+      effectiveDate: new Date("2026-09-03T00:00:00.000Z"), unitAmountSnapshot: d("100000.00"), durationMonthsSnapshot: 2,
+      voidReason: "Correction", bankTransaction: { referenceNo: "OLD-RATE" } }
+  ]);
+  assert.deepEqual(rates.get("direct"), [{ source: "PAYMENT", status: "ACTIVE", amountApplied: "1100000.00", effectiveDate: "2026-09-01",
+    unitAmount: "100000.00", durationMonths: 2, referenceNo: "DIRECT-1", voidReason: null }]);
+  assert.deepEqual(rates.get("carry"), [{ source: "CARRY_TRANSFER", status: "ACTIVE", amountApplied: "150000.00", effectiveDate: "2026-09-02",
+    unitAmount: "50000.00", durationMonths: 1, referenceNo: null, voidReason: null }]);
+  assert.equal(rates.get("snapshot")![0]!.unitAmount, "100000.00", "historical snapshot is not derived from a current Time Rule");
 });
 
 test("contribution overview keeps event type, category, campaign status, and totals", () => {
@@ -89,7 +150,69 @@ test("Campaign donor cards show participation only, separate direct and carry am
   assert.equal(result[0].allocatedFromCarry, "400.00");
   assert.equal(result[0].totalAllocation, "520.00");
   assert.equal(result[0].allocationHistory.length, 3, "voided allocation evidence stays discoverable");
+  assert.doesNotThrow(() => JSON.stringify(result));
+  assert.equal(containsBigInt(result), false);
+  assert.equal("legacyApplied" in result[0], false);
   assert.equal(summarizeCampaignAllocations({ contributions: [], allocations: [], campaignMasters, today: "2026-09-19" }).length, 0);
+});
+
+test("TIME_BASED carry allocated to Campaign stays serializable without changing contribution evidence", () => {
+  const campaign = { id: "campaign-006", eventCodeId: "event-006", campaignName: "Kebutuhan Makan Bhikku Resident", targetAmount: d("50003.00"),
+    activeFlag: true, startDate: null, endDate: null, eventCode: { code: "006", eventName: "Kebutuhan Makan Bhikku Resident", eventType: "CAMPAIGN", activeFlag: true } };
+  const contributions = summarizeContributions({
+    groups: [{ eventCodeId: "event-003", eventCampaignId: null, _sum: { originalAmount: d("1150003.00") }, _count: { _all: 1 } }],
+    events: [{ id: "event-003", code: "003", eventName: "Rupang Guru Rinpoche", eventType: "TIME_BASED", category: null }],
+    campaigns: [], today: "2026-09-25"
+  });
+  const result = summarizeCampaignAllocations({ contributions, campaignMasters: [campaign], allocations: [{ id: "carry-50003", eventCampaignId: campaign.id,
+    amountDelta: d("50003.00"), allocationType: "CARRY_TRANSFER", allocationStatus: "ACTIVE", effectiveDate: new Date("2026-09-25T00:00:00.000Z"),
+    reason: "Carry TIME_BASED 003", eventCampaign: campaign }], today: "2026-09-25" });
+
+  assert.equal(result[0].allocatedFromCarry, "50003.00");
+  assert.equal(result[0].directContribution, "0.00");
+  assert.equal(contributions.find(row => row.eventType === "TIME_BASED")?.totalAmount, "1150003.00");
+  assert.equal(contributions.some(row => row.eventType === "CAMPAIGN"), false);
+  assert.doesNotThrow(() => JSON.stringify(result));
+  assert.equal(containsBigInt(result), false);
+  assert.equal("legacyApplied" in result[0], false);
+});
+
+test("Campaign public cards serialize direct, wallet, participation, and mixed sources", () => {
+  const campaign = (id: string, name: string) => ({ id, eventCodeId: "event-006", campaignName: name, targetAmount: null,
+    activeFlag: true, startDate: null, endDate: null, eventCode: { code: "006", eventName: "Campaign 006", eventType: "CAMPAIGN", activeFlag: true } });
+  const direct = campaign("campaign-direct", "Direct");
+  const wallet = campaign("campaign-wallet", "Wallet");
+  const participation = campaign("campaign-participation", "Participation");
+  const mixed = campaign("campaign-mixed", "Mixed");
+  const masters = [direct, wallet, participation, mixed];
+  const contributions = summarizeContributions({
+    groups: [
+      { eventCodeId: "event-006", eventCampaignId: direct.id, _sum: { originalAmount: d("120.00") }, _count: { _all: 1 } },
+      { eventCodeId: "event-006", eventCampaignId: mixed.id, _sum: { originalAmount: d("200.00") }, _count: { _all: 1 } }
+    ],
+    events: [{ id: "event-006", code: "006", eventName: "Campaign 006", eventType: "CAMPAIGN", category: null }],
+    campaigns: masters, today: "2026-09-25"
+  });
+  const result = summarizeCampaignAllocations({ contributions, campaignMasters: masters,
+    participations: [{ eventCampaignId: participation.id }],
+    allocations: [{ id: "mixed-carry", eventCampaignId: mixed.id, amountDelta: d("50.00"), allocationType: "CARRY_TRANSFER", allocationStatus: "ACTIVE",
+      effectiveDate: new Date("2026-09-25T00:00:00.000Z"), reason: "Carry", eventCampaign: mixed }],
+    walletEntries: [{ eventCampaignId: wallet.id, amountDelta: d("25.00"), entryStatus: "ACTIVE" }, { eventCampaignId: mixed.id, amountDelta: d("10.00"), entryStatus: "ACTIVE" }],
+    legacyContributionGroups: [{ eventCampaignId: mixed.id, _sum: { originalAmount: d("30.00") } }], today: "2026-09-25" });
+
+  assert.equal(result.length, 4);
+  assert.equal(result.find(row => row.campaignId === direct.id)?.directContribution, "120.00");
+  assert.equal(result.find(row => row.campaignId === wallet.id)?.carryBalance, "25.00");
+  assert.equal(result.find(row => row.campaignId === participation.id)?.totalAllocation, "0.00");
+  assert.deepEqual(result.find(row => row.campaignId === mixed.id) && {
+    directContribution: result.find(row => row.campaignId === mixed.id)!.directContribution,
+    allocatedFromCarry: result.find(row => row.campaignId === mixed.id)!.allocatedFromCarry,
+    carryBalance: result.find(row => row.campaignId === mixed.id)!.carryBalance,
+    appliedToCampaign: result.find(row => row.campaignId === mixed.id)!.appliedToCampaign
+  }, { directContribution: "200.00", allocatedFromCarry: "50.00", carryBalance: "10.00", appliedToCampaign: "80.00" });
+  assert.doesNotThrow(() => JSON.stringify(result));
+  assert.equal(containsBigInt(result), false);
+  assert.equal(result.every(row => !("legacyApplied" in row) && !("directApplied" in row)), true);
 });
 
 test("manual Campaign participation persists without financial rows and merges with later allocation", async () => {
@@ -160,7 +283,7 @@ test("Campaign participation options exclude existing cards and require a curren
   assert.equal(campaignAcceptsNewParticipation({ activeFlag: true, startDate: null, endDate: null }, false, "2026-09-19"), false);
 });
 
-test("Campaign section is participation-first and only its own card can source carry", () => {
+test("Campaign section remains participation-first while Carry allocation moves to donor summary", () => {
   const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
   const section = screen.slice(screen.indexOf("function CampaignSection"), screen.indexOf("export function ProgramAllocation"));
   const timeBasedCard = read("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx");
@@ -173,16 +296,16 @@ test("Campaign section is participation-first and only its own card can source c
   assert.match(screen, /Campaign ditambahkan sebagai partisipasi donatur/);
   assert.match(screen, /tidak membuat transaksi bank atau alokasi dana/i);
   assert.match(api, /\/campaign-participations/);
-  assert.match(timeBasedCard, /Alokasikan Carry/);
-  // Campaign carry is a real wallet source, but the action is explicit per card and gated.
+  assert.doesNotMatch(timeBasedCard, /Alokasikan Carry/);
   assert.match(section, /Kontribusi langsung/);
   assert.match(section, /Terpakai untuk Campaign/);
   assert.match(section, /Alokasi dari Carry/);
   assert.match(section, /Saldo Carry/);
-  assert.match(section, /canOfferCampaignTransfer\(/);
-  assert.match(section, /onCarry\(row\)/);
+  assert.doesNotMatch(section, /canOfferCampaignTransfer\(/);
+  assert.doesNotMatch(section, /onCarry\(row\)/);
   assert.doesNotMatch(section.slice(0, section.indexOf("campaigns.length ?")), /Alokasikan Carry/);
-  assert.match(screen, /createCampaignWalletTransfer\(memberId, transferSource\.campaign\.campaignId/);
+  assert.match(screen, /CarryDonorSummary/);
+  assert.match(screen, /createCampaignWalletTransfer\(memberId, sourceCampaignId/);
 });
 
 test("ledger labels cover every known entry type and never mislabel unknown types as Coverage Use", () => {
@@ -241,20 +364,6 @@ test("wallet transfers into TIME BASED must satisfy the destination minimum unit
   assert.equal(destinationUnitRequirement("50000.00", "100000.00", "150000.00"), null);
   assert.equal(destinationUnitRequirement("0.00", "0.00", "150000.00"), "150000.00");
   assert.equal(destinationUnitRequirement("abc", "0.00", "150000.00"), null);
-  assert.equal(canOfferCampaignTransfer({ canMutate: true, memberActive: true, carry: "50006.00", destinationCount: 1 }), true);
-  assert.equal(canOfferCampaignTransfer({ canMutate: true, memberActive: true, carry: "0.00", destinationCount: 1 }), false);
-  assert.equal(canOfferCampaignTransfer({ canMutate: true, memberActive: true, carry: "50006.00", destinationCount: 0 }), false);
-});
-
-test("Transfer Carry is offered only for mutable, active, positive-carry programs with a destination", () => {
-  const base = { canMutate: true, memberActive: true, activeFlag: true, carry: "100000.00", destinationCount: 1 };
-  assert.equal(canOfferTransfer(base), true);
-  assert.equal(canOfferTransfer({ ...base, carry: "0.00" }), false);
-  assert.equal(canOfferTransfer({ ...base, carry: "0" }), false);
-  assert.equal(canOfferTransfer({ ...base, destinationCount: 0 }), false);
-  assert.equal(canOfferTransfer({ ...base, canMutate: false }), false);
-  assert.equal(canOfferTransfer({ ...base, memberActive: false }), false);
-  assert.equal(canOfferTransfer({ ...base, activeFlag: false }), false);
 });
 
 test("dependency conflicts surface the unwind-first domain hint without auto-unwind", () => {
@@ -292,14 +401,14 @@ test("STANDARD and CAMPAIGN contributions render without TIME_BASED entitlement 
 test("TIME_BASED cards separate principal, consumed, carry, current rule, and historical rate", () => {
   const card = read("../../frontend/src/features/member/data/components/TimeBasedProgramCard.tsx");
   assert.match(card, /Current rule/);
-  assert.match(card, /Historical rate follows the ledger below/);
+  assert.match(card, /Historical rate follows recorded coverage consumption/);
   assert.match(card, /Dana masuk/);
   assert.match(card, /Consumed/);
-  assert.match(card, /Carry tersedia/);
-  assert.match(card, /canOfferTransfer\(/);
+  assert.match(card, /Saldo Carry Program/);
+  assert.match(card, /sub\.appliedHistoricalRates/);
   assert.match(card, /ledgerEntryLabel\(entry\.type\)/);
   assert.match(card, /Balance history · Latest 24 entries/);
-  assert.match(card, /Alokasikan Carry/);
+  assert.doesNotMatch(card, /Alokasikan Carry/);
 });
 
 test("TIME BASED program metadata keeps status and start date system-managed", () => {
@@ -344,9 +453,9 @@ test("TIME BASED program status follows system participation state, not coverage
   assert.deepEqual(emptyFinancialState.get("manual"), { principal: 0n, consumed: 0n, transferIn: 0n, transferOut: 0n, carry: 0n });
 });
 
-test("Transfer Carry modal requires an explicit destination and validates amount, reason, and the destination unit minimum", () => {
+test("global Transfer Carry modal requires source-aware explicit routing and validates destination, amount, and reason", () => {
   const modal = read("../../frontend/src/features/member/data/components/TransferCarryModal.tsx");
-  assert.match(modal, /validateTransferAmount\(amount, sourceCarry\)/);
+  assert.match(modal, /validateTransferAmount\(amount, source\.balance\)/);
   assert.match(modal, /reason\.trim\(\)\.length < 3/);
   assert.match(modal, /transferEstimate\(/);
   assert.match(modal, /This moves only unused carry\./);
@@ -360,10 +469,14 @@ test("Transfer Carry modal requires an explicit destination and validates amount
   assert.match(modal, /useState\(""\)/);
   assert.match(modal, /Pilih tujuan…/);
   assert.match(modal, /Pilih tujuan alokasi terlebih dahulu\./);
-  assert.match(modal, /Belum ada tujuan alokasi yang valid untuk donatur ini\./);
+  assert.match(modal, /Belum ada tujuan alokasi yang valid untuk sumber ini\./);
   assert.match(modal, /destinationUnitRequirement\(/);
-  assert.match(modal, /Source Wallet/);
-  assert.match(modal, /Campaign wallet/);
+  assert.match(modal, /Sumber Carry/);
+  assert.match(modal, /Pilih sumber secara eksplisit/);
+  assert.match(modal, /sources\.length === 1/);
+  assert.match(modal, /sourceSubscriptionId: source\.sourceSubscriptionId/);
+  assert.match(modal, /sourceCampaignId: source\.sourceCampaignId/);
+  assert.match(modal, /setDestinationId\(""\); setAmount\(next\?\.balance/);
   assert.doesNotMatch(modal, /destinations\[0\]/);
   assert.doesNotMatch(modal, /campaigns\[0\]/);
 });
@@ -380,11 +493,13 @@ test("reversal UI uses danger styling, requires a reason, and renders dependency
 test("Program and Allocation refresh after idempotent transfer commands without response-shape branching", () => {
   const screen = read("../../frontend/src/features/member/data/components/ProgramAllocation.tsx");
   assert.match(screen, /await action\(\);/);
-  assert.match(screen, /setMessage\(success\)/);
-  assert.match(screen, /await Promise\.all\(\[load\(true\), loadHistory\(true\)\]\)/);
-  assert.match(screen, /transferDestinationCandidates\(data\.subscriptions, sub\.subscriptionId\)/);
+  assert.match(screen, /const \[sponsorshipReloaded, historyReloaded\] = await Promise\.all\(\[load\(true\), loadHistory\(true\)\]\)/);
+  assert.match(screen, /if \(sponsorshipReloaded && historyReloaded\) setMessage\(success\);/);
+  assert.match(screen, /Alokasi carry berhasil diproses, tetapi sebagian data gagal dimuat ulang/);
+  assert.match(screen, /transferDestinationCandidates\(data\.subscriptions, ""\)/);
   assert.doesNotMatch(screen, /result\.source\.|result\.destination\./);
   assert.match(screen, /<ContributionOverview/);
+  assert.match(screen, /<CarryDonorSummary summary=\{data\.carrySummary\}/);
   assert.match(screen, /<TimeBasedProgramCard/);
   assert.match(screen, /<TransferHistoryPanel/);
 });

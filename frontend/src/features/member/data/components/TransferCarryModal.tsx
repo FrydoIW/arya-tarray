@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { MoneyInput } from "@/components/ui/MoneyInput";
@@ -8,99 +8,116 @@ import { Select } from "@/components/ui/Select";
 import { formatMoney } from "@/lib/format";
 import { centsToMoney, createIdempotencyKey, dependencyConflictHint, destinationUnitRequirement, moneyToCents,
   subscriptionLabel, transferEstimate, validateTransferAmount } from "../program-allocation.utils";
-import type { CarryTransferInput, SponsorshipSubscription, TransferModalSource } from "../types";
+import type { CarrySummarySource, CarryTransferInput, SponsorshipSubscription } from "../types";
 import styles from "../styles/program-allocation.module.css";
 
 type Props = {
   open: boolean;
-  source: TransferModalSource | null;
+  sources: CarrySummarySource[];
   destinations: SponsorshipSubscription[];
   campaigns?: Array<{ campaignId: string; campaignName: string; code: string; eventName: string }>;
   busy: boolean;
   error: string;
   onClose: () => void;
-  onSubmit: (input: CarryTransferInput) => Promise<boolean>;
+  onSourceChange: () => void;
+  onSubmit: (source: CarrySummarySource, input: CarryTransferInput) => Promise<boolean>;
 };
 
-export function TransferCarryModal({ open, source, destinations, campaigns = [], busy, error, onClose, onSubmit }: Props) {
+function sourceValue(source: CarrySummarySource) {
+  return `${source.sourceType}:${source.sourceSubscriptionId ?? source.sourceCampaignId}`;
+}
+
+export function TransferCarryModal({ open, sources, destinations, campaigns = [], busy, error, onClose, onSourceChange, onSubmit }: Props) {
+  const [sourceId, setSourceId] = useState("");
   const [destinationId, setDestinationId] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const commandRef = useRef<{ key: string; payload: string } | null>(null);
 
   useEffect(() => {
-    if (!open || !source) return;
-    // Financial routing must never target an implicitly selected destination.
+    if (!open) return;
+    const initial = sources.length === 1 ? sources[0] : null;
+    setSourceId(initial ? sourceValue(initial) : "");
     setDestinationId("");
-    setAmount(source.type === "TIME_BASED" ? source.subscription.carryBalance : source.campaign.carryBalance);
+    setAmount(initial?.balance ?? "");
     setReason("");
     commandRef.current = null;
-  }, [open, source]);
+  }, [open, sources]);
 
-  if (!source) return null;
-  const sourceCarry = source.type === "TIME_BASED" ? source.subscription.carryBalance : source.campaign.carryBalance;
-  const destination = destinations.find(item => item.subscriptionId === destinationId) ?? null;
-  const campaign = destinationId.startsWith("campaign:") ? campaigns.find(item => `campaign:${item.campaignId}` === destinationId) ?? null : null;
-  const amountError = validateTransferAmount(amount, sourceCarry);
+  const source = useMemo(() => sources.find(item => sourceValue(item) === sourceId) ?? null, [sourceId, sources]);
+  const availableDestinations = source?.sourceType === "TIME_BASED"
+    ? destinations.filter(item => item.subscriptionId !== source.sourceSubscriptionId) : destinations;
+  const availableCampaigns = source?.sourceType === "CAMPAIGN"
+    ? campaigns.filter(item => item.campaignId !== source.sourceCampaignId) : campaigns;
+  const destination = availableDestinations.find(item => item.subscriptionId === destinationId) ?? null;
+  const campaign = destinationId.startsWith("campaign:")
+    ? availableCampaigns.find(item => `campaign:${item.campaignId}` === destinationId) ?? null : null;
+  const amountError = source ? validateTransferAmount(amount, source.balance) : "Pilih sumber carry terlebih dahulu.";
   const reasonError = reason.trim().length < 3 ? "Reason wajib diisi (minimal 3 karakter)." : null;
   const destinationError = destination || campaign ? null : "Pilih tujuan alokasi terlebih dahulu.";
   const unitRequirement = destination?.timeRule
-    ? destinationUnitRequirement(amount, destination.carryBalance, destination.timeRule.unitAmount)
-    : null;
+    ? destinationUnitRequirement(amount, destination.carryBalance, destination.timeRule.unitAmount) : null;
   const unitError = unitRequirement ? `Kurang ${formatMoney(unitRequirement)} untuk mencapai 1 unit di tujuan.` : null;
-  const invalid = Boolean(amountError || reasonError || destinationError || unitError);
+  const invalid = Boolean(!source || amountError || reasonError || destinationError || unitError);
   const estimate = destination?.timeRule
-    ? transferEstimate({ amount, destinationCarry: destination.carryBalance, unitAmount: destination.timeRule.unitAmount, durationMonths: destination.timeRule.durationMonths })
-    : null;
+    ? transferEstimate({ amount, destinationCarry: destination.carryBalance, unitAmount: destination.timeRule.unitAmount, durationMonths: destination.timeRule.durationMonths }) : null;
   const hint = error ? dependencyConflictHint(error) : null;
 
+  function changeSource(nextId: string) {
+    const next = sources.find(item => sourceValue(item) === nextId) ?? null;
+    setSourceId(nextId); setDestinationId(""); setAmount(next?.balance ?? ""); setReason(""); commandRef.current = null;
+    onSourceChange();
+  }
+
   async function submit() {
-    if (busy || invalid || (!destination && !campaign)) return;
+    if (busy || invalid || !source || (!destination && !campaign)) return;
     const cents = moneyToCents(amount);
     if (cents === null) return;
     const normalized = centsToMoney(cents);
-    const payload = JSON.stringify({ destinationSubscriptionId: destination?.subscriptionId, destinationCampaignId: campaign?.campaignId, amount: normalized, reason: reason.trim() });
+    const payload = JSON.stringify({ sourceType: source.sourceType, sourceSubscriptionId: source.sourceSubscriptionId,
+      sourceCampaignId: source.sourceCampaignId, destinationSubscriptionId: destination?.subscriptionId,
+      destinationCampaignId: campaign?.campaignId, amount: normalized, reason: reason.trim() });
     if (!commandRef.current || commandRef.current.payload !== payload)
       commandRef.current = { key: createIdempotencyKey(), payload };
-    await onSubmit({ ...(destination ? { destinationSubscriptionId: destination.subscriptionId } : { destinationCampaignId: campaign!.campaignId }),
+    await onSubmit(source, { ...(destination ? { destinationSubscriptionId: destination.subscriptionId } : { destinationCampaignId: campaign!.campaignId }),
       amount: normalized, reason: reason.trim(), idempotencyKey: commandRef.current.key });
   }
 
-  return <Modal open={open} title="Alokasikan Carry" description="Alokasikan saldo carry yang belum terpakai ke TIME BASED lain atau Campaign aktif milik donatur yang sama."
+  return <Modal open={open} title="Alokasikan Carry" description="Pilih sumber carry donatur, lalu tentukan tujuan alokasinya. Provenance sumber tetap tersimpan di ledger audit."
     onClose={() => !busy && onClose()}>
     <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); void submit(); }}>
-      <div className={styles.sourceBox}>
-        <span>Source Wallet</span>
-        {source.type === "TIME_BASED"
-          ? <><strong>{source.subscription.event.code} · {source.subscription.event.eventName}</strong>
-            <small>{subscriptionLabel(source.subscription)}</small></>
-          : <><strong>{source.campaign.eventCode} · {source.campaign.eventName}</strong>
-            <small>{source.campaign.campaignName} · Campaign wallet</small></>}
-        <b>Available Carry <span className={styles.money}>{formatMoney(sourceCarry)}</span></b>
-      </div>
-      {error ? <div className="ui-alert ui-alert-error" role="alert">{error}{hint ? <small className={styles.hint}>{hint}</small> : null}</div> : null}
-      <label className={styles.field}>Transfer Amount
-        <MoneyInput value={amount} disabled={busy} onValueChange={setAmount} aria-label="Transfer amount" />
-        <small className={styles.helper}>Default seluruh carry. Partial diperbolehkan.</small>
-        {amountError ? <small className={styles.fieldError}>{amountError}</small> : null}
-      </label>
-      <label className={styles.field}>Tujuan Alokasi
-        <Select value={destinationId} disabled={busy || (!destinations.length && !campaigns.length)} onChange={event => setDestinationId(event.target.value)} aria-label="Destination program">
-          <option value="">Pilih tujuan…</option>
-          {destinations.map(item => <option key={item.subscriptionId} value={item.subscriptionId}>
-            {item.event.code} · {item.event.eventName} — {subscriptionLabel(item)}
+      <label className={styles.field}>Sumber Carry
+        <Select value={sourceId} disabled={busy || sources.length === 1} onChange={event => changeSource(event.target.value)} aria-label="Carry source">
+          <option value="">{sources.length ? "Pilih sumber carry…" : "Belum ada carry tersedia"}</option>
+          {sources.map(item => <option key={sourceValue(item)} value={sourceValue(item)}>
+            {item.sourceType === "TIME_BASED" ? "TIME BASED" : "CAMPAIGN"} · {item.code} · {item.name} — {formatMoney(item.balance)}
           </option>)}
-          {campaigns.map(item => <option key={item.campaignId} value={`campaign:${item.campaignId}`}>{item.code} · {item.eventName} — {item.campaignName}</option>)}
         </Select>
-        {destinationError ? <small className={styles.fieldError}>{destinationError}</small> : null}
-        {!destinations.length && !campaigns.length
-          ? <small className={styles.fieldError}>Belum ada tujuan alokasi yang valid untuk donatur ini.</small> : null}
+        {sources.length > 1 ? <small className={styles.helper}>Pilih sumber secara eksplisit agar provenance transfer tetap jelas.</small> : null}
+      </label>
+      {source ? <div className={styles.sourceBox}>
+        <span>{source.sourceType === "TIME_BASED" ? "TIME BASED" : "CAMPAIGN"}{source.activeFlag ? "" : " · sumber historis"}</span>
+        <strong>{source.code} · {source.name}</strong><small>{source.detail ?? "Tanpa referensi"}</small>
+        <b>Saldo tersedia <span className={styles.money}>{formatMoney(source.balance)}</span></b>
+      </div> : null}
+      {error ? <div className="ui-alert ui-alert-error" role="alert">{error}{hint ? <small className={styles.hint}>{hint}</small> : null}</div> : null}
+      <label className={styles.field}>Tujuan Alokasi
+        <Select value={destinationId} disabled={busy || !source || (!availableDestinations.length && !availableCampaigns.length)} onChange={event => setDestinationId(event.target.value)} aria-label="Destination program">
+          <option value="">Pilih tujuan…</option>
+          {availableDestinations.map(item => <option key={item.subscriptionId} value={item.subscriptionId}>{item.event.code} · {item.event.eventName} — {subscriptionLabel(item)}</option>)}
+          {availableCampaigns.map(item => <option key={item.campaignId} value={`campaign:${item.campaignId}`}>{item.code} · {item.eventName} — {item.campaignName}</option>)}
+        </Select>
+        {source && destinationError ? <small className={styles.fieldError}>{destinationError}</small> : null}
+        {source && !availableDestinations.length && !availableCampaigns.length ? <small className={styles.fieldError}>Belum ada tujuan alokasi yang valid untuk sumber ini.</small> : null}
+      </label>
+      <label className={styles.field}>Jumlah Transfer
+        <MoneyInput value={amount} disabled={busy || !source} onValueChange={setAmount} aria-label="Transfer amount" />
+        <small className={styles.helper}>Default seluruh carry sumber. Partial diperbolehkan.</small>
+        {source && amountError ? <small className={styles.fieldError}>{amountError}</small> : null}
       </label>
       {destination ? <div className={styles.ruleBox}>
-        <span>Destination Current Rule</span>
-        <strong>{destination.timeRule ? `${formatMoney(destination.timeRule.unitAmount)} / ${destination.timeRule.durationMonths} bln` : "Tidak ada rule aktif"}</strong>
-        <small>Destination carry saat ini {formatMoney(destination.carryBalance)}</small>
-        {unitError ? <small className={styles.fieldError}>{unitError}</small> : null}
+        <span>Destination Current Rule</span><strong>{destination.timeRule ? `${formatMoney(destination.timeRule.unitAmount)} / ${destination.timeRule.durationMonths} bln` : "Tidak ada rule aktif"}</strong>
+        <small>Destination carry saat ini {formatMoney(destination.carryBalance)}</small>{unitError ? <small className={styles.fieldError}>{unitError}</small> : null}
       </div> : null}
       {campaign ? <div className={styles.ruleBox}><span>Campaign tujuan</span><strong>{campaign.code} · {campaign.eventName}</strong><small>{campaign.campaignName} menerima alokasi carry tanpa membuat BankTransaction.</small></div> : null}
       {estimate ? <div className={styles.previewBox}>
@@ -110,19 +127,12 @@ export function TransferCarryModal({ open, source, destinations, campaigns = [],
         <div className={styles.previewRow}><span>Remaining destination carry</span><b className={styles.money}>{formatMoney(estimate.remainingCarry)}</b></div>
       </div> : null}
       <label className={styles.field}>Reason
-        <textarea required minLength={3} maxLength={1000} rows={3} value={reason} disabled={busy}
-          onChange={event => setReason(event.target.value)} placeholder="Alasan transfer carry…" />
-        {reasonError ? <small className={styles.fieldError}>{reasonError}</small> : null}
+        <textarea required minLength={3} maxLength={1000} rows={3} value={reason} disabled={busy || !source} onChange={event => setReason(event.target.value)} placeholder="Alasan transfer carry…" />
+        {source && reasonError ? <small className={styles.fieldError}>{reasonError}</small> : null}
       </label>
-      <ul className={styles.warningBox}>
-        <li>This moves only unused carry.</li>
-        <li>Existing coverage is not changed.</li>
-        <li>Original donation and Final Event remain unchanged.</li>
-      </ul>
-      <div className={styles.footer}>
-        <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={busy || invalid}>{busy ? "Memproses…" : "Alokasikan Carry"}</Button>
-      </div>
+      <ul className={styles.warningBox}><li>This moves only unused carry.</li><li>Existing coverage is not changed.</li><li>Original donation and Final Event remain unchanged.</li></ul>
+      <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
+        <Button type="submit" disabled={busy || invalid}>{busy ? "Memproses…" : "Alokasikan Carry"}</Button></div>
     </form>
   </Modal>;
 }

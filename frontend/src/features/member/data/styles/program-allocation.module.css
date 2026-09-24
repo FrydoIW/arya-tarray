@@ -42,6 +42,12 @@
 .figures b { color: var(--ink); }
 .figures b.money { color: #275f91; }
 
+.carrySummary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 17px; border: 1px solid #dce7f4; border-radius: 12px; background: linear-gradient(105deg, #f9fcff, #f3f8ff); box-shadow: 0 6px 18px rgba(48, 77, 117, .035); }
+.carrySummaryKicker { display: block; margin-bottom: 3px; color: #4f78a1; font-size: 10px; font-weight: 800; letter-spacing: .09em; }
+.carrySummary h2 { margin: 0; color: var(--ink); font-size: 20px; line-height: 1.2; }
+.carrySummary p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }.carrySummary p span { padding: 0 4px; color: #8aa0b8; }
+.carrySummaryAction { display: grid; justify-items: end; gap: 5px; flex: 0 0 auto; }.carrySummaryAction small { color: var(--muted); font-size: 10px; text-align: right; }
+
 .campaignGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; padding: 12px 16px 16px; }
 .campaignCard { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; min-width: 0; padding: 12px; border: 1px solid #e8edf3; border-radius: 10px; background: linear-gradient(135deg, #fff, #fcfbff); }
 .campaignIcon { width: 34px; height: 34px; display: grid; place-items: center; color: #8953b4; border-radius: 10px; background: #f5edfb; }.campaignCard > div { display: grid; gap: 6px; min-width: 0; }.campaignCard header, .campaignCard footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }.campaignCard header div { display: grid; gap: 2px; min-width: 0; }.campaignCard header strong { color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }.campaignCard header small, .campaignCard footer span { color: var(--muted); font-size: 10px; }.campaignCard header em { flex: 0 0 auto; padding: 3px 7px; color: #52657a; border-radius: 999px; background: #f1f5f9; font-size: 9px; font-style: normal; font-weight: 800; }.campaignCard header em[data-status="ACTIVE"] { color: #1f7a4d; background: #e8f6ee; }.campaignCard header em[data-status="CLOSED"], .campaignCard header em[data-status="ENDED"] { color: #a33a3a; background: #fdecec; }.campaignCard p { margin: 0; color: #53647a; font-size: 11px; overflow-wrap: anywhere; }.campaignCard footer { align-items: center; padding-top: 7px; border-top: 1px solid #eff2f6; }.campaignCard footer strong { font-size: 12px; }
@@ -71,9 +77,9 @@
 .allocationRows { display: grid; gap: 7px; }
 .allocationRows > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 1px solid #eff3f7; }
 .allocationRows strong { font-size: 12px; }
-.carryHighlight { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid #dfeafb; border-radius: 8px; background: linear-gradient(110deg, #edf4ff, #f7faff); }
-.carryHighlight > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: #276fbe; background: #dceaff; }
-.carryHighlight div { display: grid; gap: 1px; }.carryHighlight small { color: #64809f; font-size: 10px; }.carryHighlight strong { font-size: 16px; }
+.carryBalance { display: flex; align-items: center; gap: 8px; padding-top: 7px; border-top: 1px solid #eff3f7; }
+.carryBalance > span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; color: #276fbe; background: #edf4ff; }
+.carryBalance div { display: grid; gap: 1px; }.carryBalance small { color: #64809f; font-size: 10px; }.carryBalance strong { font-size: 13px; }
 .transferFigures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .transferFigures > div { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; padding: 7px; border-radius: 8px; background: #fafbfc; }
 .transferFigures > div > span { grid-row: span 2; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; }.transferFigures small { color: var(--muted); font-size: 9px; }.transferFigures strong { font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -156,6 +162,7 @@
   .transferPanel { border-top: 1px solid #e9eef5; }.coveragePanel { grid-column: 1 / -1; border-right: 0; }.ratePanel { grid-column: 2; grid-row: 2; border-top: 1px solid #e9eef5; }
 }
 @media (max-width: 720px) {
+  .carrySummary { align-items: flex-start; flex-direction: column; }.carrySummaryAction { justify-items: start; }.carrySummaryAction small { text-align: left; }
   .sectionHead { align-items: flex-start; flex-direction: column; }
   .formGrid { grid-template-columns: 1fr; }
   .programBody { grid-template-columns: 1fr; }.programFacts, .financialPanel { border-right: 0; }.financialPanel, .transferPanel { border-top: 1px solid #e9eef5; }.coveragePanel, .ratePanel { grid-column: auto; grid-row: auto; border-right: 0; border-top: 1px solid #e9eef5; }

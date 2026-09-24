@@ -197,6 +197,15 @@ export function loadMemberSponsorship(memberId: string) {
       by: ["subscriptionId", "entryType"], where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryStatus: "ACTIVE" },
       _sum: { amountDelta: true }
     }) : [];
+    // Balance history is intentionally compact per subscription. Applied-rate history needs
+    // its own bounded evidence set so a recent non-rate entry cannot hide a COVERAGE_USE row.
+    const appliedHistoricalRateEntries = subscriptions.length ? await tx.memberEventBalanceLedger.findMany({
+      where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryType: "COVERAGE_USE" },
+      select: { subscriptionId: true, carryTransferId: true, entryStatus: true, amountDelta: true, effectiveDate: true,
+        unitAmountSnapshot: true, durationMonthsSnapshot: true, voidReason: true, createdAt: true, id: true,
+        bankTransaction: { select: { referenceNo: true } } },
+      orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }, { id: "desc" }], take: 500
+    }) : [];
     const paymentDates = subscriptions.length ? await tx.memberEventBalanceLedger.findMany({
       where: { subscriptionId: { in: subscriptions.map(row => row.id) }, entryStatus: "ACTIVE", OR: [
         { entryType: "PAYMENT" }, { entryType: "TRANSFER_IN", carryTransfer: { is: { status: "ACTIVE" } } }
@@ -223,7 +232,7 @@ export function loadMemberSponsorship(memberId: string) {
       tx.memberEventCampaignAllocation.groupBy({ by: ["eventCampaignId"], where: { eventCampaignId: { in: capacityCampaignIds }, allocationStatus: "ACTIVE" }, _sum: { amountDelta: true } }),
       tx.bankTransaction.groupBy({ by: ["eventCampaignId"], where: { eventCampaignId: { in: capacityCampaignIds }, status: "FINALIZED", reconciliationExcludedAt: null, originalAmount: { gt: 0 }, memberEventCampaignAllocations: { none: {} } }, _sum: { originalAmount: true } })
     ]) : [[], []];
-    return { member, subscriptions, paymentDates, pending, eventOptions, balances, contributionGroups, legacyCampaignContributionGroups, contributionEvents,
+    return { member, subscriptions, paymentDates, pending, eventOptions, balances, appliedHistoricalRateEntries, contributionGroups, legacyCampaignContributionGroups, contributionEvents,
       contributionCampaigns, campaignMasters: contributionCampaigns, campaignAllocations, campaignWalletEntries, campaignParticipations, campaignOptions,
       campaignAppliedGroups, campaignLegacyAppliedGroups };
   });

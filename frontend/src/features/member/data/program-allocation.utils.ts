@@ -92,18 +92,6 @@ export function destinationUnitRequirement(amount: string, destinationCarry: str
   return available >= unit ? null : centsToMoney(unit - available);
 }
 
-export function canOfferTransfer(input: { canMutate: boolean; memberActive: boolean; activeFlag: boolean; carry: string; destinationCount: number }) {
-  if (!input.canMutate || !input.memberActive || !input.activeFlag) return false;
-  if (input.destinationCount < 1) return false;
-  const carry = moneyToCents(input.carry);
-  return carry !== null && carry > BigInt(0);
-}
-
-/** Campaign wallet sources have no lifecycle flag of their own; the donor must be mutable and the wallet positive. */
-export function canOfferCampaignTransfer(input: { canMutate: boolean; memberActive: boolean; carry: string; destinationCount: number }) {
-  return canOfferTransfer({ ...input, activeFlag: true });
-}
-
 /** Domain hint for unwind-first conflicts. Backend message stays the primary signal. */
 export function dependencyConflictHint(message: string) {
   return /depend|unwind|active Carry Transfer/i.test(message)
