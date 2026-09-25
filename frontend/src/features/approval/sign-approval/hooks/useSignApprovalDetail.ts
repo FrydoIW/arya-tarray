@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
+import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
 import {
   approveSignApproval,
   getSignApprovalDetail,
@@ -10,7 +11,7 @@ import {
 import type { SignApprovalDetail } from "../types";
 
 function invalidateDecisionWorkspaces() {
-  invalidateWorkspaceCache("monitoring/dashboard/workspace");
+  invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
   invalidateWorkspaceCache("member/data/workspace");
   invalidateWorkspaceCache("reconciliation/statement-upload/workspace");
   invalidateWorkspaceCache("reconciliation/edit-income/workspace");

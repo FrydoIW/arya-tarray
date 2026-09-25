@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
+import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
 import { EVENT_TYPES } from "@/lib/event-type";
 import { executeEventCodeChanges, getEventCodes } from "../api/event-code.api";
 import type { EventCode, EventCodeInput, EventCodeMode, EventCodeStatusFilter } from "../types";
@@ -234,7 +235,7 @@ export function useEventCodes() {
         deletes: deletedIds
       });
 
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       invalidateWorkspaceCache("member/data/workspace");
       invalidateWorkspaceCache("reconciliation/statement-upload/workspace");
       invalidateWorkspaceCache("reconciliation/edit-income/workspace");

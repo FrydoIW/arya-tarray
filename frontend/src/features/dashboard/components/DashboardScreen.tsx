@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
-import { CalendarCheck, CalendarX, ChartNoAxesCombined, Clock3, Coins, HandCoins } from "lucide-react";
-import { MetricCard } from "@/components/ui/MetricCard";
+import { ChartNoAxesCombined } from "lucide-react";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { DashboardMetrics } from "./DashboardMetrics";
 import { RecentActivities } from "./RecentActivities";
 import { StatementStatus } from "./StatementStatus";
@@ -83,30 +81,6 @@ export function DashboardScreen() {
           loading={loading && !data}
           canViewInquiry={canViewInquiry}
         />
-      </section>
-
-      <section className="ui-card dashboard-panel dashboard-campaigns" aria-label="Campaign monitoring">
-        <div className="dashboard-panel-header"><div><h2>Campaign monitoring</h2><p>Official finalized incoming funds across active and upcoming Campaigns</p></div></div>
-        {data?.campaigns?.length ? <div className="dashboard-campaign-grid">{data.campaigns.map((campaign) => <div className="dashboard-campaign-item" key={campaign.id}>
-          <div><strong>{campaign.campaignName}</strong><span>{campaign.eventCode.code} · {campaign.eventCode.eventName}</span></div>
-          <div className="dashboard-campaign-amount">Rp{Number(campaign.collectedAmount).toLocaleString("id-ID")}{campaign.targetAmount ? ` / Rp${Number(campaign.targetAmount).toLocaleString("id-ID")}` : ""}</div>
-          {campaign.targetAmount && <><div className="dashboard-campaign-track"><span style={{ width: `${Math.min(100, Math.max(0, campaign.progressPercent ?? 0))}%` }} /></div><small>{Math.round(campaign.progressPercent ?? 0)}%{campaign.targetReached ? " · Target reached" : ""}</small></>}
-          <small>{campaign.displayStatus === "SCHEDULED" ? "Scheduled" : "Active"}{campaign.startDate || campaign.endDate ? ` · ${campaign.startDate ?? "Anytime"} – ${campaign.endDate ?? "Open"}` : ""}</small>
-        </div>)}</div> : <div className="dashboard-empty-panel">No active Campaigns yet.</div>}
-      </section>
-
-      <section className="ui-card dashboard-panel" aria-label="Rupang sponsorship monitoring">
-        <div className="dashboard-panel-header"><div><h2>Rupang sponsorship</h2><p>Current Time-Based coverage across all programs</p></div>{canViewMemberData ? <Link href="/member/data?programBalance=HAS_CARRY" className="dashboard-panel-link">View Members with carry →</Link> : null}</div>
-        <div className="dashboard-member-metrics dashboard-sponsorship-metrics">
-          <MetricCard label="Active subscriptions" value={(data?.sponsorshipSummary?.activeSubscriptions ?? 0).toLocaleString("id-ID")} detail="Currently valid" icon={<CalendarCheck size={19} />} tone="green" />
-          <MetricCard label="Expiring soon" value={(data?.sponsorshipSummary?.expiringSoon ?? 0).toLocaleString("id-ID")} detail="Within 30 calendar days" icon={<Clock3 size={19} />} tone="gold" />
-          <MetricCard label="Expired" value={(data?.sponsorshipSummary?.expiredSubscriptions ?? 0).toLocaleString("id-ID")} detail="Active records past validity" icon={<CalendarX size={19} />} tone="red" />
-          <MetricCard label="Outstanding carry" value={formatMoney(data?.sponsorshipSummary?.outstandingCarryBalance ?? "0")} detail="Allocated TIME_BASED balance" icon={<HandCoins size={19} />} tone="maroon" />
-          <MetricCard label="Subscriptions with carry" value={(data?.sponsorshipSummary?.subscriptionsWithCarryBalance ?? 0).toLocaleString("id-ID")} detail="Positive active balance" icon={<Coins size={19} />} tone="blue" />
-        </div>
-        {data?.sponsorshipSummary?.carryByEvent?.length ? <div className="dashboard-member-metrics dashboard-sponsorship-metrics" aria-label="Top programs by outstanding carry">
-          {data.sponsorshipSummary.carryByEvent.map(event => <MetricCard key={event.eventCodeId} label={`${event.code} · ${event.eventName}`} value={formatMoney(event.amount)} detail="Outstanding carry" icon={<HandCoins size={19} />} tone="gold" />)}
-        </div> : null}
       </section>
 
       <MemberDashboardSection

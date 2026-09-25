@@ -42,6 +42,20 @@ export const navigation: NavigationGroup[] = [
         icon: CircleGauge,
         href: "/dashboard",
         enabled: true
+      },
+      {
+        menuCode: "MONITORING_TIME_BASED",
+        label: "Time Based Monitoring",
+        icon: CircleGauge,
+        href: "/monitoring/time-based",
+        enabled: true
+      },
+      {
+        menuCode: "MONITORING_CAMPAIGN",
+        label: "Campaign Monitoring",
+        icon: CircleGauge,
+        href: "/monitoring/campaign",
+        enabled: true
       }
     ]
   },

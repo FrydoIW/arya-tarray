@@ -5,6 +5,8 @@ import { SIGN_APPROVAL_MENU_CODE } from "../constants/approval.js";
 import { requireMenuAccess } from "../middleware/authorization.js";
 import { signApprovalRouter } from "../modules/approval/sign-approval/sign-approval.routes.js";
 import { dashboardRouter } from "../modules/monitoring/dashboard/dashboard.routes.js";
+import { timeBasedMonitoringRouter } from "../modules/monitoring/time-based/time-based-monitoring.routes.js";
+import { campaignMonitoringRouter } from "../modules/monitoring/campaign/campaign-monitoring.routes.js";
 import { statementUploadRouter } from "../modules/reconciliation/statement-upload/statement-upload.routes.js";
 import { editIncomeRouter } from "../modules/reconciliation/edit-income/edit-income.routes.js";
 import { transactionInquiryRouter } from "../modules/reconciliation/transaction-inquiry/transaction-inquiry.routes.js";
@@ -23,6 +25,8 @@ apiRouter.use(
   requireMenuAccess("MONITORING_DASHBOARD"),
   dashboardRouter
 );
+apiRouter.use("/monitoring/time-based", requireMenuAccess("MONITORING_TIME_BASED"), timeBasedMonitoringRouter);
+apiRouter.use("/monitoring/campaign", requireMenuAccess("MONITORING_CAMPAIGN"), campaignMonitoringRouter);
 
 apiRouter.use(
   "/configuration/event-codes",

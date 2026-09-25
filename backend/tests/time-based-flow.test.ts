@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { addOpeningCoverageRecord, pendingTimeBasedPaymentPreview, updateSubscriptionRecord, voidOpeningCoverageRecord, retryAllocationRecord } from "../src/modules/member/data/member-data.service.js";
 import { calculateCarryGrant, manuallyAllocateTimeBasedPayment, reconcileTimeBasedCoverageForIdentity, rebuildTimeBasedSubscription, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../src/modules/member/time-based/member-time-based.service.js";
 import { assertNoOutstandingTimeBasedCarry } from "../src/modules/configuration/event-code/event-time-rule.service.js";
-import { loadDashboardTimeBasedCarry, loadDashboardTimeBasedSummary, summarizeTimeBasedCarry } from "../src/modules/monitoring/dashboard/dashboard.repository.js";
+import { summarizeTimeBasedCarry } from "../src/modules/monitoring/time-based/time-based-monitoring.repository.js";
 import { pendingTimeBasedPaymentsWhere } from "../src/modules/member/data/member-data.repository.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -448,22 +448,11 @@ test("Time Rule mutation blocks positive or negative carry and accepts zero", ()
   assert.doesNotThrow(() => assertNoOutstandingTimeBasedCarry(groups(["0"])));
 });
 
-test("Dashboard carry sums only positive active subscription groups", () => {
+test("Time Based monitoring carry sums only positive active subscription groups", () => {
   assert.deepEqual(summarizeTimeBasedCarry([
     { _sum: { amountDelta: d("25000") } }, { _sum: { amountDelta: d("0") } },
     { _sum: { amountDelta: d("-10") } }
-  ]), { outstandingCarryBalance: "25000.00", subscriptionsWithCarryBalance: 1 });
-});
-
-test("Dashboard carry query filters VOIDED rows before grouped aggregation", async () => {
-  let where: unknown;
-  const client = { memberEventBalanceLedger: { groupBy: async (input: { where: unknown }) => {
-    where = input.where;
-    return [{ subscriptionId: "sub-a", _sum: { amountDelta: d("25000") } }];
-  } }, memberEventSubscription: { findMany: async () => [{ id: "sub-a", eventCode: { id: "rupang", code: "091", eventName: "Rupang" } }] } };
-  assert.deepEqual(await loadDashboardTimeBasedCarry(client as never),
-    { outstandingCarryBalance: "25000.00", subscriptionsWithCarryBalance: 1, carryByEvent: [{ eventCodeId: "rupang", code: "091", eventName: "Rupang", amount: "25000.00" }] });
-  assert.deepEqual(where, { entryStatus: "ACTIVE" });
+  ]), { outstandingCarry: "25000.00", carrySourceCount: 1 });
 });
 
 test("pending preview handles a partial payment with historical VOIDED rate", () => {
@@ -485,15 +474,6 @@ test("pending TIME_BASED preview uses full PAYMENT to resolve a unit at the suff
   assert.equal(preview.grantedUnits, 1);
 });
 
-test("Dashboard Time-Based counts exclude unfunded validUntil NULL", async () => {
-  const today = day("2026-09-14");
-  const rows = [null, day("2026-09-20"), day("2026-09-10")];
-  const client = { memberEventSubscription: { count: async ({ where }: { where: { validUntil: { gte?: Date; lte?: Date; lt?: Date } } }) =>
-    rows.filter(validUntil => validUntil !== null && (!where.validUntil.gte || validUntil >= where.validUntil.gte)
-      && (!where.validUntil.lte || validUntil <= where.validUntil.lte) && (!where.validUntil.lt || validUntil < where.validUntil.lt)).length } };
-  assert.deepEqual(await loadDashboardTimeBasedSummary(today, day("2026-10-14"), client as never),
-    { activeSubscriptions: 1, expiringSoon: 1, expiredSubscriptions: 1 });
-});
 
 test("zero-carry subscription status is still system-managed after full payment", async () => {
   const f = fixture(); f.payments.push(payment("p1", "50000")); await f.sync("p1");

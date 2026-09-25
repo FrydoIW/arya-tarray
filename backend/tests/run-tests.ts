@@ -30,6 +30,7 @@ import "./statement-upload-remark.test.js";
 import "./statement-upload-duplicates.test.js";
 import "./statement-upload-withdraw.test.js";
 import "./statement-upload-overlap.test.js";
+import "./monitoring-split.test.js";
 
 import "./v5-final-hardening.test.js";
 import "./targeted-hardening.test.js";

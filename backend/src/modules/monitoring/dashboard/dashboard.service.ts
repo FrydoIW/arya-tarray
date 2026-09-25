@@ -6,8 +6,6 @@ import {
   loadDashboardMemberRecords,
   loadDashboardPeriodSummary,
   loadDashboardRecentActivityCandidates,
-  loadDashboardTimeBasedSummary,
-  loadDashboardTimeBasedCarry,
   loadDashboardTrendMonth,
   loadDashboardViewer,
   loadTopFinalEvents,
@@ -15,7 +13,6 @@ import {
 } from "./dashboard.repository.js";
 import type { DashboardWorkspaceQuery } from "./dashboard.schema.js";
 import { isRegistrationFollowUpIdentity, summarizeDashboardMemberDonations } from "./dashboard-member.domain.js";
-import { getCampaignSummaries } from "../../configuration/event-code/event-campaign.service.js";
 
 const TREND_MONTHS = 6;
 const RECENT_ACTIVITY_LIMIT = 6;
@@ -187,9 +184,7 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     : monthRange(previousMonth);
   const trendMonths = Array.from({ length: TREND_MONTHS }, (_, index) => shiftMonth(period.month, index - (TREND_MONTHS - 1)));
 
-  const today = new Date(`${currentBusinessDayValue()}T00:00:00.000Z`);
-  const expiringUntil = new Date(today); expiringUntil.setUTCDate(expiringUntil.getUTCDate() + 30);
-  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords, campaigns, sponsorshipSummary, sponsorshipCarry] = await Promise.all([
+  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords] = await Promise.all([
     loadDashboardViewer(userId),
     loadDashboardPeriodSummary(currentRange),
     loadDashboardPeriodSummary(previousRange),
@@ -199,10 +194,7 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     }))),
     loadTopFinalEvents(currentRange),
     loadDashboardRecentActivityCandidates(),
-    loadDashboardMemberRecords(currentRange),
-    getCampaignSummaries({ dashboard: true }),
-    loadDashboardTimeBasedSummary(today, expiringUntil),
-    loadDashboardTimeBasedCarry()
+    loadDashboardMemberRecords(currentRange)
   ]);
 
   if (!viewer) throw new HttpError(401, "Current user is no longer available");
@@ -283,7 +275,6 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
         changePercent: numberChange(current.completeTransactions, previous.completeTransactions)
       }
     },
-    sponsorshipSummary: { ...sponsorshipSummary, ...sponsorshipCarry },
     trend: trendRecords.map(({ month: trendMonth, record }) => ({
       month: trendMonth,
       label: monthLabel(trendMonth),
@@ -330,7 +321,6 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
       }))
     },
     recentActivities: mapRecentActivities(recentCandidates),
-    campaigns: campaigns.filter((campaign) => campaign.displayStatus === "ACTIVE" || campaign.displayStatus === "SCHEDULED").slice(0, 6),
     lastUpdatedAt: new Date()
   };
 }

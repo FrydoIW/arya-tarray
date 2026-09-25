@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
+import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
 import * as api from "../api/member-data.api";
 import type { IdentityMetadataInput, MemberDetail, MemberProfileInput } from "../types";
 
@@ -24,7 +25,7 @@ export function useMemberDetail(memberId: string) {
       await action();
       invalidateWorkspaceCache("member/data/workspace");
       invalidateWorkspaceCache("member/registration/workspace");
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
       setMessage(success); refresh(); return true;
     }

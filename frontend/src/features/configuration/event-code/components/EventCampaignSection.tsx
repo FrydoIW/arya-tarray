@@ -6,6 +6,7 @@ import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
+import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
 import { executeCampaignChanges, getCampaigns } from "../api/event-code.api";
 import type { CampaignInput, EventCampaign, EventCode } from "../types";
 import styles from "../styles/event-code.module.css";
@@ -81,7 +82,7 @@ export function EventCampaignSection({ eventCodes, masterDirty }: { eventCodes: 
       setDrafts(result.items.map(toDraft));
       setMode("INQUIRY");
       setMessage(`${result.changedCount} Campaign change${result.changedCount === 1 ? "" : "s"} executed.`);
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["campaign"]);
       invalidateWorkspaceCache("reconciliation/statement-upload/workspace");
       invalidateWorkspaceCache("reconciliation/edit-income/workspace");
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
@@ -123,7 +124,7 @@ export function EventCampaignSection({ eventCodes, masterDirty }: { eventCodes: 
           <label>Status<select value={item.activeFlag ? "ACTIVE" : "CLOSED"} disabled={mode !== "EDIT" || busy || masterDirty} onChange={(event) => change(item.id, "activeFlag", event.target.value === "ACTIVE")}><option value="ACTIVE">Active</option><option value="CLOSED">Closed</option></select></label>
           <label className={styles.campaignRemark}>Remark<input value={item.remark ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} maxLength={1000} onChange={(event) => change(item.id, "remark", event.target.value || null)} /></label>
         </div>
-        {saved && <div className={styles.campaignProgress}>Collected Rp{Number(saved.collectedAmount).toLocaleString("id-ID")} {saved.targetAmount ? ` / Rp${Number(saved.targetAmount).toLocaleString("id-ID")} (${Math.round(saved.progressPercent ?? 0)}%)` : ""}{saved.targetReached ? " · Target reached" : ""}</div>}
+        {saved && <div className={styles.campaignProgress}>Target applied Rp{Number(saved.targetApplied).toLocaleString("id-ID")} {saved.targetAmount ? ` / Rp${Number(saved.targetAmount).toLocaleString("id-ID")} (${Math.round(saved.progressPercent ?? 0)}%)` : ""}{saved.targetReached ? " · Target reached" : ""}</div>}
       </div>;
     })}</div>}
     </div>

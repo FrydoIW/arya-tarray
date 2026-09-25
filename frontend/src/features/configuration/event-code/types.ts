@@ -37,7 +37,10 @@ export type EventCampaign = {
   startDate: string | null;
   endDate: string | null;
   targetAmount: string | null;
-  collectedAmount: string;
+  directContribution: string;
+  carryAllocation: string;
+  targetApplied: string;
+  campaignCarry: string;
   remainingAmount: string | null;
   progressPercent: number | null;
   targetReached: boolean;

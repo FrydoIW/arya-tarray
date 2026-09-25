@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate, formatMoney } from "@/lib/format";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
+import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
 import * as api from "../api/member-data.api";
 import { moneyToCents, transferDestinationCandidates } from "../program-allocation.utils";
 import type { CarrySummarySource, CarryTransferHistory, CarryTransferInput, CarryTransferRecord, CarryTransferReverseInput, OpeningCoverageInput, SponsorshipSubscription, SponsorshipWorkspace, SubscriptionInput } from "../types";
@@ -132,7 +133,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
     try {
       setData(await action());
       invalidateWorkspaceCache("member/data/workspace");
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       setMessage(success); setMode(null); setCarryModalOpen(false); setReverseTarget(null);
       void loadHistory(true);
       return true;
@@ -146,7 +147,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
     try {
       await action();
       invalidateWorkspaceCache("member/data/workspace");
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       setCarryModalOpen(false); setReverseTarget(null);
       const [sponsorshipReloaded, historyReloaded] = await Promise.all([load(true), loadHistory(true)]);
       if (sponsorshipReloaded && historyReloaded) setMessage(success);

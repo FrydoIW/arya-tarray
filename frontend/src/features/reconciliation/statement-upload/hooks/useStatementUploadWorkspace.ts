@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isAbortError } from "@/lib/api";
 import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, setWorkspaceCache, workspaceCacheKey } from "@/lib/workspace-cache";
+import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
 import {
   executeStatementDraft,
   getStatementUploadWorkspace,
@@ -213,7 +214,7 @@ export function useStatementUploadWorkspace() {
     try {
       const next = await uploadStatement({ file, bankAccountId });
       invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       invalidateWorkspaceCache("member/registration/workspace");
       invalidateWorkspaceCache("reconciliation/edit-income/workspace");
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
@@ -248,7 +249,7 @@ export function useStatementUploadWorkspace() {
     try {
       const next = await executeStatementDraft(workspace.statement.id);
       invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       invalidateWorkspaceCache("approval/sign-approval/workspace");
       invalidateWorkspaceCache("reconciliation/edit-income/workspace");
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
@@ -272,7 +273,7 @@ export function useStatementUploadWorkspace() {
     try {
       const next = await withdrawStatementDraft({ statementId, reason });
       invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       invalidateWorkspaceCache("approval/sign-approval/workspace");
       invalidateWorkspaceCache("reconciliation/edit-income/workspace");
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");

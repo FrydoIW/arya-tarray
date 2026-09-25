@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isAbortError } from "@/lib/api";
 import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
+import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
 import {
   executeEditIncomeCorrection,
   getEditIncomeDetail,
@@ -371,7 +372,7 @@ export function useEditIncomeWorkspace() {
     try {
       const result = await executeEditIncomeCorrection(detail.statement.id, corrections);
       invalidateWorkspaceCache(EDIT_INCOME_WORKSPACE_PREFIX);
-      invalidateWorkspaceCache("monitoring/dashboard/workspace");
+      invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       invalidateWorkspaceCache("member/data/workspace");
       invalidateWorkspaceCache("approval/sign-approval/workspace");
       invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");

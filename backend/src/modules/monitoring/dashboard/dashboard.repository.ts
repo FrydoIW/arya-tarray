@@ -1,8 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 import { officialDonationTransactionWhere } from "../../member/member-donation.rules.js";
-import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
-import { centsToDecimal } from "../../member/data/member-donation.domain.js";
 
 export type DashboardPeriodRange = {
   periodStart: Date;
@@ -225,43 +223,6 @@ export function loadDashboardViewer(userId: string) {
     where: { id: userId },
     select: { id: true, fullName: true, email: true }
   });
-}
-
-export async function loadDashboardTimeBasedSummary(today: Date, expiringUntil: Date, client: Pick<typeof prisma, "memberEventSubscription"> = prisma) {
-  const base = { activeFlag: true } as const;
-  const [activeSubscriptions, expiringSoon, expiredSubscriptions] = await Promise.all([
-    client.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
-    client.memberEventSubscription.count({ where: { ...base, validUntil: { gte: today, lte: expiringUntil }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
-    client.memberEventSubscription.count({ where: { ...base, validUntil: { lt: today } } })
-  ]);
-  return { activeSubscriptions, expiringSoon, expiredSubscriptions };
-}
-
-export function summarizeTimeBasedCarry(groups: Array<{ _sum: { amountDelta: { toString(): string } | null } }>) {
-  const balances = groups.map(row => row._sum.amountDelta ? decimalStringToCents(row._sum.amountDelta.toString()) : 0n);
-  const positive = balances.filter(value => value > 0n);
-  return { outstandingCarryBalance: centsToDecimal(positive.reduce((sum, value) => sum + value, 0n)),
-    subscriptionsWithCarryBalance: positive.length };
-}
-
-export async function loadDashboardTimeBasedCarry(client: Pick<typeof prisma, "memberEventBalanceLedger" | "memberEventSubscription"> = prisma) {
-  const groups = await client.memberEventBalanceLedger.groupBy({ by: ["subscriptionId"],
-    where: { entryStatus: "ACTIVE" }, _sum: { amountDelta: true } });
-  const positive = groups.filter(row => row._sum.amountDelta && row._sum.amountDelta.greaterThan(0));
-  const subscriptions = positive.length ? await client.memberEventSubscription.findMany({
-    where: { id: { in: positive.map(row => row.subscriptionId) } },
-    select: { id: true, eventCode: { select: { id: true, code: true, eventName: true } } }
-  }) : [];
-  const amounts = new Map(positive.map(row => [row.subscriptionId, decimalStringToCents(row._sum.amountDelta!.toString())]));
-  const byEvent = new Map<string, { eventCodeId: string; code: string; eventName: string; amount: bigint }>();
-  for (const sub of subscriptions) {
-    const current = byEvent.get(sub.eventCode.id) ?? { eventCodeId: sub.eventCode.id, code: sub.eventCode.code, eventName: sub.eventCode.eventName, amount: 0n };
-    current.amount += amounts.get(sub.id) ?? 0n;
-    byEvent.set(sub.eventCode.id, current);
-  }
-  return { ...summarizeTimeBasedCarry(groups), carryByEvent: [...byEvent.values()]
-    .sort((a, b) => a.amount === b.amount ? a.code.localeCompare(b.code) : a.amount > b.amount ? -1 : 1)
-    .slice(0, 5).map(row => ({ eventCodeId: row.eventCodeId, code: row.code, eventName: row.eventName, amount: centsToDecimal(row.amount) })) };
 }
 
 const officialMemberDonationWhere = (range: DashboardPeriodRange): Prisma.BankTransactionWhereInput => ({

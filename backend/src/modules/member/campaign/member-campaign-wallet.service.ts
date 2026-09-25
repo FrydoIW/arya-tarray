@@ -3,7 +3,7 @@ import { currentBusinessDayValue } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
 import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
 import { centsToDecimal } from "../data/member-donation.domain.js";
-import { campaignDisplayStatus } from "../../configuration/event-code/event-campaign.service.js";
+import { campaignDisplayStatus } from "../../campaign/campaign-financial-summary.domain.js";
 
 type Tx = Prisma.TransactionClient;
 

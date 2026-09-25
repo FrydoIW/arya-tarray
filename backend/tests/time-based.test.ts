@@ -90,12 +90,12 @@ test("Opening coverage and subscription resync remain connected", () => {
 test("finalization, identity linking, correction, and dashboard summary retain their separate responsibilities", () => {
   const approval = readFileSync(new URL("../src/modules/approval/sign-approval/sign-approval.repository.ts", import.meta.url), "utf8");
   const registration = readFileSync(new URL("../src/modules/member/registration/member-registration.repository.ts", import.meta.url), "utf8");
-  const dashboard = readFileSync(new URL("../src/modules/monitoring/dashboard/dashboard.repository.ts", import.meta.url), "utf8");
+  const monitoring = readFileSync(new URL("../src/modules/monitoring/time-based/time-based-monitoring.repository.ts", import.meta.url), "utf8");
   assert.match(approval, /input\.decision === "APPROVED"[\s\S]*synchronizeTimeBasedTransaction/);
   assert.match(approval, /changedTimeBasedTransactionIds/);
   assert.match(registration, /synchronizePendingTimeBasedForMember/);
-  assert.match(dashboard, /loadDashboardTimeBasedSummary/);
-  assert.match(dashboard, /validUntil: \{ gte: today, lte: expiringUntil \}/);
+  assert.match(monitoring, /loadTimeBasedMonitoring/);
+  assert.match(monitoring, /validUntil: \{ gte: today, lte: expiringUntil \}/);
 });
 
 test("rate guard, manual adjustment restriction, and subscription resync protect unresolved payments", () => {
