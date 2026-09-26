@@ -1,36 +1,32 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
-import { CalendarClock, CircleGauge, Coins, Flag, Gift, WalletCards } from "lucide-react";
+
+import { useEffect, useState } from "react";
+import { Gift } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { getWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
-import { getCampaignMonitoring, getTimeBasedMonitoring } from "../api/monitoring.api";
-import { CAMPAIGN_MONITORING_WORKSPACE_PREFIX, TIME_BASED_MONITORING_WORKSPACE_PREFIX } from "../monitoring-cache";
-import type { CampaignMonitoringWorkspace, TimeBasedMonitoringWorkspace } from "../types";
+import { getCampaignMonitoring } from "../api/monitoring.api";
+import { CAMPAIGN_MONITORING_WORKSPACE_PREFIX } from "../monitoring-cache";
+import type { CampaignMonitoringWorkspace } from "../types";
 import styles from "../styles/monitoring.module.css";
 
-function useWorkspace<T>(prefix: string, query: Record<string, number>, load: (signal: AbortSignal) => Promise<T>) {
-  const key = workspaceCacheKey(prefix, query);
-  const [data, setData] = useState<T | null>(() => getWorkspaceCache<T>(key)?.value ?? null);
+function useCampaignWorkspace() {
+  const key = workspaceCacheKey(CAMPAIGN_MONITORING_WORKSPACE_PREFIX, {});
+  const [data, setData] = useState<CampaignMonitoringWorkspace | null>(() => getWorkspaceCache<CampaignMonitoringWorkspace>(key)?.value ?? null);
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    const read = readWorkspace(key, load);
+    const read = readWorkspace(key, signal => getCampaignMonitoring(signal));
     if (read.cached) setData(read.cached);
     (read.promise ?? Promise.resolve(read.cached!)).then(value => { if (!controller.signal.aborted) setData(value); })
       .catch(caught => { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Gagal memuat monitoring."); })
       .finally(read.release);
     return () => controller.abort();
-  }, [key, load]);
+  }, [key]);
   return { data, error };
 }
-const campaignLoad = (signal: AbortSignal) => getCampaignMonitoring(signal);
-function MemberLink({ id, children }: { id: string; children: ReactNode }) { const auth = useAuthSession(); return auth.menuCodes.includes("MEMBER_DATA") ? <Link href={`/member/data/${id}`}>{children}</Link> : <>{children}</>; }
 
-function Pager({ value, onChange }: { value: { page: number; totalPages: number; total: number }; onChange: (page: number) => void }) { return value.totalPages > 1 ? <div className={styles.pager}><button type="button" disabled={value.page <= 1} onClick={() => onChange(value.page - 1)}>Previous</button><span>Page {value.page} / {value.totalPages} · {value.total} records</span><button type="button" disabled={value.page >= value.totalPages} onClick={() => onChange(value.page + 1)}>Next</button></div> : null; }
-
-export function TimeBasedMonitoringScreen() { const [carryPage, setCarryPage] = useState(1); const [expiryPage, setExpiryPage] = useState(1); const query = useMemo(() => ({ carryPage, expiryPage }), [carryPage, expiryPage]); const timeLoad = useCallback((signal: AbortSignal) => getTimeBasedMonitoring(query, signal), [query]); const { data, error } = useWorkspace<TimeBasedMonitoringWorkspace>(TIME_BASED_MONITORING_WORKSPACE_PREFIX, query, timeLoad); return <main className={styles.page}><header><div><span>MONITORING</span><h1>Time Based Monitoring</h1><p>Current program, coverage, and carry state. This screen is read-only.</p></div></header>{error ? <div className="ui-alert ui-alert-error">{error}</div> : null}<section className={styles.metrics}>{[["Active Programs", data?.summary.activePrograms ?? 0, <CircleGauge size={18} />], ["Currently Covered", data?.summary.currentlyCovered ?? 0, <CalendarClock size={18} />], ["Expiring ≤30 days", data?.summary.expiringSoon ?? 0, <Flag size={18} />], ["Outstanding Carry", formatMoney(data?.summary.outstandingCarry ?? "0"), <WalletCards size={18} />], ["Carry Sources", data?.summary.carrySourceCount ?? 0, <Coins size={18} />]].map(([label, value, icon]) => <MetricCard key={String(label)} label={String(label)} value={String(value)} detail="Current state" icon={icon as ReactNode} tone="blue" />)}</section><section className={styles.panel}><h2>Program / Event overview</h2><div className={styles.table}>{data?.eventGroups.map(row => <div key={row.code} className={styles.row}><strong>{row.code} · {row.eventName}</strong><span>{row.rule ? `${formatMoney(row.rule.unitAmount)} / ${row.rule.durationMonths} bln` : "No active rule"}</span><span>{row.activePrograms} program · {row.currentlyCovered} covered</span><b>{formatMoney(row.outstandingCarry)} carry</b></div>) ?? "Loading…"}</div></section><section className={styles.two}><section className={styles.panel}><h2>Carry attention</h2>{data?.carryAttention.rows.map(row => <div className={styles.row} key={row.subscriptionId}><MemberLink id={row.member.id}>{row.member.memberName}</MemberLink><span>{row.program.code} · {row.program.eventName}</span><b>{formatMoney(row.carryBalance)}</b></div>) ?? "Loading…"}<Pager value={data?.carryAttention.pagination ?? { page: 1, totalPages: 1, total: 0 }} onChange={setCarryPage} /></section><section className={styles.panel}><h2>Upcoming expiry</h2>{data?.upcomingExpiry.rows.map(row => <div className={styles.row} key={row.subscriptionId}><MemberLink id={row.member.id}>{row.member.memberName}</MemberLink><span>{row.program.code} · {row.program.eventName}</span><b>{formatDate(row.validUntil)}</b></div>) ?? "Loading…"}<Pager value={data?.upcomingExpiry.pagination ?? { page: 1, totalPages: 1, total: 0 }} onChange={setExpiryPage} /></section></section></main>; }
-
-export function CampaignMonitoringScreen() { const { data, error } = useWorkspace<CampaignMonitoringWorkspace>(CAMPAIGN_MONITORING_WORKSPACE_PREFIX, {}, campaignLoad); return <main className={styles.page}><header><div><span>MONITORING</span><h1>Campaign Monitoring</h1><p>Direct bank contribution, target application, and donor-owned carry are shown separately.</p></div></header>{error ? <div className="ui-alert ui-alert-error">{error}</div> : null}<section className={styles.metrics}>{[["Active Campaigns", data?.summary.activeCampaigns ?? 0], ["Scheduled", data?.summary.scheduledCampaigns ?? 0], ["Target Applied", formatMoney(data?.summary.totalTargetApplied ?? "0")], ["Remaining", formatMoney(data?.summary.totalRemaining ?? "0")], ["Campaign Carry", formatMoney(data?.summary.outstandingCampaignCarry ?? "0")]].map(([label, value]) => <MetricCard key={String(label)} label={String(label)} value={String(value)} detail="Current state" icon={<Gift size={18} />} tone="gold" />)}</section><section className={styles.panel}><h2>Campaign target state</h2>{data?.campaigns.map(row => <article className={styles.campaign} key={row.campaignId}><header><div><strong>{row.eventCode.code} · {row.eventCode.eventName}</strong><h3>{row.campaignName}</h3></div><em>{row.displayStatus}</em></header><div className={styles.facts}><span>Direct Contribution<b>{formatMoney(row.directContribution)}</b></span><span>Carry Allocation<b>{formatMoney(row.carryAllocation)}</b></span><span>Target Applied<b>{formatMoney(row.targetApplied)}</b></span><span>Campaign Carry<b>{formatMoney(row.campaignCarry)}</b></span>{row.targetAmount ? <span>Remaining<b>{formatMoney(row.remainingAmount ?? "0")}</b></span> : <span>Target<b>Unlimited</b></span>}</div>{row.targetAmount ? <div className={styles.progress}><i style={{ width: `${Math.min(100, row.progressPercent ?? 0)}%` }} /><small>{Math.round(row.progressPercent ?? 0)}% · {formatMoney(row.targetApplied)} / {formatMoney(row.targetAmount)}</small></div> : null}</article>) ?? "Loading…"}</section></main>; }
+export function CampaignMonitoringScreen() {
+  const { data, error } = useCampaignWorkspace();
+  return <main className={styles.page}><header><div><span>MONITORING</span><h1>Campaign Monitoring</h1><p>Direct bank contribution, target application, and donor-owned carry are shown separately.</p></div></header>{error ? <div className="ui-alert ui-alert-error">{error}</div> : null}<section className={styles.metrics}>{[["Active Campaigns", data?.summary.activeCampaigns ?? 0], ["Scheduled", data?.summary.scheduledCampaigns ?? 0], ["Target Applied", formatMoney(data?.summary.totalTargetApplied ?? "0")], ["Remaining", formatMoney(data?.summary.totalRemaining ?? "0")], ["Campaign Carry", formatMoney(data?.summary.outstandingCampaignCarry ?? "0")]].map(([label, value]) => <MetricCard key={String(label)} label={String(label)} value={String(value)} detail="Current state" icon={<Gift size={18} />} tone="gold" />)}</section><section className={styles.panel}><h2>Campaign target state</h2>{data?.campaigns.map(row => <article className={styles.campaign} key={row.campaignId}><header><div><strong>{row.eventCode.code} · {row.eventCode.eventName}</strong><h3>{row.campaignName}</h3></div><em>{row.displayStatus}</em></header><div className={styles.facts}><span>Direct Contribution<b>{formatMoney(row.directContribution)}</b></span><span>Carry Allocation<b>{formatMoney(row.carryAllocation)}</b></span><span>Target Applied<b>{formatMoney(row.targetApplied)}</b></span><span>Campaign Carry<b>{formatMoney(row.campaignCarry)}</b></span>{row.targetAmount ? <span>Remaining<b>{formatMoney(row.remainingAmount ?? "0")}</b></span> : <span>Target<b>Unlimited</b></span>}</div>{row.targetAmount ? <div className={styles.progress}><i style={{ width: `${Math.min(100, row.progressPercent ?? 0)}%` }} /><small>{Math.round(row.progressPercent ?? 0)}% · {formatMoney(row.targetApplied)} / {formatMoney(row.targetAmount)}</small></div> : null}</article>) ?? "Loading…"}</section></main>;
+}
