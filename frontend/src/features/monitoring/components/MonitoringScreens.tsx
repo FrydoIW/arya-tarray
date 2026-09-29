@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Gift } from "lucide-react";
+import { CalendarDays, CircleDollarSign, Gift, Target, WalletCards } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { formatMoney } from "@/lib/format";
 import { getWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
 import { getCampaignMonitoring } from "../api/monitoring.api";
 import { CAMPAIGN_MONITORING_WORKSPACE_PREFIX } from "../monitoring-cache";
 import type { CampaignMonitoringWorkspace } from "../types";
-import styles from "../styles/monitoring.module.css";
+import { CampaignTargetCard } from "./CampaignTargetCard";
+import styles from "./CampaignMonitoring.module.css";
 
 function useCampaignWorkspace() {
   const key = workspaceCacheKey(CAMPAIGN_MONITORING_WORKSPACE_PREFIX, {});
@@ -28,5 +29,24 @@ function useCampaignWorkspace() {
 
 export function CampaignMonitoringScreen() {
   const { data, error } = useCampaignWorkspace();
-  return <main className={styles.page}><header><div><span>MONITORING</span><h1>Campaign Monitoring</h1><p>Direct bank contribution, target application, and donor-owned carry are shown separately.</p></div></header>{error ? <div className="ui-alert ui-alert-error">{error}</div> : null}<section className={styles.metrics}>{[["Active Campaigns", data?.summary.activeCampaigns ?? 0], ["Scheduled", data?.summary.scheduledCampaigns ?? 0], ["Target Applied", formatMoney(data?.summary.totalTargetApplied ?? "0")], ["Remaining", formatMoney(data?.summary.totalRemaining ?? "0")], ["Campaign Carry", formatMoney(data?.summary.outstandingCampaignCarry ?? "0")]].map(([label, value]) => <MetricCard key={String(label)} label={String(label)} value={String(value)} detail="Current state" icon={<Gift size={18} />} tone="gold" />)}</section><section className={styles.panel}><h2>Campaign target state</h2>{data?.campaigns.map(row => <article className={styles.campaign} key={row.campaignId}><header><div><strong>{row.eventCode.code} · {row.eventCode.eventName}</strong><h3>{row.campaignName}</h3></div><em>{row.displayStatus}</em></header><div className={styles.facts}><span>Direct Contribution<b>{formatMoney(row.directContribution)}</b></span><span>Carry Allocation<b>{formatMoney(row.carryAllocation)}</b></span><span>Target Applied<b>{formatMoney(row.targetApplied)}</b></span><span>Campaign Carry<b>{formatMoney(row.campaignCarry)}</b></span>{row.targetAmount ? <span>Remaining<b>{formatMoney(row.remainingAmount ?? "0")}</b></span> : <span>Target<b>Unlimited</b></span>}</div>{row.targetAmount ? <div className={styles.progress}><i style={{ width: `${Math.min(100, row.progressPercent ?? 0)}%` }} /><small>{Math.round(row.progressPercent ?? 0)}% · {formatMoney(row.targetApplied)} / {formatMoney(row.targetAmount)}</small></div> : null}</article>) ?? "Loading…"}</section></main>;
+
+  return <main className={styles.page}>
+    <header className={styles.pageHead}>
+      <div className={styles.titleBlock}><span className={styles.eyebrow}>MONITORING / CAMPAIGN</span><h1>Campaign Monitoring</h1><p>Direct bank contribution, target application, and donor-owned carry are shown separately.</p></div>
+    </header>
+    {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
+    {data ? <>
+      <section className={styles.metrics} aria-label="Campaign summary">
+        <MetricCard label="Active Campaigns" value={data.summary.activeCampaigns} detail="Current state" icon={<Gift size={19} />} tone="gold" />
+        <MetricCard label="Scheduled" value={data.summary.scheduledCampaigns} detail="Current state" icon={<CalendarDays size={19} />} tone="gold" />
+        <MetricCard label="Target Applied" value={formatMoney(data.summary.totalTargetApplied)} detail="Current state" icon={<Target size={19} />} tone="gold" />
+        <MetricCard label="Remaining" value={formatMoney(data.summary.totalRemaining)} detail="Current state" icon={<CircleDollarSign size={19} />} tone="gold" />
+        <MetricCard label="Campaign Carry" value={formatMoney(data.summary.outstandingCampaignCarry)} detail="Current state" icon={<WalletCards size={19} />} tone="gold" />
+      </section>
+      <section className={styles.portfolio} aria-labelledby="campaign-target-title">
+        <div className={styles.sectionHeading}><div><h2 id="campaign-target-title">Campaign target state</h2><p>Direct contribution, carry allocation, target application, and remaining balances by campaign.</p></div></div>
+        {data.campaigns.length ? <div className={styles.campaignList}>{data.campaigns.map(row => <CampaignTargetCard key={row.campaignId} campaign={row} />)}</div> : <p className={styles.empty}>No campaigns to display.</p>}
+      </section>
+    </> : !error ? <section className={styles.loadingPanel} role="status"><Gift size={19} /><span>Loading Campaign Monitoring…</span></section> : null}
+  </main>;
 }

@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarClock, CircleGauge, Coins, Flag, WalletCards } from "lucide-react";
+import { CalendarClock, CircleGauge, Flag, WalletCards } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { getWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
 import { getTimeBasedMonitoring } from "../api/monitoring.api";
 import { TIME_BASED_MONITORING_WORKSPACE_PREFIX } from "../monitoring-cache";
 import type { TimeBasedMonitoringWorkspace, TimeBasedTimelineFilter } from "../types";
 import { TimeBasedCoverageTimeline } from "./TimeBasedCoverageTimeline";
 import { TimeBasedProgramOverview } from "./TimeBasedProgramOverview";
-import styles from "../styles/monitoring.module.css";
+import styles from "./TimeBasedMonitoring.module.css";
 
 const EMPTY_QUERY = { timelinePage: 1, timelinePageSize: 10 };
 
@@ -40,18 +40,23 @@ export function TimeBasedMonitoringScreen() {
   const { data, error } = useTimeBasedWorkspace(query);
   const changeFilter = useCallback((next: TimeBasedTimelineFilter) => { setTimelineFilter(next); setTimelinePage(1); }, []);
   const changeWindow = useCallback((next: string) => { setWindowStart(next); setTimelinePage(1); }, []);
-  const metrics: Array<[string, string | number, ReactNode]> = [
-    ["Active Programs", data?.summary.activePrograms ?? 0, <CircleGauge size={18} key="active" />],
-    ["Currently Covered", data?.summary.currentlyCovered ?? 0, <CalendarClock size={18} key="covered" />],
-    ["Expiring ≤30 Days", data?.summary.expiringSoon ?? 0, <Flag size={18} key="expiring" />],
-    ["Outstanding Carry", formatMoney(data?.summary.outstandingCarry ?? "0"), <WalletCards size={18} key="carry" />],
-    ["Carry Sources", data?.summary.carrySourceCount ?? 0, <Coins size={18} key="sources" />]
-  ];
-  return <main className={`${styles.page} ${styles.timeBasedPage}`}>
-    <header className={styles.pageHead}><div><span>MONITORING</span><h1>Time Based Monitoring</h1><p>Current programs, recorded coverage, and TIME_BASED carry. This screen is read-only.</p></div>{data ? <aside><CalendarClock size={17} /><span>Last updated<time>{formatDateTime(data.generatedAt)}</time></span></aside> : null}</header>
-    {error ? <div className="ui-alert ui-alert-error">{error}</div> : null}
-    <section className={styles.metrics}>{metrics.map(([label, value, icon]) => <MetricCard key={label} label={label} value={String(value)} detail="Current state" icon={icon} tone="blue" />)}</section>
-    <TimeBasedProgramOverview rows={data?.eventGroups ?? []} />
-    {data ? <TimeBasedCoverageTimeline timeline={data.timeline} filter={timelineFilter} onFilterChange={changeFilter} onWindowChange={changeWindow} onPageChange={setTimelinePage} canViewMemberData={auth.menuCodes.includes("MEMBER_DATA")} today={data.today} /> : <section className={`${styles.panel} ${styles.timelineLoading}`}><span>Loading coverage timeline…</span></section>}
+
+  const metrics: Array<[string, string | number, string, ReactNode, "blue" | "green" | "gold" | "violet"]> = data ? [
+    ["Active Programs", data.summary.activePrograms, "Active donor programs", <CircleGauge size={20} key="active" />, "blue"],
+    ["Currently Covered", data.summary.currentlyCovered, "Current coverage", <CalendarClock size={20} key="covered" />, "green"],
+    ["Expiring ≤30 Days", data.summary.expiringSoon, "Current coverage", <Flag size={20} key="expiring" />, "gold"],
+    ["Outstanding Carry", formatMoney(data.summary.outstandingCarry), `${data.summary.carrySourceCount} carry sources`, <WalletCards size={20} key="carry" />, "violet"]
+  ] : [];
+
+  return <main className={styles.page}>
+    <header className={styles.pageHead}>
+      <div className={styles.titleBlock}><span className={styles.eyebrow}>MONITORING / TIME BASED</span><h1>Time Based Monitoring</h1><p>Current programs, recorded coverage, and TIME_BASED carry. This screen is read-only.</p></div>
+    </header>
+    {error ? <div className="ui-alert ui-alert-error" role="alert">{error}</div> : null}
+    {data ? <>
+      <section className={styles.metrics} aria-label="Time Based summary">{metrics.map(([label, value, detail, icon, tone]) => <MetricCard key={label} label={label} value={String(value)} detail={detail} icon={icon} tone={tone} />)}</section>
+      <TimeBasedProgramOverview rows={data.eventGroups} />
+      <TimeBasedCoverageTimeline timeline={data.timeline} filter={timelineFilter} onFilterChange={changeFilter} onWindowChange={changeWindow} onPageChange={setTimelinePage} canViewMemberData={auth.menuCodes.includes("MEMBER_DATA")} today={data.today} />
+    </> : !error ? <section className={styles.loadingPanel} role="status"><CalendarClock size={20} /><span>Loading Time Based Monitoring…</span></section> : null}
   </main>;
 }
