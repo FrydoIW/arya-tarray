@@ -81,6 +81,27 @@ function CarryDonorSummary({ summary, canAllocate, busy, onAllocate }: {
   </section>;
 }
 
+function StandardContributionSection({ contributions }: { contributions: SponsorshipWorkspace["contributions"] }) {
+  const standardRows = contributions.filter(row => row.eventType === "STANDARD");
+
+  return <section className={styles.section} aria-labelledby="pa-standard-title">
+    <div className={styles.sectionHead}>
+      <div><h2 id="pa-standard-title">STANDARD</h2><p>Ringkasan kontribusi langsung donor berdasarkan Final Event.</p></div>
+    </div>
+    {standardRows.length ? <div className={styles.standardTableWrap}>
+      <table className={styles.standardTable}>
+        <thead><tr><th scope="col">Final Event</th><th scope="col">Category</th><th scope="col">Transactions</th><th scope="col">Total Contribution</th></tr></thead>
+        <tbody>{standardRows.map(row => <tr key={`${row.eventCodeId}:${row.campaign?.campaignId ?? "none"}`}>
+          <td data-label="Final Event"><span className={styles.standardEvent}><strong>{row.eventCode}</strong><span>{row.eventName}</span></span></td>
+          <td data-label="Category">{row.category}</td>
+          <td data-label="Transactions" className={styles.standardNumeric}>{row.transactionCount}</td>
+          <td data-label="Total Contribution" className={styles.standardNumeric}><strong className={styles.money}>{formatMoney(row.totalAmount)}</strong></td>
+        </tr>)}</tbody>
+      </table>
+    </div> : <p className={styles.empty}>Belum ada kontribusi STANDARD</p>}
+  </section>;
+}
+
 export function ProgramAllocation({ memberId, memberActive, canMutate }: { memberId: string; memberActive: boolean; canMutate: boolean }) {
   const [data, setData] = useState<SponsorshipWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -226,6 +247,8 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
       <ContributionOverview totals={data.contributionTotals} />
       <CarryDonorSummary summary={data.carrySummary} canAllocate={canAllocateCarry} busy={busy}
         onAllocate={() => { setTransferError(""); setCarryModalOpen(true); }} />
+
+      <StandardContributionSection contributions={data.contributions} />
 
       <section className={styles.section} aria-labelledby="pa-programs-title">
         <div className={styles.sectionHead}>

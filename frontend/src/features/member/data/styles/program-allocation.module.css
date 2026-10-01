@@ -24,6 +24,27 @@
 .typeTile[data-type="CAMPAIGN"] .typeIcon { color: #8953b4; background: #f5edfb; }
 .typeTile[data-type="TIME_BASED"] .typeIcon { color: #2876a5; background: #eaf5fb; }
 
+.standardTableWrap { overflow-x: auto; padding: 0 16px 10px; }
+.standardTable { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.standardTable th { padding: 11px 10px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
+.standardTable td { padding: 12px 10px; border-top: 1px solid #edf1f5; color: var(--ink); vertical-align: middle; }
+.standardTable th:nth-child(n + 3), .standardNumeric { text-align: right; font-variant-numeric: tabular-nums; }
+.standardEvent { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.standardEvent strong { flex: 0 0 auto; font-weight: 700; }
+.standardEvent span { overflow-wrap: anywhere; }
+
+@media (max-width: 720px) {
+  .standardTableWrap { padding: 10px 16px 16px; }
+  .standardTable, .standardTable tbody, .standardTable tr, .standardTable td { display: block; width: 100%; }
+  .standardTable thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .standardTable tr { padding: 5px 12px; border: 1px solid #e9eef4; border-radius: 9px; }
+  .standardTable tr + tr { margin-top: 8px; }
+  .standardTable td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-top: 0; text-align: right; }
+  .standardTable td + td { border-top: 1px solid #edf1f5; }
+  .standardTable td::before { content: attr(data-label); flex: 0 0 auto; color: var(--muted); font-size: 11px; text-align: left; }
+  .standardEvent { justify-content: flex-end; flex-wrap: wrap; text-align: right; }
+}
+
 .contributionGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; padding: 0 16px 16px; }
 .contributionCard { display: grid; gap: 9px; min-width: 0; padding: 13px; border: 1px solid #e4e9f0; border-radius: 10px; background: linear-gradient(145deg, #fff, #fbfcfe); }
 .contributionCard header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
