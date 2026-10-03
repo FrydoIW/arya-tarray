@@ -1,22 +1,5 @@
-# Validation status
+# OBSOLETE — historical validation note
 
-Validated in the generation environment:
-- TypeScript/TSX syntax transpilation: PASS (32 files)
-- CSS parse: PASS
-- JSON configuration parse: PASS
-- Secret-pattern scan for previously used project credentials: PASS
+This file described checks in an early generation environment. Its counts and incomplete setup status are historical and **must not** be used as current release evidence or database instructions.
 
-Not completed in this environment:
-- `npm install` / full dependency resolution (package registry access timed out)
-- Prisma schema generation against installed Prisma package
-- Runtime connection to the Arya Tarray MySQL server
-
-Recommended first local check after extraction:
-
-```bash
-npm install
-npm run db:generate -w backend
-npm run build
-```
-
-Then configure `.env` and run the migration.
+Use [TESTING.md](TESTING.md) for executable current checks and [DATABASE.md](DATABASE.md) for the only authoritative database governance procedure. **Do not run** a Prisma migration or legacy database initializer based on this historical note.
