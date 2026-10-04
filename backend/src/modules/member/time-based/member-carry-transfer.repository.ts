@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
+import { decimalStringToCents } from "../../../lib/money.js";
 import { resolveTransferReversibility } from "./member-carry-transfer.foundation.js";
 
 export type CarryTransferReadClient = Pick<Prisma.TransactionClient,

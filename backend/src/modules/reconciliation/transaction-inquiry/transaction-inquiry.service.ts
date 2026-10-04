@@ -1,5 +1,6 @@
 import { currentBusinessDayValue, currentBusinessMonthValue, formatBusinessDateTime } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
+import { centsToDecimal } from "../../../lib/money.js";
 import { formatPeriodLabel, resolvePeriod } from "../../../lib/period.js";
 import {
   loadEventCodeLabels,
@@ -56,12 +57,6 @@ function decimalToCents(value: { toString(): string } | string | null | undefine
   const [whole = "0", fraction = ""] = normalized.split(".");
   const cents = BigInt(whole || "0") * 100n + BigInt((fraction + "00").slice(0, 2));
   return negative ? -cents : cents;
-}
-
-function centsToDecimal(value: bigint) {
-  const negative = value < 0n;
-  const absolute = negative ? -value : value;
-  return `${negative ? "-" : ""}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, "0")}`;
 }
 
 function absDecimal(value: { toString(): string } | null | undefined) {

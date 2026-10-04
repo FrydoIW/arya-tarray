@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isAbortError } from "@/lib/api";
 import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, setWorkspaceCache, workspaceCacheKey } from "@/lib/workspace-cache";
-import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
+import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import {
   executeStatementDraft,
   getStatementUploadWorkspace,

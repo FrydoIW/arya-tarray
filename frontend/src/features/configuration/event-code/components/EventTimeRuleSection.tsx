@@ -6,7 +6,7 @@ import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
-import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
+import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import { executeTimeRules, getTimeRules } from "../api/event-code.api";
 import type { EventCode, EventTimeRule, TimeRuleInput } from "../types";
 import styles from "../styles/event-code.module.css";

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isAbortError } from "@/lib/api";
 import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
-import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
+import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import * as api from "../api/member-registration.api";
 import type { MemberInput, Workspace, WorkspaceQuery } from "../types";
 const empty: Workspace = { summary: { unverified: 0, verified: 0, ignored: 0 }, rows: [], pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 } };

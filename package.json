@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "concurrently -n backend,frontend -c auto \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "build": "npm run build -w backend && npm run build -w frontend",
-    "test": "npm run test -w backend"
+    "test": "npm run test -w backend",
+    "test:db:bootstrap": "npm run test:db:bootstrap -w backend",
+    "test:integration": "npm run test:integration -w backend",
+    "test:browser": "npm run test:browser -w frontend",
+    "test:full": "npm test && npm run test:integration && npm run test:browser"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
-import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
+import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import { EVENT_TYPES } from "@/lib/event-type";
 import { executeEventCodeChanges, getEventCodes } from "../api/event-code.api";
 import type { EventCode, EventCodeInput, EventCodeMode, EventCodeStatusFilter } from "../types";

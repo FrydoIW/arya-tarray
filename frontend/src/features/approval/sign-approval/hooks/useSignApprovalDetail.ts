@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
-import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
+import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import {
   approveSignApproval,
   getSignApprovalDetail,

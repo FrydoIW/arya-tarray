@@ -1,5 +1,6 @@
 import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib/business-time.js";
 import { HttpError } from "../../../lib/http.js";
+import { centsToDecimal } from "../../../lib/money.js";
 import { resolvePeriod } from "../../../lib/period.js";
 import type { EditIncomeWorkspaceQuery, ExecuteEditIncomeInput } from "./edit-income.schema.js";
 import {
@@ -21,12 +22,6 @@ function decimalToCents(value: { toString(): string }) {
   const [whole = "0", fraction = ""] = normalized.split(".");
   const cents = BigInt(whole || "0") * 100n + BigInt((fraction + "00").slice(0, 2));
   return negative ? -cents : cents;
-}
-
-function centsToDecimal(value: bigint) {
-  const negative = value < 0n;
-  const absolute = negative ? -value : value;
-  return `${negative ? "-" : ""}${(absolute / 100n).toString()}.${(absolute % 100n).toString().padStart(2, "0")}`;
 }
 
 function totalAmount(totalCredit: { toString(): string }, totalDebit: { toString(): string }) {

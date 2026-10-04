@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isValidPeriodDate } from "../../../lib/period.js";
-import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
+import { decimalStringToCents } from "../../../lib/money.js";
 import { memberProfileFieldSchemas, optionalMemberText } from "../member-profile.schema.js";
 
 const correctionReason = z.string().trim().min(3, "Reason minimal 3 karakter").max(1000);

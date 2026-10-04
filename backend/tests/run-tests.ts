@@ -1,5 +1,7 @@
 import "./admin-access-guard.test.js";
 import "./business-time.test.js";
+import "./money.test.js";
+import "./integration-guard.test.js";
 import "./period.test.js";
 import "./member-identity.test.js";
 import "./member-data.test.js";

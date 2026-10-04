@@ -7,7 +7,7 @@ import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
 import { formatMoney } from "@/lib/format";
 import { getWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
 import { getTimeBasedMonitoring } from "../api/monitoring.api";
-import { TIME_BASED_MONITORING_WORKSPACE_PREFIX } from "../monitoring-cache";
+import { TIME_BASED_MONITORING_WORKSPACE_PREFIX } from "@/lib/monitoring-cache";
 import type { TimeBasedMonitoringWorkspace, TimeBasedTimelineFilter } from "../types";
 import { TimeBasedCoverageTimeline } from "./TimeBasedCoverageTimeline";
 import { TimeBasedProgramOverview } from "./TimeBasedProgramOverview";

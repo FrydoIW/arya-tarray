@@ -6,6 +6,8 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
 
 # Environment / secrets
 .env

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { HttpError } from "../../../lib/http.js";
-import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
+import { decimalStringToCents } from "../../../lib/money.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { allocatePostingSequences, assertRebuildHasNoActiveTransferRelation, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
 

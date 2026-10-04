@@ -1,4 +1,5 @@
 import { HttpError } from "../../../lib/http.js";
+import { centsToDecimal } from "../../../lib/money.js";
 import { timeBasedPaymentPreview } from "../../member/time-based/time-based-preview.js";
 import type { ApproveDecisionInput, RejectDecisionInput } from "./sign-approval.schema.js";
 import {
@@ -22,14 +23,6 @@ function decimalToCents(value: { toString(): string }) {
   const [whole = "0", fraction = ""] = normalized.split(".");
   const cents = BigInt(whole || "0") * 100n + BigInt((fraction + "00").slice(0, 2));
   return negative ? -cents : cents;
-}
-
-function centsToDecimal(value: bigint) {
-  const negative = value < 0n;
-  const absolute = negative ? -value : value;
-  const whole = absolute / 100n;
-  const cents = (absolute % 100n).toString().padStart(2, "0");
-  return `${negative ? "-" : ""}${whole.toString()}.${cents}`;
 }
 
 function absoluteCents(value: { toString(): string }) {

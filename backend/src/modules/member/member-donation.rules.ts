@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { decimalStringToCents } from "../reconciliation/reconciliation-classification.js";
+import { decimalStringToCents } from "../../lib/money.js";
 
 export type OfficialDonationCandidate = {
   status: string;

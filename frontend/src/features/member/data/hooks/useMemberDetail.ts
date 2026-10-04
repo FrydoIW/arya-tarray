@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
-import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
+import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import * as api from "../api/member-data.api";
 import type { IdentityMetadataInput, MemberDetail, MemberProfileInput } from "../types";
 

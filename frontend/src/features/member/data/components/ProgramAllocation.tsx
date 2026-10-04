@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate, formatMoney } from "@/lib/format";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
-import { invalidateMonitoringWorkspaces } from "@/features/monitoring/monitoring-cache";
+import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import * as api from "../api/member-data.api";
 import { moneyToCents, transferDestinationCandidates } from "../program-allocation.utils";
 import type { CarrySummarySource, CarryTransferHistory, CarryTransferInput, CarryTransferRecord, CarryTransferReverseInput, OpeningCoverageInput, SponsorshipSubscription, SponsorshipWorkspace, SubscriptionInput } from "../types";

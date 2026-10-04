@@ -1,5 +1,7 @@
-import { decimalStringToCents } from "../../reconciliation/reconciliation-classification.js";
+import { centsToDecimal, decimalStringToCents } from "../../../lib/money.js";
 import { isCanonicalMemberDonationCandidate } from "../member-donation.rules.js";
+
+export { centsToDecimal };
 
 export type DonationCandidate = {
   status: string;
@@ -13,12 +15,6 @@ export type DonationCandidate = {
 
 export function isOfficialMemberDonation(row: DonationCandidate, memberId: string) {
   return isCanonicalMemberDonationCandidate(row, memberId);
-}
-
-export function centsToDecimal(value: bigint) {
-  const negative = value < 0n;
-  const absolute = negative ? -value : value;
-  return `${negative ? "-" : ""}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, "0")}`;
 }
 
 export function summarizeDonationCandidates(rows: DonationCandidate[], memberId: string, context?: { start: Date; end: Date; eventCodeId?: string }) {

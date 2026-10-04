@@ -6,7 +6,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { formatMoney } from "@/lib/format";
 import { getWorkspaceCache, readWorkspace, workspaceCacheKey } from "@/lib/workspace-cache";
 import { getCampaignMonitoring } from "../api/monitoring.api";
-import { CAMPAIGN_MONITORING_WORKSPACE_PREFIX } from "../monitoring-cache";
+import { CAMPAIGN_MONITORING_WORKSPACE_PREFIX } from "@/lib/monitoring-cache";
 import type { CampaignMonitoringWorkspace } from "../types";
 import { CampaignTargetCard } from "./CampaignTargetCard";
 import styles from "./CampaignMonitoring.module.css";

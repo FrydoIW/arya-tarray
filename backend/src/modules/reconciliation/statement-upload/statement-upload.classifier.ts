@@ -1,7 +1,10 @@
+import { centsToDecimal as centsToDecimalString } from "../../../lib/money.js";
 import {
   isEligibleIncomingTransaction,
   type ClassificationSource
 } from "../reconciliation-classification.js";
+
+export { centsToDecimalString };
 
 export type ActiveEventCode = {
   id: string;
@@ -11,14 +14,6 @@ export type ActiveEventCode = {
 export function suffixCodeFromCents(amountCents: bigint) {
   const absoluteRupiah = (amountCents < 0n ? -amountCents : amountCents) / 100n;
   return (absoluteRupiah % 1000n).toString().padStart(3, "0");
-}
-
-export function centsToDecimalString(cents: bigint) {
-  const negative = cents < 0n;
-  const absolute = negative ? -cents : cents;
-  const whole = absolute / 100n;
-  const fraction = (absolute % 100n).toString().padStart(2, "0");
-  return `${negative ? "-" : ""}${whole.toString()}.${fraction}`;
 }
 
 export function classifyParsedTransaction(

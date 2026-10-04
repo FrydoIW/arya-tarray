@@ -1,3 +1,7 @@
+import { decimalStringToCents } from "../../lib/money.js";
+
+export { decimalStringToCents };
+
 export type BankDirection = "CR" | "DB";
 
 export type ClassificationSource = {
@@ -30,15 +34,6 @@ export function directionFromStoredTransactionType(transactionType: string | nul
     return "DB";
   }
   return null;
-}
-
-export function decimalStringToCents(value: string) {
-  const trimmed = value.trim();
-  const negative = trimmed.startsWith("-");
-  const normalized = negative ? trimmed.slice(1) : trimmed;
-  const [whole = "0", fraction = ""] = normalized.split(".");
-  const cents = BigInt(whole || "0") * 100n + BigInt((fraction + "00").slice(0, 2));
-  return negative ? -cents : cents;
 }
 
 export function storedTransactionRequiresClassification(input: {
