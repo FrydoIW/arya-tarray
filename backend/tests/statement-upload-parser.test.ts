@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import ExcelJS from "exceljs";
-import { readFile } from "node:fs/promises";
+import JSZip from "jszip";
 import { parseBcaStatementWorkbook } from "../src/modules/reconciliation/statement-upload/statement-upload.parser.js";
 
 async function buildMergedCellFixture() {
@@ -58,6 +58,52 @@ async function buildNullDateFixture() {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+async function buildSyntheticMalformedMergeFixture() {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("BCA Okt 2026");
+  sheet.getCell("A1").value = "Informasi Rekening - Mutasi Rekening";
+  sheet.getCell("A2").value = "No. rekening";
+  sheet.getCell("B2").value = "091-0000123";
+  sheet.getCell("A3").value = "Nama";
+  sheet.getCell("B3").value = "SYNTHETIC TEST ORGANIZATION";
+  sheet.getCell("A4").value = "Periode";
+  sheet.getCell("B4").value = "01/10/2026 - 31/10/2026";
+  sheet.getCell("A5").value = "Tgl";
+  sheet.getCell("B5").value = "Keterangan";
+  sheet.getCell("C5").value = "Jumlah";
+
+  sheet.getCell("A6").value = "01/10";
+  sheet.getCell("B6").value = "TRSF E-BANKING CR";
+  sheet.getCell("C6").value = "123,456.70 CR";
+  sheet.getCell("B7").value = "0110/FTSCY/TEST001";
+  sheet.getCell("B8").value = "SYNTHETIC SENDER ALPHA";
+  sheet.mergeCells("A6:A8");
+  sheet.mergeCells("C6:C8");
+
+  // These values are intentionally covered by the malformed ranges below.
+  // The parser must recover this transaction from the following reference line.
+  sheet.getCell("A9").value = "02/10";
+  sheet.getCell("B9").value = "TRSF E-BANKING CR";
+  sheet.getCell("C9").value = "200,000.20 CR";
+  sheet.getCell("B10").value = "0210/FTSCY/TEST002 200000.20";
+  sheet.getCell("B11").value = "SYNTHETIC SENDER BETA";
+
+  const archive = await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
+  const worksheetPath = "xl/worksheets/sheet1.xml";
+  const worksheet = await archive.file(worksheetPath)!.async("string");
+  const malformed = worksheet
+    .replace('ref="A6:A8"', 'ref="A6:A10"')
+    .replace('ref="C6:C8"', 'ref="C6:C10"')
+    .replace(
+      'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',
+      'xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    )
+    .replace(/(<\/?)(?!x:)([A-Za-z][A-Za-z0-9]*)(?=[\s/>])/g, "$1x:$2");
+  archive.file(worksheetPath, malformed);
+
+  return Buffer.from(await archive.generateAsync({ type: "nodebuffer" }));
+}
+
 test("BCA parser never yields a transaction without a transaction date", async () => {
   const parsed = await parseBcaStatementWorkbook(await buildNullDateFixture());
 
@@ -91,20 +137,21 @@ test("BCA parser ignores merged continuation rows as transaction starts", async 
 });
 
 
-test("BCA parser recovers real transaction boundaries from malformed overlapping merge ranges", async () => {
-  const fixture = await readFile(new URL("./fixtures/malformed-merge-statement.xlsx", import.meta.url));
-  const parsed = await parseBcaStatementWorkbook(fixture);
+test("BCA parser recovers synthetic transaction boundaries from malformed overlapping merge ranges", async () => {
+  const parsed = await parseBcaStatementWorkbook(await buildSyntheticMalformedMergeFixture());
 
-  assert.equal(parsed.transactions.length, 40);
-  const tony = parsed.transactions.find((item) => item.sourceRowNo === 137);
-  const vivian = parsed.transactions.find((item) => item.sourceRowNo === 141);
-  const wendy = parsed.transactions.find((item) => item.sourceRowNo === 145);
+  assert.deepEqual(parsed.validSheets, ["BCA Okt 2026"]);
+  assert.equal(parsed.accountNo, "091-0000123");
+  assert.equal(parsed.transactions.length, 2);
 
-  assert.equal(tony?.amountCents, 145_000_300n);
-  assert.equal(tony?.senderName, "TONY HALIM");
-  assert.equal(tony?.description, "0505/FTSCY/WS95031 1450003.00\nDana Rupang Guru Rinpoche\nTONY HALIM");
-  assert.equal(vivian?.amountCents, 70_000_400n);
-  assert.equal(vivian?.senderName, "VIVIAN LEE");
-  assert.equal(wendy?.amountCents, 105_000_500n);
-  assert.equal(wendy?.senderName, "WENDY TAN");
+  const first = parsed.transactions[0];
+  assert.equal(first.sourceRowNo, 6);
+  assert.equal(first.amountCents, 12_345_670n);
+  assert.equal(first.senderName, "SYNTHETIC SENDER ALPHA");
+
+  const recovered = parsed.transactions[1];
+  assert.equal(recovered.sourceRowNo, 9);
+  assert.equal(recovered.amountCents, 20_000_020n);
+  assert.equal(recovered.referenceNo, "0210/FTSCY/TEST002");
+  assert.equal(recovered.senderName, "SYNTHETIC SENDER BETA");
 });

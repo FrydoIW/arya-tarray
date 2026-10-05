@@ -8,6 +8,9 @@ coverage/
 *.tsbuildinfo
 frontend/test-results/
 frontend/playwright-report/
+test-results/
+playwright-report/
+blob-report/
 
 # Environment / secrets
 .env
@@ -17,6 +20,9 @@ frontend/playwright-report/
 # Runtime
 uploads/
 *.log
+tmp/
+temp/
+*.tmp
 
 # IDE / OS
 .idea/
@@ -24,8 +30,15 @@ uploads/
 .DS_Store
 Thumbs.db
 
+# Local agent/browser captures
+.agents/skills/
+.playwright-mcp/
+
 # Local backups
 backups/
 *.sql.gz
 *.dump
 *.backup
+*.sqlite
+*.sqlite3
+*.db

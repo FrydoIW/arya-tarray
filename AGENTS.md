@@ -33,11 +33,10 @@ Current navigation:
 
 - MySQL 8.4 / utf8mb4; production database name `arya_tarray`.
 - `backend/prisma/schema.prisma` is the current application contract.
-- Deliver current structural changes only as reviewed manual patches under `backend/prisma/patches/`.
-- Never execute patches automatically from application startup or tooling.
-- The active Prisma migration directory is historical compatibility state, not a current rebuild/bootstrap mechanism. Do not rewrite, delete, or move it without reconciling every target database’s `_prisma_migrations` history.
+- Physical database provisioning and structural changes require approved, access-controlled operational change records outside this source repository.
+- Never execute physical database changes automatically from application startup or tooling.
 - Do not run `prisma migrate dev`, `prisma migrate deploy`, `prisma db push`, `prisma db pull`, reset, or drop/recreate workflows.
-- After an approved physical patch is applied by a human, run `npx prisma generate` and `npx prisma validate`.
+- After an approved physical change is applied by a human, run `npx prisma generate` and `npx prisma validate`.
 - Never commit credentials.
 
 ## Implementation safety
