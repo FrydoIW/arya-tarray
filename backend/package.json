@@ -15,6 +15,7 @@
     "db:validate": "prisma validate",
     "test": "node --import tsx --test tests/run-tests.ts",
     "test:db:bootstrap": "node --import tsx tests/integration/bootstrap-test-database.ts",
+    "test:db:verify": "node --import tsx tests/integration/bootstrap-test-database.ts",
     "test:integration": "node --import tsx --test tests/integration/run-tests.ts",
     "test:integration:typecheck": "tsc --noEmit -p tests/integration/tsconfig.json"
   },

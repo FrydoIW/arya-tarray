@@ -248,6 +248,32 @@ test("approved correction preserves proposal, remark evidence, snapshot, and FIN
   });
 });
 
+test("shared DEV cleanup preserves other ownership scopes and seeded configuration", async () => {
+  const first = new FinancialFixture();
+  const retained = new FinancialFixture();
+  try {
+    await first.setup();
+    await retained.setup();
+    const memberId = await retained.member("Unrelated synthetic DEV ownership scope");
+    const identityId = await retained.identity(memberId);
+    const campaign = await retained.campaign("Retained synthetic DEV evidence");
+    const row = await retained.transaction({ identityId, ...campaign });
+    const before = await prisma.bankTransaction.findUniqueOrThrow({ where: { id: row.transactionId } });
+    const accounts = await prisma.accountingAccount.findMany({ orderBy: { code: "asc" } });
+    const menu = await prisma.menu.findFirstOrThrow({ where: { menuCode: "ACCOUNTING_REPORT" } });
+    await first.cleanup();
+    assert.deepEqual(await prisma.bankTransaction.findUniqueOrThrow({ where: { id: row.transactionId } }), before);
+    assert.equal(await prisma.member.count({ where: { id: memberId } }), 1);
+    assert.equal(await prisma.user.count({ where: { id: retained.userId } }), 1);
+    assert.equal(await prisma.bankAccount.count({ where: { id: retained.bankAccountId } }), 1);
+    assert.deepEqual(await prisma.accountingAccount.findMany({ orderBy: { code: "asc" } }), accounts);
+    assert.deepEqual(await prisma.menu.findUniqueOrThrow({ where: { id: menu.id } }), menu);
+  } finally {
+    await first.cleanup();
+    await retained.cleanup();
+  }
+});
+
 test("concurrent carry request, replay, and reversal preserve one transfer and compensating evidence", async () => {
   await withFixture(async fixture => {
     const memberId = await fixture.member("Carry Test Donor");

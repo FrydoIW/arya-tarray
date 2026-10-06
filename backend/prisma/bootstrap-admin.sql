@@ -1,4 +1,8 @@
-USE arya_tarray;
+-- MANUAL helper: select the approved target explicitly in your SQL client first.
+-- Local DEV: arya_tarray_dev. Future PROD: arya_tarray_prod only after separate approval.
+-- Never changes the selected database automatically and is not an application startup script.
+SELECT DATABASE() AS selected_database;
+SET @target_allowed = IF(CAST(DATABASE() AS BINARY) IN ('arya_tarray_dev', 'arya_tarray_prod'), 1, 0);
 
 -- Safe bootstrap helper.
 -- Existing users are NEVER reactivated and their password/name are NEVER overwritten.
@@ -16,11 +20,13 @@ SET @admin_user_id = (
 );
 
 SET @bootstrap_allowed = IF(
-    @admin_user_id IS NOT NULL
-    OR (
+    @target_allowed = 1 AND (
+      @admin_user_id IS NOT NULL
+      OR (
         @new_admin_password_hash IS NOT NULL
         AND @new_admin_password_hash LIKE '$2%'
         AND CHAR_LENGTH(@new_admin_password_hash) >= 50
+      )
     ),
     1,
     0
@@ -81,7 +87,8 @@ SET @admin_user_id = (
 
 INSERT INTO arya_user_role (user_id, role_id)
 SELECT @admin_user_id, @admin_role_id
-WHERE @admin_user_id IS NOT NULL
+WHERE @bootstrap_allowed = 1
+  AND @admin_user_id IS NOT NULL
   AND @admin_role_id IS NOT NULL
   AND NOT EXISTS (
       SELECT 1
@@ -92,6 +99,8 @@ WHERE @admin_user_id IS NOT NULL
 
 SELECT
     CASE
+        WHEN @target_allowed = 0 THEN
+            'BLOCKED: select the explicitly approved DEV/future PROD database before running this manual helper.'
         WHEN @bootstrap_allowed = 0 THEN
             'BLOCKED: bootstrap admin does not exist. Set @new_admin_password_hash to a freshly generated bcrypt hash and execute again. No role/user changes were applied.'
         ELSE

@@ -1,29 +1,33 @@
-/** Guard before importing application modules, constructing Prisma, or making any database call. */
-export function requireSafeTestDatabaseUrl(testUrl: string | undefined, applicationUrl: string | undefined): string {
-  if (!testUrl?.trim()) throw new Error("TEST_DATABASE_URL is required for MySQL integration tests.");
+export const DEV_DATABASE = "arya_tarray_dev";
+
+export type WriteAcknowledgment = { aryaEnv: string | undefined; allowWrites: string | undefined };
+
+function localDevUrl(value: string | undefined, name: string): URL {
+  if (!value?.trim()) throw new Error(`${name} is required for DEV integration tests.`);
   let parsed: URL;
-  try {
-    parsed = new URL(testUrl);
-  } catch {
-    throw new Error("TEST_DATABASE_URL must be a valid MySQL URL.");
-  }
+  try { parsed = new URL(value); } catch { throw new Error(`${name} must be a valid MySQL URL.`); }
   if (parsed.protocol !== "mysql:" || !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
     throw new Error("Integration tests require a loopback MySQL host.");
   }
-  if (decodeURIComponent(parsed.pathname) !== "/arya_tarray_test") {
-    throw new Error("Integration tests require the dedicated arya_tarray_test database.");
+  // Reject connection redirects (including MySQL socket parameters) and ambiguous names.
+  if (parsed.pathname !== `/${DEV_DATABASE}` || parsed.search || parsed.hash) {
+    throw new Error(`Integration tests require exactly ${DEV_DATABASE}, without URL query/fragment overrides.`);
   }
-  if (applicationUrl?.trim()) {
-    try {
-      const app = new URL(applicationUrl);
-      if (app.protocol === parsed.protocol && app.hostname === parsed.hostname && (app.port || "3306") === (parsed.port || "3306")
-        && decodeURIComponent(app.pathname) === decodeURIComponent(parsed.pathname)) {
-        throw new Error("TEST_DATABASE_URL must not target the configured application database.");
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("TEST_DATABASE_URL must not")) throw error;
-      // A malformed application URL cannot make the exact, loopback test-db allowlist less strict.
-    }
-  }
-  return testUrl;
+  return parsed;
+}
+
+/** Pure allowlist; run before importing application/fixture modules or connecting. */
+export function requireSafeTestDatabaseUrl(testUrl: string | undefined, applicationUrl: string | undefined,
+  acknowledgment: WriteAcknowledgment): string {
+  if (acknowledgment.aryaEnv !== "DEV") throw new Error("Integration tests require ARYA_ENV=DEV.");
+  if (acknowledgment.allowWrites !== "true") throw new Error("Integration tests require ALLOW_DEV_INTEGRATION_WRITES=true.");
+  const target = localDevUrl(testUrl, "TEST_DATABASE_URL");
+  const application = localDevUrl(applicationUrl, "DATABASE_URL");
+  // Both URLs intentionally share DEV. Refuse stale credentials/ports/hosts rather than silently overriding.
+  if (target.href !== application.href) throw new Error("DATABASE_URL and TEST_DATABASE_URL conflict; both must select the same DEV connection.");
+  return testUrl!;
+}
+
+export function assertConnectedDevDatabase(actual: string | null | undefined): void {
+  if (actual !== DEV_DATABASE) throw new Error("SELECT DATABASE() mismatch: refusing integration fixture writes.");
 }

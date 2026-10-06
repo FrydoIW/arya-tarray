@@ -14,12 +14,14 @@ It creates three tables, the two posting accounts, and one PAGE menu with no bac
 or opening balance. DDL is not transactional. Follow its preconditions and stop on a
 partial application; never blindly rerun against an existing Accounting table set.
 
-Under explicit user authorization, Codex applied this patch only to the dedicated
+Historical foundation gate: under explicit user authorization, Codex applied this patch only to the dedicated
 local `arya_tarray_test` database on 2026-10-07. Verification found three Accounting
 tables, 1110 Bank / 4110 Contribution Revenue, the PAGE menu, enforced constraints,
 zero initial journals, and no unbalanced journals. The local test server is MySQL
 8.0.42. Production remains MySQL 8.4; the patch was NOT executed against `arya_tarray`,
-dev, UAT, production, or any non-test database. No Prisma mutation command was used.
+dev, UAT, production, or any non-test database at that foundation gate. That old test
+database was subsequently retired; it is not a current setup target. No Prisma
+mutation command was used.
 
 For deployment, a human must review/apply the patch to the approved target during
 its operational change window before enabling this feature. Run the verification
@@ -32,9 +34,13 @@ changing the cutover as an operational policy change; do not move it casually.
 
 After provisioning, safe commands are `npm run db:generate -w backend` and
 `npm run db:validate -w backend`, plus builds/typechecks and tests. Do not run Prisma
-migrate, push, pull, reset, or application startup provisioning. Test connections
-must remain loopback-only and point exactly to `arya_tarray_test`, distinct from the
-application database. Never print or commit credentials.
+migrate, push, pull, reset, or application startup provisioning. Current local DEV
+and integration connections share exactly loopback `arya_tarray_dev`, using a
+DEV-only DML principal and explicit integration-write acknowledgment. Local DEV
+cutover is approved as `2026-10-01`, not a future PROD cutover. The earlier test-only
+patch record above remains historical; both obsolete local databases were later
+retired under separate explicit approval after DEV validation and private recovery.
+See [local environments](local-environments.md). Never print or commit credentials.
 
 ## Posting and corrections
 

@@ -41,6 +41,11 @@ npm run build
 
 The repository has no root `typecheck` script. See [TESTING.md](TESTING.md) for CI and test limitations.
 
+Local application and integration tests share the explicitly provisioned `arya_tarray_dev`.
+Only `backend/.env` is active; ignored `.env.dev.local.txt` and `.env.prod.local.txt`
+are manual reference files, never branch-selected or automatically loaded. Future
+`arya_tarray_prod` is the separately restored local pre-Accounting `main`/presentation baseline, not an integration target. See [local environment separation](docs/local-environments.md).
+
 > **Database governance:** `schema.prisma` is the current application contract. Physical provisioning and change records are approved operational material outside this source repository. Do **not** use Prisma migration, push, pull, reset, or drop/recreate commands as a production procedure. See [DATABASE.md](DATABASE.md) before database work.
 
 ## Maintainer and handoff documents

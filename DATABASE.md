@@ -13,9 +13,24 @@ npx prisma validate
 
 `prisma validate` validates the model only; `prisma generate` updates the client only. Neither command verifies or changes a physical database.
 
-## Local integration-test schema only
+## Local DEV schema and read-only preflight
 
-`backend/tests/integration/current-schema.mysql.sql` is a reviewed schema-only snapshot for bootstrapping a **new empty local** `arya_tarray_test` database. It is not a production or staging bootstrap and does not certify any other environment. `npm run test:db:bootstrap` requires `TEST_DATABASE_URL`, applies only to the guarded local test database, refuses a nonempty schema, and never drops or resets a database. See [TESTING.md](TESTING.md).
+Local Accounting application and integration testing share exactly `arya_tarray_dev`.
+Local `arya_tarray_prod` is separately restored for the current pre-Accounting `main`
+baseline and presentation testing: 32 application tables plus preserved migration
+metadata, no Accounting tables or menu. It is not an integration-test target. Its
+approved external record is `20261007-local-prod-setup.md`; the Accounting PROD
+patch remains reserved for a separately approved later release. The two obsolete local databases were
+retired under explicit approval on 2026-10-07 after DEV/runtime preflight and private
+recovery dumps. They are not runtime/test targets and must not be recreated.
+
+`backend/tests/integration/current-schema.mysql.sql` is a reviewed 35-table schema
+reference, not an automatic provisioning workflow. A new DEV schema requires an
+explicit operational approval. `npm run test:db:verify` (and the compatibility alias
+`test:db:bootstrap`) now perform SELECT-only preflight: actual database, required
+columns/indexes/FKs/enforced CHECKs, approved COA, and Accounting PAGE. They never
+import SQL, create, seed, truncate, or reset a database. See [TESTING.md](TESTING.md)
+and [local environment separation](docs/local-environments.md).
 
 ## Prohibited commands
 

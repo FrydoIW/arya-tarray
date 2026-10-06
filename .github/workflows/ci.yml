@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATABASE_URL: mysql://ci_user:ci_password@127.0.0.1:3306/arya_tarray
+      # Placeholder for client generation/build only; this job does not connect to MySQL.
+      DATABASE_URL: mysql://ci_user:ci_password@127.0.0.1:3306/arya_tarray_dev
       JWT_SECRET: ci-only-secret-not-for-production
       FRONTEND_ORIGIN: http://localhost:3000
       NEXT_PUBLIC_API_URL: http://localhost:4000/api

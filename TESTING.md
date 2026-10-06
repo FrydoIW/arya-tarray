@@ -10,7 +10,7 @@ Install dependencies from the repository root with `npm ci` when setting up a cl
 | --- | --- | --- |
 | Backend tests (also root `npm test`) | `backend/` | `npm test` |
 | Real-MySQL integration tests | repository root | `npm run test:integration` |
-| Bootstrap a new empty local test database | repository root | `npm run test:db:bootstrap` |
+| Verify shared local DEV (read-only preflight) | repository root | `npm run test:db:verify` |
 | Integration-test TypeScript | `backend/` | `npm run test:integration:typecheck` |
 | Playwright browser smoke | repository root | `npm run test:browser` |
 | Full suite (requires test MySQL and browser) | repository root | `npm run test:full` |
@@ -27,20 +27,38 @@ Run Prisma generation before backend checks in a clean checkout. Generation and 
 
 `backend/tests/run-tests.ts` imports the default backend unit/contract suites. Tests exercise reconciliation classification and BCA parsing, approval and correction rules, Member/identity and donation rules, TIME_BASED allocation/coverage, CAMPAIGN financial evidence, carry transfer/idempotency/reversal, configuration, and monitoring read-model behavior. Some tests use fake transaction clients or source/contract assertions. Parser regression inputs are constructed from synthetic values in test source. The default `npm test` does not connect to MySQL.
 
-## Dedicated MySQL integration tests
+## Shared DEV MySQL integration tests
 
 Accounting suites verify recognition, approval concurrency/rollback, immutable reclassification
 snapshots, cutover (including corrections), review-required cases, all four Carry paths, Member
-no-GL behavior, report/export consistency and backend permission. Set
-`ACCOUNTING_CUTOVER_DATE=2026-11-01` for these synthetic scenarios. Provision Accounting
-tables/accounts/menu in an existing test schema through the approved local patch process;
+no-GL behavior, report/export consistency and backend permission. Approved local
+DEV cutover is `ACCOUNTING_CUTOVER_DATE=2026-10-01`; scenarios include September
+pre-cutover and November post-cutover evidence. This is not PROD cutover approval.
+Provision current schema/accounts/menu only through an approved operational change;
 the runner never applies DDL. See [Accounting Phase 1](docs/accounting-phase1.md).
 
-For a **new empty** local MySQL database named exactly `arya_tarray_test`, use the reviewed schema-only snapshot and `npm run test:db:bootstrap`. The bootstrap reads `TEST_DATABASE_URL`, refuses non-loopback/non-test URLs and any existing nonempty target, and imports DDL only. It does not copy application rows, alter an existing schema, or reset a database. The integration runner itself never creates or alters schema. Never point either command at `arya_tarray`, a shared database, or a copied production database.
+`npm run test:db:verify` verifies an already provisioned `arya_tarray_dev` without
+writes. The old `test:db:bootstrap` name is a compatibility alias for the same
+read-only verification, NOT a schema importer. Legacy `arya_tarray` and
+`arya_tarray_test`, future PROD, and arbitrary names are rejected.
 
-Set `TEST_DATABASE_URL` to a local test-only MySQL URL ending in `/arya_tarray_test`; keep it in the local process environment, never a committed file or console output. A dedicated MySQL account limited to the test schema is preferable. The bootstrap requires the MySQL command-line client (`mysql` on PATH, or set `MYSQL_CLIENT_BIN` to its executable path). Run `npm run test:db:bootstrap` once, then `npm run test:integration` from the repository root. To check test code without MySQL, run `npm run test:integration:typecheck -w backend`.
+Private `backend/.env` must set `ARYA_ENV=DEV`,
+`ALLOW_DEV_INTEGRATION_WRITES=true`, and matching `DATABASE_URL` / `TEST_DATABASE_URL`
+on loopback MySQL with the exact database name `arya_tarray_dev`. Use the DEV-only
+DML principal, never a privileged legacy/root connection. Run `npm run test:db:verify`
+then `npm run test:integration` from the root. No MySQL CLI is required by preflight.
+Check test code without MySQL with `npm run test:integration:typecheck -w backend`.
 
-The runner checks its target **before importing production modules or creating Prisma connections**. It refuses missing/invalid URLs, non-loopback hosts, any database name other than `arya_tarray_test`, and a configured application `DATABASE_URL` pointing to the same database. It redirects the production Prisma client to this test URL only inside the test process. Each scenario creates UUID-scoped fixture rows and deletes only those recorded rows in dependency order in `finally`; there is no global `TRUNCATE`, reset, or cleanup of unrelated data.
+The runner explicitly loads backend/.env first, refuses stale/conflicting inherited
+selection variables (including cutover), and checks its target before importing
+application/fixture modules. It rejects non-DEV mode, missing acknowledgment,
+non-MySQL/remote hosts, URL query/fragment overrides, and differing app/test connections.
+It verifies actual `SELECT DATABASE()` and current schema before registering tests.
+Fixture setup and cleanup independently check URL/mode/acknowledgment and actual database.
+UUID/ownership-scoped cleanup removes only each fixture's rows; manual DEV rows are
+not globally erased. Do not switch environment or edit backend/.env during a run.
+Guard tests include actual connection mismatch and all forbidden targets without
+connecting to them. Clear stale shell variables before rerunning; never print URLs.
 
 ## Browser smoke tests
 
@@ -54,4 +72,4 @@ Accounting browser coverage uses a synthetic read-only workspace to check previe
 report tabs and export downloads. The standalone frontend lint command currently opens an ESLint
 configuration prompt; no linter configuration has been added as part of Accounting.
 
-Run the MySQL suite against a provisioned test database in each environment before reporting its financial assertions as passing there. The browser suite uses mocked API responses and does not exercise a real authenticated backend workflow. Typecheck/build alone do not establish business-data correctness.
+Run the MySQL suite only against provisioned local DEV before reporting its financial assertions as passing there. The browser suite uses mocked API responses and does not exercise a real authenticated backend workflow. Typecheck/build alone do not establish business-data correctness.

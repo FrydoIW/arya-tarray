@@ -83,14 +83,14 @@ test("Accounting failure and serialization abort roll back the whole approval be
 }));
 
 test("Accounting pre-cutover and rejected receipts do not fabricate history", async () => scenario(async f => {
-  const pre = await receipt(f, "STANDARD", "2026-10-31");
+  const pre = await receipt(f, "STANDARD", "2026-09-30");
   await prisma.bankTransaction.update({ where: { id: pre.transactionId }, data: { originalAmount: "100123.00" } });
   await decideSignApprovalAtomic({ approvalId: pre.approvalId!, userId: f.userId, decision: "APPROVED" });
   const destination = await f.campaign("Pre-cutover Correction");
   await correct(f, pre, { action: "MODIFIED", proposedEventCodeId: destination.eventCodeId, proposedEventCampaignId: destination.campaignId });
   await decideSignApprovalAtomic({ approvalId: pre.approvalId!, userId: f.userId, decision: "APPROVED" });
   assert.equal(await prisma.accountingJournal.count({ where: { bankTransactionId: pre.transactionId } }), 0);
-  const report = await getAccountingReport(accountingQuerySchema.parse({ view: "reconciliation", from: "2026-10-01", bankAccountId: f.bankAccountId }));
+  const report = await getAccountingReport(accountingQuerySchema.parse({ view: "reconciliation", from: "2026-09-01", bankAccountId: f.bankAccountId }));
   assert.equal(report.rows[0]!.state, "PRE_CUTOVER_NON_ACCOUNTED");
   const rejected = await receipt(f);
   await decideSignApprovalAtomic({ approvalId: rejected.approvalId!, userId: f.userId, decision: "REJECTED" });

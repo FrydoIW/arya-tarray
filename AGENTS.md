@@ -31,7 +31,7 @@ Current navigation:
 
 ## Database governance
 
-- MySQL 8.4 / utf8mb4; production database name `arya_tarray`.
+- MySQL 8.4 / utf8mb4 deployment target; local application/integration database `arya_tarray_dev` is Accounting-enabled. Local `arya_tarray_prod` is the approved pre-Accounting main/presentation baseline, restored separately from the former original database. Never run integration tests or the Accounting patch on local PROD without a separate approved release. The two obsolete local databases remain retired; never recreate them from runtime/test startup.
 - `backend/prisma/schema.prisma` is the current application contract.
 - Physical database provisioning and structural changes require approved, access-controlled operational change records outside this source repository.
 - Never execute physical database changes automatically from application startup or tooling.

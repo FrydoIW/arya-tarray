@@ -1,6 +1,7 @@
--- Test-only current physical schema snapshot from local arya_tarray (MySQL 8.0.42, 2026-10-04).
+-- Reviewed current physical schema snapshot (MySQL 8.0.42 baseline plus Accounting Phase 1).
 -- Schema only: no rows, credentials, CREATE DATABASE, USE, DROP, or _prisma_migrations.
--- Import exclusively through bootstrap-test-database.ts into a NEW EMPTY arya_tarray_test.
+-- Schema reference for DEV preflight; normal integration startup NEVER imports this file.
+-- Initial import into a NEW EMPTY arya_tarray_dev requires explicit operational approval.
 -- Not an application/production bootstrap and not a substitute for manual patch governance.
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;

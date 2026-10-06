@@ -3,6 +3,15 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../src/lib/prisma.js";
 import { FinancialFixture } from "./financial-fixture.js";
+import { Prisma } from "@prisma/client";
+
+// The restricted DEV DML principal receives MySQL 1216 rather than detailed 1452/P2003.
+// Still require a specific FK/integrity error; arbitrary connection/query errors must fail.
+function foreignKeyViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003"
+    || error instanceof Prisma.PrismaClientUnknownRequestError
+      && /MysqlError \{ code: 1216, message: "Cannot add or update a child row: a foreign key constraint fails", state: "23000" \}/.test(error.message);
+}
 
 test("Accounting Foundation has the three tables and two approved posting accounts", async () => {
   const tables = await prisma.$queryRaw<Array<{ name: string }>>`SELECT TABLE_NAME AS name
@@ -28,7 +37,8 @@ test("Accounting MySQL enforces uniqueness, FKs, one-sided lines and exact decim
     await prisma.accountingJournal.create({ data: header });
     await assert.rejects(prisma.accountingJournal.create({ data: { ...header, id: randomUUID(), journalNumber: randomUUID() } }), { code: "P2002" });
     await assert.rejects(prisma.accountingJournal.create({ data: { ...header, id: randomUUID(), sourceEventKey: randomUUID() } }), { code: "P2002" });
-    await assert.rejects(prisma.accountingJournal.create({ data: { ...header, id: randomUUID(), sourceEventKey: randomUUID(), journalNumber: randomUUID(), bankTransactionId: randomUUID() } }), { code: "P2003" });
+    await assert.rejects(prisma.accountingJournal.create({ data: { ...header, id: randomUUID(), sourceEventKey: randomUUID(), journalNumber: randomUUID(), bankTransactionId: randomUUID() } }), foreignKeyViolation);
+    assert.equal(await prisma.accountingJournal.count({ where: { bankTransactionId: transactionId } }), 1);
     const line = { journalId, lineNo: 1, accountId: bank.id, accountCodeSnapshot: bank.code, accountNameSnapshot: bank.name,
       bankAccountId: fixture.bankAccountId, bankNameSnapshot: "Synthetic Bank", bankAccountNoSnapshot: fixture.bankAccountId,
       bankAccountNameSnapshot: "Synthetic Account", debit: "999999999999999999.99", credit: "0.00" };
@@ -37,10 +47,9 @@ test("Accounting MySQL enforces uniqueness, FKs, one-sided lines and exact decim
     for (const sides of [{ debit: "0.00", credit: "0.00" }, { debit: "1.00", credit: "1.00" }, { debit: "-1.00", credit: "0.00" }]) {
       await assert.rejects(prisma.accountingJournalLine.create({ data: { ...line, lineNo: 2, ...sides } }));
     }
-    await assert.rejects(prisma.accountingJournalLine.create({ data: { ...line, lineNo: 2, accountId: randomUUID() } }), { code: "P2003" });
+    await assert.rejects(prisma.accountingJournalLine.create({ data: { ...line, lineNo: 2, accountId: randomUUID() } }), foreignKeyViolation);
+    assert.equal(await prisma.accountingJournalLine.count({ where: { journalId } }), 1);
   } finally {
-    await prisma.accountingJournalLine.deleteMany({ where: { journalId } });
-    await prisma.accountingJournal.deleteMany({ where: { id: journalId } });
     await fixture.cleanup();
   }
 });

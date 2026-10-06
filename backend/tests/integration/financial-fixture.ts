@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../src/lib/prisma.js";
+import { requireSafeTestDatabaseUrl, assertConnectedDevDatabase } from "./test-database.js";
+import { loadBackendTestEnvironment } from "./test-environment.js";
 
 const testDate = new Date("2026-09-01T00:00:00.000Z");
 
@@ -16,6 +18,11 @@ export class FinancialFixture {
   readonly approvalIds: string[] = [];
 
   async setup() {
+    loadBackendTestEnvironment();
+    requireSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL,
+      { aryaEnv: process.env.ARYA_ENV, allowWrites: process.env.ALLOW_DEV_INTEGRATION_WRITES });
+    const selected = await prisma.$queryRaw<Array<{ name: string | null }>>`SELECT DATABASE() AS name`;
+    assertConnectedDevDatabase(selected[0]?.name);
     await prisma.user.create({ data: {
       id: this.userId, fullName: "Integration Test Actor", email: `integration-${this.userId}@example.invalid`,
       passwordHash: "not-a-login-account", status: "ACTIVE"
@@ -93,6 +100,11 @@ export class FinancialFixture {
   }
 
   async cleanup() {
+    // Failed setup/guards must not run cleanup against an unverified connection either.
+    requireSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL,
+      { aryaEnv: process.env.ARYA_ENV, allowWrites: process.env.ALLOW_DEV_INTEGRATION_WRITES });
+    const selected = await prisma.$queryRaw<Array<{ name: string | null }>>`SELECT DATABASE() AS name`;
+    assertConnectedDevDatabase(selected[0]?.name);
     const memberId = { in: this.memberIds };
     const identityId = { in: this.identityIds };
     const statementId = { in: this.statementIds };
