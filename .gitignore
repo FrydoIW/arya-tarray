@@ -42,3 +42,4 @@ backups/
 *.sqlite
 *.sqlite3
 *.db
+.local/sql-patches/

@@ -15,7 +15,7 @@ function reviewedSchema(): { sql: string; tables: string[] } {
   const tables = [...sql.matchAll(/^CREATE TABLE `([^`]+)`/gm)].map(match => match[1]!);
   const models = [...prisma.matchAll(/@@map\("(arya_[^"]+)"\)/g)].map(match => match[1]!);
 
-  if (tables.length !== 32 || models.length !== 32 ||
+  if (tables.length !== 35 || models.length !== 35 ||
       tables.some((table, index) => table !== [...models].sort()[index]) ||
       /^\s*(?:INSERT|REPLACE|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE DATABASE|USE|GRANT|CREATE USER|LOAD DATA)\b/im.test(sql)) {
     throw new Error("The reviewed schema-only baseline no longer matches the Prisma table set or contains forbidden SQL.");

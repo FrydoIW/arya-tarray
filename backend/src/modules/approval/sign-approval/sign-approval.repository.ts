@@ -7,6 +7,7 @@ import { assertCorrectionApprovalCampaignValid } from "../../reconciliation/corr
 import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-time-based.service.js";
 import { synchronizeCampaignContribution } from "../../member/campaign/member-campaign-wallet.service.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
+import { postStatementRecognition, postCorrectionReclassifications } from "../../accounting/accounting.posting.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
 const ALREADY_DECIDED_MESSAGE = "This approval request has already been decided. Reload the approval queue.";
@@ -333,6 +334,17 @@ export async function decideSignApprovalAtomic(input: {
   decision: SignApprovalDecision;
   remark?: string;
 }) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await decideSignApprovalOnce(input); }
+    catch (error) {
+      const retry = error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2034"
+        || (error.code === "P2010" && ["1213", "1205"].includes(String(error.meta?.code))));
+      if (!retry || attempt >= 3) throw error;
+    }
+  }
+}
+
+async function decideSignApprovalOnce(input: { approvalId: string; userId: string; decision: SignApprovalDecision; remark?: string }) {
   return prisma.$transaction(async (tx) => {
     const current = await tx.reconciliationApproval.findUnique({
       where: { id: input.approvalId },
@@ -594,6 +606,8 @@ export async function decideSignApprovalAtomic(input: {
         select: { id: true }
       });
       for (const transaction of campaignTransactions) await synchronizeCampaignContribution(tx, transaction.id, input.userId);
+      if (correctionProposal) await postCorrectionReclassifications(tx, correctionProposal.items, input.userId, now);
+      else await postStatementRecognition(tx, current.statementUploadId, input.userId, now);
     }
 
     await tx.reconciliationApprovalHistory.create({
@@ -624,5 +638,5 @@ export async function decideSignApprovalAtomic(input: {
         }
       }
     });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 60000 });
 }

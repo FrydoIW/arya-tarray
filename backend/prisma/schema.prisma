@@ -7,7 +7,90 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model AccountingAccount {
+  id String @id @default(uuid()) @map("accounting_account_id") @db.Char(36)
+  code String @unique(map: "uk_accounting_account_code") @map("account_code") @db.VarChar(10)
+  name String @map("account_name") @db.VarChar(150)
+  accountType String @map("account_type") @db.VarChar(20)
+  normalBalance String @map("normal_balance") @db.VarChar(10)
+  postingFlag Boolean @default(true) @map("posting_flag")
+  activeFlag Boolean @default(true) @map("active_flag")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  lines AccountingJournalLine[]
+  @@map("arya_accounting_account")
+}
+
+/// Every persisted journal is posted. Corrections append evidence; there is no edit/delete API.
+model AccountingJournal {
+  id String @id @default(uuid()) @map("accounting_journal_id") @db.Char(36)
+  journalNumber String @unique(map: "uk_accounting_journal_number") @map("journal_number") @db.VarChar(60)
+  journalType String @map("journal_type") @db.VarChar(20)
+  sourceEventKey String @unique(map: "uk_accounting_source_event") @map("source_event_key") @db.VarChar(150)
+  accountingDate DateTime @map("accounting_date") @db.Date
+  postedAt DateTime @map("posted_at") @db.DateTime(3)
+  descriptionSnapshot String? @map("description_snapshot") @db.Text
+  bankTransactionId String @map("bank_transaction_id") @db.Char(36)
+  correctionItemId String? @unique(map: "uk_accounting_correction_item") @map("correction_item_id") @db.Char(36)
+  relatedJournalId String? @map("related_journal_id") @db.Char(36)
+  postedById String @map("posted_by") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_transaction")
+  correctionItem ReconciliationCorrectionItem? @relation(fields: [correctionItemId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_correction")
+  relatedJournal AccountingJournal? @relation("AccountingJournalRelationship", fields: [relatedJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_related")
+  linkedJournals AccountingJournal[] @relation("AccountingJournalRelationship")
+  postedBy User @relation("AccountingPostedBy", fields: [postedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_actor")
+  lines AccountingJournalLine[]
+  @@index([accountingDate, id], map: "idx_accounting_journal_date")
+  @@index([bankTransactionId, postedAt], map: "idx_accounting_journal_source")
+  @@index([relatedJournalId], map: "idx_accounting_journal_related")
+  @@map("arya_accounting_journal")
+}
+
+/// MySQL CHECK constraints for exact nonzero, one-sided lines live in the reviewed physical patch.
+model AccountingJournalLine {
+  id String @id @default(uuid()) @map("accounting_journal_line_id") @db.Char(36)
+  journalId String @map("accounting_journal_id") @db.Char(36)
+  lineNo Int @map("line_no") @db.UnsignedInt
+  accountId String @map("accounting_account_id") @db.Char(36)
+  accountCodeSnapshot String @map("account_code_snapshot") @db.VarChar(10)
+  accountNameSnapshot String @map("account_name_snapshot") @db.VarChar(150)
+  debit Decimal @db.Decimal(20, 2)
+  credit Decimal @db.Decimal(20, 2)
+  bankAccountId String @map("bank_account_id") @db.Char(36)
+  bankNameSnapshot String @map("bank_name_snapshot") @db.VarChar(100)
+  bankAccountNoSnapshot String @map("bank_account_no_snapshot") @db.VarChar(100)
+  bankAccountNameSnapshot String @map("bank_account_name_snapshot") @db.VarChar(200)
+  eventCodeId String? @map("event_code_id") @db.Char(36)
+  eventCodeSnapshot String? @map("event_code_snapshot") @db.Char(3)
+  eventNameSnapshot String? @map("event_name_snapshot") @db.VarChar(200)
+  eventTypeSnapshot String? @map("event_type_snapshot") @db.VarChar(20)
+  eventCampaignId String? @map("event_campaign_id") @db.Char(36)
+  campaignNameSnapshot String? @map("campaign_name_snapshot") @db.VarChar(200)
+  memberIdentityId String? @map("member_identity_id") @db.Char(36)
+  donorNameSnapshot String? @map("donor_name_snapshot") @db.VarChar(255)
+  memberId String? @map("member_id") @db.Char(36)
+  memberCodeSnapshot String? @map("member_code_snapshot") @db.VarChar(30)
+  memberNameSnapshot String? @map("member_name_snapshot") @db.VarChar(150)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  journal AccountingJournal @relation(fields: [journalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_journal")
+  account AccountingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_account")
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_bank")
+  eventCode EventCode? @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_event")
+  eventCampaign EventCampaign? @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_campaign")
+  memberIdentity MemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_identity")
+  member Member? @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_member")
+  @@unique([journalId, lineNo], map: "uk_accounting_line_number")
+  @@index([accountId, journalId], map: "idx_accounting_line_account")
+  @@index([bankAccountId], map: "idx_accounting_line_bank")
+  @@index([eventCodeId], map: "idx_accounting_line_event")
+  @@index([eventCampaignId], map: "idx_accounting_line_campaign")
+  @@index([memberId], map: "idx_accounting_line_member")
+  @@map("arya_accounting_journal_line")
+}
+
 model Member {
+  accountingLines AccountingJournalLine[]
   id String @id @default(uuid()) @map("member_id") @db.Char(36)
   memberCode String @unique(map: "uk_member_code") @map("member_code") @db.VarChar(30)
   memberName String @map("member_name") @db.VarChar(150)
@@ -48,6 +131,7 @@ model Member {
 }
 
 model MemberIdentity {
+  accountingLines AccountingJournalLine[]
   id String @id @default(uuid()) @map("member_identity_id") @db.Char(36)
   memberId String? @map("member_id") @db.Char(36)
   sourceType String @default("STATEMENT") @map("source_type") @db.VarChar(20)
@@ -133,6 +217,7 @@ model Role {
 }
 
 model User {
+  postedAccountingJournals AccountingJournal[] @relation("AccountingPostedBy")
   registeredMembers Member[] @relation("MemberRegisteredBy")
   createdMembers Member[] @relation("MemberCreatedBy")
   updatedMembers Member[] @relation("MemberUpdatedBy")
@@ -254,6 +339,7 @@ model RoleMenu {
 }
 
 model EventCode {
+  accountingLines AccountingJournalLine[]
   id          String   @id @default(uuid()) @map("event_code_id") @db.Char(36)
   code        String   @db.Char(3)
   eventName   String   @map("event_name") @db.VarChar(150)
@@ -281,6 +367,7 @@ model EventCode {
 }
 
 model EventCampaign {
+  accountingLines AccountingJournalLine[]
   id String @id @default(uuid()) @map("event_campaign_id") @db.Char(36)
   eventCodeId String @map("event_code_id") @db.Char(36)
   campaignName String @map("campaign_name") @db.VarChar(200)
@@ -576,6 +663,7 @@ model MemberEventCampaignParticipation {
 }
 
 model BankAccount {
+  accountingLines AccountingJournalLine[]
   id           String   @id @default(uuid()) @map("bank_account_id") @db.Char(36)
   bankCode     String   @map("bank_code") @db.VarChar(30)
   bankName     String   @map("bank_name") @db.VarChar(100)
@@ -692,6 +780,7 @@ model BankStatementUploadDuplicate {
 }
 
 model BankTransaction {
+  accountingJournals AccountingJournal[]
   memberIdentityId String? @map("member_identity_id") @db.Char(36)
   memberIdentity MemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_member_identity")
   @@index([memberIdentityId], map: "idx_bank_transaction_member_identity")
@@ -822,6 +911,7 @@ model ReconciliationCorrectionProposal {
 }
 
 model ReconciliationCorrectionItem {
+  accountingJournals AccountingJournal[]
   id                    String    @id @default(uuid()) @map("correction_item_id") @db.Char(36)
   proposalId            String    @map("correction_proposal_id") @db.Char(36)
   action                String    @db.VarChar(20)

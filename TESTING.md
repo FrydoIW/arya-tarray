@@ -29,6 +29,13 @@ Run Prisma generation before backend checks in a clean checkout. Generation and 
 
 ## Dedicated MySQL integration tests
 
+Accounting suites verify recognition, approval concurrency/rollback, immutable reclassification
+snapshots, cutover (including corrections), review-required cases, all four Carry paths, Member
+no-GL behavior, report/export consistency and backend permission. Set
+`ACCOUNTING_CUTOVER_DATE=2026-11-01` for these synthetic scenarios. Provision Accounting
+tables/accounts/menu in an existing test schema through the approved local patch process;
+the runner never applies DDL. See [Accounting Phase 1](docs/accounting-phase1.md).
+
 For a **new empty** local MySQL database named exactly `arya_tarray_test`, use the reviewed schema-only snapshot and `npm run test:db:bootstrap`. The bootstrap reads `TEST_DATABASE_URL`, refuses non-loopback/non-test URLs and any existing nonempty target, and imports DDL only. It does not copy application rows, alter an existing schema, or reset a database. The integration runner itself never creates or alters schema. Never point either command at `arya_tarray`, a shared database, or a copied production database.
 
 Set `TEST_DATABASE_URL` to a local test-only MySQL URL ending in `/arya_tarray_test`; keep it in the local process environment, never a committed file or console output. A dedicated MySQL account limited to the test schema is preferable. The bootstrap requires the MySQL command-line client (`mysql` on PATH, or set `MYSQL_CLIENT_BIN` to its executable path). Run `npm run test:db:bootstrap` once, then `npm run test:integration` from the repository root. To check test code without MySQL, run `npm run test:integration:typecheck -w backend`.
@@ -42,5 +49,9 @@ Run `npx playwright install chromium` once on a new machine, then `npm run test:
 `.github/workflows/ci.yml` runs `npm ci`, Prisma generation/validation, both TypeScript checks, root backend tests, and both production builds on pushes and pull requests to its configured branches. The MySQL and browser suites are opt-in because their external prerequisites are not provided by this CI job.
 
 ## Current limitations
+
+Accounting browser coverage uses a synthetic read-only workspace to check preview/review labels,
+report tabs and export downloads. The standalone frontend lint command currently opens an ESLint
+configuration prompt; no linter configuration has been added as part of Accounting.
 
 Run the MySQL suite against a provisioned test database in each environment before reporting its financial assertions as passing there. The browser suite uses mocked API responses and does not exercise a real authenticated backend workflow. Typecheck/build alone do not establish business-data correctness.

@@ -20,11 +20,11 @@ const rootFiles = new Set([
   "backend/tsconfig.json", "backend/prisma/schema.prisma", "backend/prisma/seed.ts",
   "backend/prisma/README.md", "backend/prisma/bootstrap-admin.sql", "frontend/.env.example",
   "frontend/next-env.d.ts", "frontend/next.config.ts", "frontend/package.json",
-  "frontend/tsconfig.json", "scripts/package-source.mjs"
+  "frontend/tsconfig.json", "frontend/playwright.config.ts", "scripts/package-source.mjs"
 ]);
 const approvedDirs = [
   ".github/workflows/", "backend/src/", "backend/tests/", "backend/scripts/",
-  "frontend/src/", "frontend/public/", "docs/"
+  "frontend/src/", "frontend/public/", "frontend/tests/", "docs/"
 ];
 const forbiddenSegments = new Set([
   ".git", ".agents", ".playwright-mcp", ".idea", ".vscode", "node_modules",

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { accountingRouter } from "../modules/accounting/accounting.routes.js";
 import { memberRegistrationRouter } from "../modules/member/registration/member-registration.routes.js";
 import { memberDataRouter } from "../modules/member/data/member-data.routes.js";
 import { SIGN_APPROVAL_MENU_CODE } from "../constants/approval.js";
@@ -17,6 +18,7 @@ import { roleRouter } from "../modules/configuration/role/role.routes.js";
 import { userRouter } from "../modules/configuration/user/user.routes.js";
 
 export const apiRouter = Router();
+apiRouter.use("/accounting", requireMenuAccess("ACCOUNTING_REPORT"), accountingRouter);
 apiRouter.use("/member/registration", requireMenuAccess("MEMBER_REGISTRATION"), memberRegistrationRouter);
 apiRouter.use("/member/data", requireMenuAccess("MEMBER_DATA"), memberDataRouter);
 

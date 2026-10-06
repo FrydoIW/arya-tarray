@@ -7,3 +7,5 @@ process.env.DATABASE_URL = requireSafeTestDatabaseUrl(process.env.TEST_DATABASE_
 const { prisma } = await import("../../src/lib/prisma.js");
 after(async () => prisma.$disconnect());
 await import("./financial-flow.test.js");
+await import("./accounting-foundation.test.js");
+await import("./accounting-flow.test.js");

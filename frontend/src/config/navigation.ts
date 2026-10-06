@@ -151,6 +151,10 @@ export const navigation: NavigationGroup[] = [
         enabled: true
       }
     ]
+  },
+  {
+    menuCode: "ACCOUNTING", label: "Accounting", icon: Landmark,
+    children: [{ menuCode: "ACCOUNTING_REPORT", label: "Accounting Reports", icon: Landmark, href: "/accounting", enabled: true }]
   }
 ];
 

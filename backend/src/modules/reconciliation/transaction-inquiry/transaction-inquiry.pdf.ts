@@ -79,7 +79,7 @@ function truncate(text: string, maxWidth: number, size: number) {
   return `${result}...`;
 }
 
-class PdfPage {
+export class PdfPage {
   commands: string[] = [];
 
   text(x: number, top: number, value: string, size = 9, bold = false) {
@@ -102,7 +102,7 @@ class PdfPage {
   }
 }
 
-class PdfDocument {
+export class PdfDocument {
   pages: PdfPage[] = [];
   addPage() { const page = new PdfPage(); this.pages.push(page); return page; }
 

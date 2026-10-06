@@ -100,6 +100,12 @@ export class FinancialFixture {
     const approvalId = { in: this.approvalIds };
     const campaignId = { in: this.campaignIds };
 
+    // Test-only, fixture-scoped cleanup; Accounting has no application deletion API.
+    const accountingSource = { bankTransaction: { is: { statementUploadId: statementId } } };
+    await prisma.accountingJournalLine.deleteMany({ where: { journal: { is: accountingSource } } });
+    await prisma.accountingJournal.deleteMany({ where: { ...accountingSource, relatedJournalId: { not: null } } });
+    await prisma.accountingJournal.deleteMany({ where: accountingSource });
+
     await prisma.memberEventCampaignWalletLedger.deleteMany({ where: { memberId } });
     await prisma.memberEventCampaignAllocation.deleteMany({ where: { memberId, reversalOfAllocationId: { not: null } } });
     await prisma.memberEventCampaignAllocation.deleteMany({ where: { memberId } });
