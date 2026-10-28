@@ -1,5 +1,7 @@
 # Arya Tarray
 
+Windows desktop development and build instructions: [DESKTOP_README.md](DESKTOP_README.md).
+
 Arya Tarray is an internal operations dashboard for Yayasan Arya Tarray Nusantara. It supports bank-statement intake, reconciliation, approval, donor records, program allocation, and monitoring. The application handles financial and donor information; use authorized accounts and protect local configuration and exported data.
 
 ## Current workflows
