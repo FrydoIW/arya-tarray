@@ -62,7 +62,7 @@ export async function loadAccountingReport(q: AccountingQuery, exportAll = false
         ${q.eventType ? Prisma.sql`AND l.event_type_snapshot = ${q.eventType}` : Prisma.empty}
         ${q.journalType ? Prisma.sql`AND j.journal_type = ${q.journalType}` : Prisma.empty}
         ${q.journalNumber ? Prisma.sql`AND INSTR(j.journal_number, ${q.journalNumber}) > 0` : Prisma.empty}`;
-      const rows = await tx.$queryRaw<Array<{ month: string; bank: string; event: string | null; eventType: string | null;
+      const rows = await tx.$queryRaw<Array<{ month: string; bank: string | null; event: string | null; eventType: string | null;
         campaign: string | null; debit: Prisma.Decimal; credit: Prisma.Decimal; journals: bigint }>>`
         SELECT DATE_FORMAT(j.accounting_date, '%Y-%m') AS month,
           l.bank_account_name_snapshot AS bank, l.event_name_snapshot AS event, l.event_type_snapshot AS eventType,

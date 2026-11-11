@@ -8,6 +8,7 @@ import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-
 import { synchronizeCampaignContribution } from "../../member/campaign/member-campaign-wallet.service.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 import { postStatementRecognition, postCorrectionReclassifications } from "../../accounting/accounting.posting.js";
+import { accountingCutoverDate } from "../../accounting/accounting.domain.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
 const ALREADY_DECIDED_MESSAGE = "This approval request has already been decided. Reload the approval queue.";
@@ -408,6 +409,14 @@ async function decideSignApprovalOnce(input: { approvalId: string; userId: strin
     if (current.status !== "PENDING") throw new HttpError(409, ALREADY_DECIDED_MESSAGE);
     if (current.statementUpload.status !== "CHECK") {
       throw new HttpError(409, "This statement is no longer Pending Approval. Reload the approval queue.");
+    }
+
+    // Check configuration before changing the decision/source rows. Period and
+    // posting checks still run in this same transaction; any failure aborts all
+    // finalization, operational synchronization, journal and history writes.
+    if (input.decision === "APPROVED" && (!correctionProposal || correctionProposal.items.some(item =>
+      item.action === "MODIFIED" && item.bankTransactionId !== null))) {
+      accountingCutoverDate();
     }
 
     const now = new Date();

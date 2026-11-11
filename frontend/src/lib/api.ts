@@ -6,6 +6,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TOKEN_KEY = "arya_token";
 const USER_KEY = "arya_user";
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 function storages() {
   if (typeof window === "undefined") return [];
   return [window.localStorage, window.sessionStorage];
@@ -69,7 +76,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       window.location.href = "/login";
     }
 
-    throw new Error(payload.message ?? "Request failed");
+    throw new ApiError(payload.message ?? "Request failed", response.status);
   }
 
   return payload as T;
@@ -93,7 +100,7 @@ export async function apiFetchBlob(path: string, init: RequestInit = {}) {
       clearSession();
       window.location.href = "/login";
     }
-    throw new Error(payload.message ?? "Request failed");
+    throw new ApiError(payload.message ?? "Request failed", response.status);
   }
 
   const disposition = response.headers.get("Content-Disposition") ?? "";

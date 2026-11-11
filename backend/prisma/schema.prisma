@@ -8,85 +8,157 @@ datasource db {
 }
 
 model AccountingAccount {
-  id String @id @default(uuid()) @map("accounting_account_id") @db.Char(36)
-  code String @unique(map: "uk_accounting_account_code") @map("account_code") @db.VarChar(10)
-  name String @map("account_name") @db.VarChar(150)
-  accountType String @map("account_type") @db.VarChar(20)
-  normalBalance String @map("normal_balance") @db.VarChar(10)
-  postingFlag Boolean @default(true) @map("posting_flag")
-  activeFlag Boolean @default(true) @map("active_flag")
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  lines AccountingJournalLine[]
+  assetGainCategories AccountingAssetCategory[] @relation("AssetCategoryGain")
+  assetLossCategories AccountingAssetCategory[] @relation("AssetCategoryLoss")
+  assetImpairmentExpenses AccountingAssetCategory[] @relation("AssetCategoryImpairmentExpense")
+  assetImpairmentAllowances AccountingAssetCategory[] @relation("AssetCategoryImpairmentAllowance")
+  assetClearingCategories AccountingAssetCategory[] @relation("AssetCategoryClearing")
+  controlledDocuments AccountingDocument[] @relation("AccountingDocumentControl")
+  bankSettlements AccountingSettlement[] @relation("AccountingSettlementBankGl")
+  draftLines AccountingJournalDraftLine[]
+  id                    String                  @id @default(uuid()) @map("accounting_account_id") @db.Char(36)
+  code                  String                  @unique(map: "uk_accounting_account_code") @map("account_code") @db.VarChar(10)
+  name                  String                  @map("account_name") @db.VarChar(150)
+  parentAccountId       String?                 @map("parent_account_id") @db.Char(36)
+  accountType           String                  @map("account_type") @db.VarChar(20)
+  accountClassification String?                 @map("account_classification") @db.VarChar(40)
+  reportSection         String?                 @map("report_section") @db.VarChar(40)
+  normalBalance         String                  @map("normal_balance") @db.VarChar(10)
+  contraFlag            Boolean                 @default(false) @map("contra_flag")
+  postingFlag           Boolean                 @default(true) @map("posting_flag")
+  activeFlag            Boolean                 @default(true) @map("active_flag")
+  createdAt             DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime                @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  lines                 AccountingJournalLine[]
+
+  relFkAccAccountParent      AccountingAccount?        @relation("fk_acc_account_parent", fields: [parentAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_account_parent")
+  revFkAccAccountParent      AccountingAccount[]       @relation("fk_acc_account_parent")
+  revFkAccAssetCatAccum      AccountingAssetCategory[] @relation("fk_acc_asset_cat_accum")
+  revFkAccAssetCatAsset      AccountingAssetCategory[] @relation("fk_acc_asset_cat_asset")
+  revFkAccAssetCatExp        AccountingAssetCategory[] @relation("fk_acc_asset_cat_exp")
+  revFkAccDocLineAccount     AccountingDocumentLine[]  @relation("fk_acc_doc_line_account")
+  revFkAccFundAccount        AccountingFund[]          @relation("fk_acc_fund_account")
+  revFkAccScheduleBalAccount AccountingSchedule[]      @relation("fk_acc_schedule_bal_account")
+  revFkAccScheduleRecAccount AccountingSchedule[]      @relation("fk_acc_schedule_rec_account")
+
+  @@index([parentAccountId], map: "idx_acc_account_parent")
   @@map("arya_accounting_account")
+  final26_fk_acc_bank_recon_gl_back AccountingBankReconciliation[] @relation("Final26_fk_acc_bank_recon_gl")
 }
 
 /// Every persisted journal is posted. Corrections append evidence; there is no edit/delete API.
 model AccountingJournal {
-  id String @id @default(uuid()) @map("accounting_journal_id") @db.Char(36)
-  journalNumber String @unique(map: "uk_accounting_journal_number") @map("journal_number") @db.VarChar(60)
-  journalType String @map("journal_type") @db.VarChar(20)
-  sourceEventKey String @unique(map: "uk_accounting_source_event") @map("source_event_key") @db.VarChar(150)
-  accountingDate DateTime @map("accounting_date") @db.Date
-  postedAt DateTime @map("posted_at") @db.DateTime(3)
-  descriptionSnapshot String? @map("description_snapshot") @db.Text
-  bankTransactionId String @map("bank_transaction_id") @db.Char(36)
-  correctionItemId String? @unique(map: "uk_accounting_correction_item") @map("correction_item_id") @db.Char(36)
-  relatedJournalId String? @map("related_journal_id") @db.Char(36)
-  postedById String @map("posted_by") @db.Char(36)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_transaction")
-  correctionItem ReconciliationCorrectionItem? @relation(fields: [correctionItemId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_correction")
-  relatedJournal AccountingJournal? @relation("AccountingJournalRelationship", fields: [relatedJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_related")
-  linkedJournals AccountingJournal[] @relation("AccountingJournalRelationship")
-  postedBy User @relation("AccountingPostedBy", fields: [postedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_actor")
-  lines AccountingJournalLine[]
+  terminatedSchedules AccountingSchedule[] @relation("AccountingScheduleTermination")
+  postedDraft AccountingJournalDraft? @relation("AccountingDraftPosted")
+  appliedApproval AccountingApprovalRequest? @relation("AccountingApprovalApplied")
+  reversalApprovalRequests AccountingApprovalRequest[] @relation("AccountingApprovalOriginal")
+  id                  String                        @id @default(uuid()) @map("accounting_journal_id") @db.Char(36)
+  journalNumber       String                        @unique(map: "uk_accounting_journal_number") @map("journal_number") @db.VarChar(60)
+  journalType         String                        @map("journal_type") @db.VarChar(20)
+  sourceEventKey      String                        @unique(map: "uk_accounting_source_event") @map("source_event_key") @db.VarChar(150)
+  accountingDate      DateTime                      @map("accounting_date") @db.Date
+  accountingPeriodId  String?                       @map("accounting_period_id") @db.Char(36)
+  postedAt            DateTime                      @map("posted_at") @db.DateTime(3)
+  descriptionSnapshot String?                       @map("description_snapshot") @db.Text
+  bankTransactionId   String?                       @map("bank_transaction_id") @db.Char(36)
+  sourceKind          String?                       @map("source_kind") @db.VarChar(30)
+  sourceReference     String?                       @map("source_reference") @db.VarChar(150)
+  correctionItemId    String?                       @unique(map: "uk_accounting_correction_item") @map("correction_item_id") @db.Char(36)
+  relatedJournalId    String?                       @map("related_journal_id") @db.Char(36)
+  reversalOfJournalId String?                       @unique(map: "uk_acc_journal_reversal") @map("reversal_of_journal_id") @db.Char(36)
+  postedById          String                        @map("posted_by") @db.Char(36)
+  createdAt           DateTime                      @default(now()) @map("created_at") @db.DateTime(3)
+  bankTransaction     BankTransaction?              @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_transaction")
+  correctionItem      ReconciliationCorrectionItem? @relation(fields: [correctionItemId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_correction")
+  relatedJournal      AccountingJournal?            @relation("AccountingJournalRelationship", fields: [relatedJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_related")
+  linkedJournals      AccountingJournal[]           @relation("AccountingJournalRelationship")
+  postedBy            User                          @relation("AccountingPostedBy", fields: [postedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_journal_actor")
+  lines               AccountingJournalLine[]
+
+  revFkAccDepRunJournal         AccountingDepreciationRun?    @relation("fk_acc_dep_run_journal")
+  revFkAccDocJournal            AccountingDocument?           @relation("fk_acc_doc_journal")
+  revFkAccDocAdjustJournal      AccountingDocumentAdjustment? @relation("fk_acc_doc_adjust_journal")
+  revFkAccFixedAssetDisposal    AccountingFixedAsset?         @relation("fk_acc_fixed_asset_disposal")
+  revFkAccFundReleaseJournal    AccountingFundRelease?        @relation("fk_acc_fund_release_journal")
+  relFkAccJournalPeriod         AccountingPeriod?             @relation("fk_acc_journal_period", fields: [accountingPeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_journal_period")
+  relFkAccJournalReversal       AccountingJournal?            @relation("fk_acc_journal_reversal", fields: [reversalOfJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_journal_reversal")
+  revFkAccJournalReversal       AccountingJournal?            @relation("fk_acc_journal_reversal")
+  revFkAccOpeningJournal        AccountingOpeningBatch?       @relation("fk_acc_opening_journal")
+  revFkAccPeriodCloseJournal    AccountingPeriod[]            @relation("fk_acc_period_close_journal")
+  revFkAccSchedulePeriodJournal AccountingSchedulePeriod?     @relation("fk_acc_schedule_period_journal")
+  revFkAccSettlementJournal     AccountingSettlement?         @relation("fk_acc_settlement_journal")
+
   @@index([accountingDate, id], map: "idx_accounting_journal_date")
   @@index([bankTransactionId, postedAt], map: "idx_accounting_journal_source")
   @@index([relatedJournalId], map: "idx_accounting_journal_related")
+  @@index([accountingPeriodId, accountingDate], map: "idx_acc_journal_period")
+  @@index([sourceKind, sourceReference], map: "idx_acc_journal_source_ref")
   @@map("arya_accounting_journal")
+  fund25_fk_acc_restriction_classification_back AccountingFundRestriction? @relation("Fund25_fk_acc_restriction_classification")
 }
 
 /// MySQL CHECK constraints for exact nonzero, one-sided lines live in the reviewed physical patch.
 model AccountingJournalLine {
-  id String @id @default(uuid()) @map("accounting_journal_line_id") @db.Char(36)
-  journalId String @map("accounting_journal_id") @db.Char(36)
-  lineNo Int @map("line_no") @db.UnsignedInt
-  accountId String @map("accounting_account_id") @db.Char(36)
-  accountCodeSnapshot String @map("account_code_snapshot") @db.VarChar(10)
-  accountNameSnapshot String @map("account_name_snapshot") @db.VarChar(150)
-  debit Decimal @db.Decimal(20, 2)
-  credit Decimal @db.Decimal(20, 2)
-  bankAccountId String @map("bank_account_id") @db.Char(36)
-  bankNameSnapshot String @map("bank_name_snapshot") @db.VarChar(100)
-  bankAccountNoSnapshot String @map("bank_account_no_snapshot") @db.VarChar(100)
-  bankAccountNameSnapshot String @map("bank_account_name_snapshot") @db.VarChar(200)
-  eventCodeId String? @map("event_code_id") @db.Char(36)
-  eventCodeSnapshot String? @map("event_code_snapshot") @db.Char(3)
-  eventNameSnapshot String? @map("event_name_snapshot") @db.VarChar(200)
-  eventTypeSnapshot String? @map("event_type_snapshot") @db.VarChar(20)
-  eventCampaignId String? @map("event_campaign_id") @db.Char(36)
-  campaignNameSnapshot String? @map("campaign_name_snapshot") @db.VarChar(200)
-  memberIdentityId String? @map("member_identity_id") @db.Char(36)
-  donorNameSnapshot String? @map("donor_name_snapshot") @db.VarChar(255)
-  memberId String? @map("member_id") @db.Char(36)
-  memberCodeSnapshot String? @map("member_code_snapshot") @db.VarChar(30)
-  memberNameSnapshot String? @map("member_name_snapshot") @db.VarChar(150)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  journal AccountingJournal @relation(fields: [journalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_journal")
-  account AccountingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_account")
-  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_bank")
-  eventCode EventCode? @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_event")
-  eventCampaign EventCampaign? @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_campaign")
-  memberIdentity MemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_identity")
-  member Member? @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_member")
+  assetSourceClaims AccountingJournalDraft[] @relation("AssetDraftSource")
+  assetCostClaims AccountingJournalDraft[] @relation("AssetDraftCost")
+  id                      String            @id @default(uuid()) @map("accounting_journal_line_id") @db.Char(36)
+  journalId               String            @map("accounting_journal_id") @db.Char(36)
+  lineNo                  Int               @map("line_no") @db.UnsignedInt
+  accountId               String            @map("accounting_account_id") @db.Char(36)
+  accountCodeSnapshot     String            @map("account_code_snapshot") @db.VarChar(10)
+  accountNameSnapshot     String            @map("account_name_snapshot") @db.VarChar(150)
+  debit                   Decimal           @db.Decimal(20, 2)
+  credit                  Decimal           @db.Decimal(20, 2)
+  bankAccountId           String?           @map("bank_account_id") @db.Char(36)
+  bankNameSnapshot        String?           @map("bank_name_snapshot") @db.VarChar(100)
+  bankAccountNoSnapshot   String?           @map("bank_account_no_snapshot") @db.VarChar(100)
+  bankAccountNameSnapshot String?           @map("bank_account_name_snapshot") @db.VarChar(200)
+  accountingFundId        String?           @map("accounting_fund_id") @db.Char(36)
+  fundRestrictionId       String?           @map("fund_restriction_id") @db.Char(36)
+  counterpartyId          String?           @map("counterparty_id") @db.Char(36)
+  eventCodeId             String?           @map("event_code_id") @db.Char(36)
+  eventCodeSnapshot       String?           @map("event_code_snapshot") @db.Char(3)
+  eventNameSnapshot       String?           @map("event_name_snapshot") @db.VarChar(200)
+  eventTypeSnapshot       String?           @map("event_type_snapshot") @db.VarChar(20)
+  eventCampaignId         String?           @map("event_campaign_id") @db.Char(36)
+  campaignNameSnapshot    String?           @map("campaign_name_snapshot") @db.VarChar(200)
+  memberIdentityId        String?           @map("member_identity_id") @db.Char(36)
+  donorNameSnapshot       String?           @map("donor_name_snapshot") @db.VarChar(255)
+  memberId                String?           @map("member_id") @db.Char(36)
+  memberCodeSnapshot      String?           @map("member_code_snapshot") @db.VarChar(30)
+  memberNameSnapshot      String?           @map("member_name_snapshot") @db.VarChar(150)
+  createdAt               DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  journal                 AccountingJournal @relation(fields: [journalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_journal")
+  account                 AccountingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_account")
+  bankAccount             BankAccount?      @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_bank")
+  eventCode               EventCode?        @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_event")
+  eventCampaign           EventCampaign?    @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_campaign")
+  memberIdentity          MemberIdentity?   @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_identity")
+  member                  Member?           @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_accounting_line_member")
+
+  revFkAccBankMatchLine       AccountingBankReconciliationMatch[] @relation("fk_acc_bank_match_line")
+  revFkAccDepRunAssetAccum    AccountingDepreciationRunAsset?     @relation("fk_acc_dep_run_asset_accum")
+  revFkAccDepRunAssetExp      AccountingDepreciationRunAsset?     @relation("fk_acc_dep_run_asset_exp")
+  revFkAccFixedAssetSource    AccountingFixedAsset?               @relation("fk_acc_fixed_asset_source")
+  relFkAccLineCounterparty    AccountingCounterparty?             @relation("fk_acc_line_counterparty", fields: [counterpartyId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_line_counterparty")
+  relFkAccLineFund            AccountingFund?                     @relation("fk_acc_line_fund", fields: [accountingFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_line_fund")
+  relFkAccLineRestrictionFund AccountingFundRestriction?          @relation("fk_acc_line_restriction_fund", fields: [fundRestrictionId, accountingFundId], references: [id, accountingFundId], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_line_restriction_fund")
+  revFkAccScheduleSource      AccountingSchedule[]                @relation("fk_acc_schedule_source")
+
   @@unique([journalId, lineNo], map: "uk_accounting_line_number")
   @@index([accountId, journalId], map: "idx_accounting_line_account")
   @@index([bankAccountId], map: "idx_accounting_line_bank")
   @@index([eventCodeId], map: "idx_accounting_line_event")
   @@index([eventCampaignId], map: "idx_accounting_line_campaign")
   @@index([memberId], map: "idx_accounting_line_member")
+  @@index([accountingFundId], map: "idx_acc_line_fund")
+  @@index([fundRestrictionId, accountingFundId], map: "idx_acc_line_restriction")
+  @@index([counterpartyId], map: "idx_acc_line_counterparty")
   @@map("arya_accounting_journal_line")
+  fund25_fk_acc_restriction_source_line_back AccountingFundRestriction[] @relation("Fund25_fk_acc_restriction_source_line")
+  fund25_fk_acc_release_evidence_back AccountingFundRelease[] @relation("Fund25_fk_acc_release_evidence")
+  fund25_fk_acc_draft_fund_source_back AccountingJournalDraft[] @relation("Fund25_fk_acc_draft_fund_source")
+  fund25_fk_acc_approval_release_evidence_back AccountingApprovalRequest[] @relation("Fund25_fk_acc_approval_release_evidence")
 }
 
 model Member {
@@ -120,6 +192,8 @@ model Member {
   campaignAllocations MemberEventCampaignAllocation[]
   campaignWalletEntries MemberEventCampaignWalletLedger[]
   campaignParticipations MemberEventCampaignParticipation[]
+  revFkAccCounterpartyMember AccountingCounterparty?     @relation("fk_acc_counterparty_member")
+  revFkAccRestrictionDonor   AccountingFundRestriction[] @relation("fk_acc_restriction_donor")
   @@index([memberName], map: "idx_member_name")
   @@index([initialName], map: "idx_member_initial_name")
   @@index([city], map: "idx_member_city")
@@ -217,6 +291,15 @@ model Role {
 }
 
 model User {
+  custodiedAssets AccountingFixedAsset[] @relation("AssetCustodian")
+  createdAssets AccountingFixedAsset[] @relation("AssetCreator")
+  updatedAssets AccountingFixedAsset[] @relation("AssetUpdater")
+  accountingDrafts AccountingJournalDraft[] @relation("AccountingDraftCreator")
+  requestedAccountingApprovals AccountingApprovalRequest[] @relation("AccountingApprovalRequester")
+  decidedAccountingApprovals AccountingApprovalRequest[] @relation("AccountingApprovalDecider")
+  appliedAccountingApprovals AccountingApprovalRequest[] @relation("AccountingApprovalApplier")
+  accountingApprovalAssignments AccountingApprovalApprover[]
+  accountingApprovalHistory AccountingApprovalHistory[]
   postedAccountingJournals AccountingJournal[] @relation("AccountingPostedBy")
   registeredMembers Member[] @relation("MemberRegisteredBy")
   createdMembers Member[] @relation("MemberCreatedBy")
@@ -286,7 +369,27 @@ model User {
   updatedMenus           Menu[]                         @relation("MenuUpdatedBy")
   createdRoleMenus       RoleMenu[]                     @relation("RoleMenuCreatedBy")
 
+  revFkAccBankReconClosed    AccountingBankReconciliation[]      @relation("fk_acc_bank_recon_closed")
+  revFkAccBankReconCreated   AccountingBankReconciliation[]      @relation("fk_acc_bank_recon_created")
+  revFkAccBankMatchActor     AccountingBankReconciliationMatch[] @relation("fk_acc_bank_match_actor")
+  revFkAccBankMatchVoidActor AccountingBankReconciliationMatch[] @relation("fk_acc_bank_match_void_actor")
+  revFkAccDepRunActor        AccountingDepreciationRun[]         @relation("fk_acc_dep_run_actor")
+  revFkAccDocActor           AccountingDocument[]                @relation("fk_acc_doc_actor")
+  revFkAccDocAdjustActor     AccountingDocumentAdjustment[]      @relation("fk_acc_doc_adjust_actor")
+  revFkAccFyClosedBy         AccountingFiscalYear[]              @relation("fk_acc_fy_closed_by")
+  revFkAccDesignationActor   AccountingFundDesignation[]         @relation("fk_acc_designation_actor")
+  revFkAccFundReleaseActor   AccountingFundRelease[]             @relation("fk_acc_fund_release_actor")
+  revFkAccOpeningActor       AccountingOpeningBatch[]            @relation("fk_acc_opening_actor")
+  revFkAccPeriodClosedBy     AccountingPeriod[]                  @relation("fk_acc_period_closed_by")
+  revFkAccScheduleActor      AccountingSchedule[]                @relation("fk_acc_schedule_actor")
+  revFkAccSettlementActor    AccountingSettlement[]              @relation("fk_acc_settlement_actor")
   @@map("arya_user")
+  fund25_fk_acc_fund_creator_back AccountingFund[] @relation("Fund25_fk_acc_fund_creator")
+  fund25_fk_acc_fund_updater_back AccountingFund[] @relation("Fund25_fk_acc_fund_updater")
+  fund25_fk_acc_restriction_creator_back AccountingFundRestriction[] @relation("Fund25_fk_acc_restriction_creator")
+  fund25_fk_acc_restriction_updater_back AccountingFundRestriction[] @relation("Fund25_fk_acc_restriction_updater")
+  fund25_fk_acc_designation_creator_back AccountingFundDesignation[] @relation("Fund25_fk_acc_designation_creator")
+  fund25_fk_acc_designation_updater_back AccountingFundDesignation[] @relation("Fund25_fk_acc_designation_updater")
 }
 
 model UserRole {
@@ -393,11 +496,15 @@ model EventCampaign {
   destinationCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationCampaign")
   sourceCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferSourceCampaign")
 
+  revFkAccDocLineCampaign    AccountingDocumentLine[] @relation("fk_acc_doc_line_campaign")
+  revFkAccFixedAssetCampaign AccountingFixedAsset[]   @relation("fk_acc_fixed_asset_campaign")
+  revFkAccFundCampaign       AccountingFund[]         @relation("fk_acc_fund_campaign")
   @@index([eventCodeId, activeFlag], map: "idx_event_campaign_event_active")
   @@index([startDate, endDate], map: "idx_event_campaign_period")
   @@index([createdById], map: "idx_event_campaign_created_by")
   @@index([updatedById], map: "idx_event_campaign_updated_by")
   @@map("arya_event_campaign")
+  fund25_fk_acc_restriction_campaign_back AccountingFundRestriction[] @relation("Fund25_fk_acc_restriction_campaign")
 }
 
 model EventTimeRule {
@@ -663,6 +770,8 @@ model MemberEventCampaignParticipation {
 }
 
 model BankAccount {
+  accountingSettlements AccountingSettlement[] @relation("AccountingSettlementBankAccount")
+  accountingDraftLines AccountingJournalDraftLine[]
   accountingLines AccountingJournalLine[]
   id           String   @id @default(uuid()) @map("bank_account_id") @db.Char(36)
   bankCode     String   @map("bank_code") @db.VarChar(30)
@@ -684,6 +793,7 @@ model BankAccount {
   statements BankStatementUpload[]
   statementUploadAttempts BankStatementUploadAttempt[]
 
+  revFkAccBankReconAccount AccountingBankReconciliation[] @relation("fk_acc_bank_recon_account")
   @@unique([bankCode, accountNo], map: "uk_bank_account_bank_account_no")
   @@map("arya_bank_account")
 }
@@ -723,6 +833,7 @@ model BankStatementUpload {
   uploadAttempt BankStatementUploadAttempt?
   matchedStatementDuplicates BankStatementUploadDuplicate[]
 
+  revFkAccBankReconUpload AccountingBankReconciliation[] @relation("fk_acc_bank_recon_upload")
   @@index([bankAccountId, status], map: "idx_bank_statement_account_status")
   @@index([withdrawnById], map: "idx_bank_statement_withdrawn_by")
   @@map("arya_bank_statement_upload")
@@ -783,6 +894,8 @@ model BankTransaction {
   accountingJournals AccountingJournal[]
   memberIdentityId String? @map("member_identity_id") @db.Char(36)
   memberIdentity MemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_member_identity")
+  revFkAccBankMatchBank         AccountingBankReconciliationMatch[] @relation("fk_acc_bank_match_bank")
+  revFkAccSettlementBank        AccountingSettlement[]              @relation("fk_acc_settlement_bank")
   @@index([memberIdentityId], map: "idx_bank_transaction_member_identity")
   id                   String    @id @default(uuid()) @map("bank_transaction_id") @db.Char(36)
   statementUploadId    String    @map("statement_upload_id") @db.Char(36)
@@ -829,6 +942,8 @@ model BankTransaction {
   @@index([reconciliationExcludedAt], map: "idx_bank_transaction_reconciliation_excluded")
   @@index([reconciliationExcludedById], map: "idx_bank_transaction_excluded_by")
   @@map("arya_bank_transaction")
+  fund25_fk_acc_draft_fund_bank_back AccountingJournalDraft[] @relation("Fund25_fk_acc_draft_fund_bank")
+  fund25_fk_acc_draft_fund_active_bank_back AccountingJournalDraft? @relation("Fund25_fk_acc_draft_fund_active_bank")
 }
 
 model BankTransactionHistory {
@@ -1003,4 +1118,839 @@ model ApprovalConfigApprover {
 
   @@id([approvalConfigId, approverUserId])
   @@map("arya_approval_config_approver")
+}
+
+
+model AccountingFiscalYear {
+  id                 String                   @id @default(uuid()) @map("fiscal_year_id") @db.Char(36)
+  yearCode           String                   @unique(map: "uk_acc_fy_code") @map("year_code") @db.VarChar(20)
+  startDate          DateTime                 @map("start_date") @db.Date
+  endDate            DateTime                 @map("end_date") @db.Date
+  status             String                   @default("OPEN") @db.VarChar(12)
+  closedAt           DateTime?                @map("closed_at") @db.DateTime(3)
+  closedById         String?                  @map("closed_by") @db.Char(36)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime                 @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  relFkAccFyClosedBy User?                    @relation("fk_acc_fy_closed_by", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fy_closed_by")
+  revFkAccOpeningFy  AccountingOpeningBatch[] @relation("fk_acc_opening_fy")
+  revFkAccPeriodFy   AccountingPeriod[]       @relation("fk_acc_period_fy")
+
+  @@index([closedById], map: "idx_acc_fy_closed_by")
+  @@index([startDate, endDate], map: "idx_acc_fy_dates")
+  @@map("arya_accounting_fiscal_year")
+  reportingPolicyDraftId String? @map("reporting_policy_draft_id") @db.Char(36)
+  closingDraftId String? @map("closing_draft_id") @db.Char(36)
+  revision Int @map("revision") @default(1) @db.UnsignedInt
+  final26_reportingPolicyDraftId AccountingJournalDraft? @relation("Final26_fk_acc_fy_policy_draft", fields: [reportingPolicyDraftId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fy_policy_draft")
+  @@index([reportingPolicyDraftId], map: "idx_acc_fy_policy_draft")
+  final26_closingDraftId AccountingJournalDraft? @relation("Final26_fk_acc_fy_closing_draft", fields: [closingDraftId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fy_closing_draft")
+  @@index([closingDraftId], map: "idx_acc_fy_closing_draft")
+  final26_fk_acc_draft_fiscal_year_back AccountingJournalDraft[] @relation("Final26_fk_acc_draft_fiscal_year")
+  final26_fk_acc_approval_fiscal_year_back AccountingApprovalRequest[] @relation("Final26_fk_acc_approval_fiscal_year")
+}
+
+model AccountingPeriod {
+  depreciationAssetPeriods AccountingDepreciationRunAsset[] @relation("DepreciationAssetPeriod")
+  activeDepreciationPeriods AccountingDepreciationRunAsset[] @relation("DepreciationActivePeriod")
+  approvalRequests AccountingApprovalRequest[]
+  id                           String                         @id @default(uuid()) @map("accounting_period_id") @db.Char(36)
+  fiscalYearId                 String                         @map("fiscal_year_id") @db.Char(36)
+  periodNo                     Int                            @map("period_no") @db.UnsignedSmallInt
+  periodCode                   String                         @unique(map: "uk_acc_period_code") @map("period_code") @db.VarChar(20)
+  startDate                    DateTime                       @map("start_date") @db.Date
+  endDate                      DateTime                       @map("end_date") @db.Date
+  status                       String                         @default("OPEN") @db.VarChar(12)
+  closingJournalId             String?                        @map("closing_journal_id") @db.Char(36)
+  closedAt                     DateTime?                      @map("closed_at") @db.DateTime(3)
+  closedById                   String?                        @map("closed_by") @db.Char(36)
+  createdAt                    DateTime                       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                    DateTime                       @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  revFkAccBankReconPeriod      AccountingBankReconciliation[] @relation("fk_acc_bank_recon_period")
+  revFkAccDepRunPeriod         AccountingDepreciationRun[]    @relation("fk_acc_dep_run_period")
+  revFkAccJournalPeriod        AccountingJournal[]            @relation("fk_acc_journal_period")
+  relFkAccPeriodCloseJournal   AccountingJournal?             @relation("fk_acc_period_close_journal", fields: [closingJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_period_close_journal")
+  relFkAccPeriodClosedBy       User?                          @relation("fk_acc_period_closed_by", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_period_closed_by")
+  relFkAccPeriodFy             AccountingFiscalYear           @relation("fk_acc_period_fy", fields: [fiscalYearId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_period_fy")
+  revFkAccSchedulePeriodPeriod AccountingSchedulePeriod[]     @relation("fk_acc_schedule_period_period")
+
+  @@unique([fiscalYearId, periodNo], map: "uk_acc_period_year_no")
+  @@index([closingJournalId], map: "idx_acc_period_close_journal")
+  @@index([closedById], map: "idx_acc_period_closed_by")
+  @@index([startDate, endDate], map: "idx_acc_period_dates")
+  @@map("arya_accounting_period")
+  closingDraftId String? @map("closing_draft_id") @db.Char(36)
+  revision Int @map("revision") @default(1) @db.UnsignedInt
+  final26_closingDraftId AccountingJournalDraft? @relation("Final26_fk_acc_period_closing_draft", fields: [closingDraftId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_period_closing_draft")
+  @@index([closingDraftId], map: "idx_acc_period_closing_draft")
+  final26_fk_acc_draft_period_back AccountingJournalDraft[] @relation("Final26_fk_acc_draft_period")
+}
+
+model AccountingCounterparty {
+  vendorAssets AccountingFixedAsset[] @relation("AssetVendor")
+  draftLines AccountingJournalDraftLine[]
+  id                         String                  @id @default(uuid()) @map("counterparty_id") @db.Char(36)
+  counterpartyCode           String                  @unique(map: "uk_acc_counterparty_code") @map("counterparty_code") @db.VarChar(40)
+  displayName                String                  @map("display_name") @db.VarChar(200)
+  counterpartyType           String                  @map("counterparty_type") @db.VarChar(12)
+  memberId                   String?                 @unique(map: "uk_acc_counterparty_member") @map("member_id") @db.Char(36)
+  activeFlag                 Boolean                 @default(true) @map("active_flag")
+  createdAt                  DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                  DateTime                @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  relFkAccCounterpartyMember Member?                 @relation("fk_acc_counterparty_member", fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_counterparty_member")
+  revFkAccDocCounterparty    AccountingDocument[]    @relation("fk_acc_doc_counterparty")
+  revFkAccLineCounterparty   AccountingJournalLine[] @relation("fk_acc_line_counterparty")
+  revFkAccSettlementCp       AccountingSettlement[]  @relation("fk_acc_settlement_cp")
+
+  @@map("arya_accounting_counterparty")
+}
+
+model AccountingFund {
+  draftLines AccountingJournalDraftLine[]
+  id                      String                      @id @default(uuid()) @map("accounting_fund_id") @db.Char(36)
+  fundCode                String                      @unique(map: "uk_acc_fund_code") @map("fund_code") @db.VarChar(40)
+  fundName                String                      @map("fund_name") @db.VarChar(200)
+  fundClass               String                      @map("fund_class") @db.VarChar(25)
+  balanceAccountId        String?                     @map("balance_account_id") @db.Char(36)
+  eventCampaignId         String?                     @map("event_campaign_id") @db.Char(36)
+  status                  String                      @default("DRAFT") @db.VarChar(12)
+  createdAt               DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime                    @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  revFkAccDocLineFund     AccountingDocumentLine[]    @relation("fk_acc_doc_line_fund")
+  relFkAccFundAccount     AccountingAccount?          @relation("fk_acc_fund_account", fields: [balanceAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fund_account")
+  relFkAccFundCampaign    EventCampaign?              @relation("fk_acc_fund_campaign", fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fund_campaign")
+  revFkAccDesignationFund AccountingFundDesignation[] @relation("fk_acc_designation_fund")
+  revFkAccRestrictionFund AccountingFundRestriction[] @relation("fk_acc_restriction_fund")
+  revFkAccLineFund        AccountingJournalLine[]     @relation("fk_acc_line_fund")
+
+  @@index([balanceAccountId], map: "idx_acc_fund_account")
+  @@index([eventCampaignId], map: "idx_acc_fund_campaign")
+  @@map("arya_accounting_fund")
+  description String? @map("description") @db.VarChar(1000)
+  effectiveOn DateTime @map("effective_on") @db.Date
+  expiresOn DateTime? @map("expires_on") @db.Date
+  sourceReference String @map("source_reference") @db.VarChar(255)
+  policy Json? @map("policy")
+  revision Int @map("revision") @default(1) @db.UnsignedInt
+  createdById String @map("created_by") @db.Char(36)
+  updatedById String @map("updated_by") @db.Char(36)
+  fund25_createdById User @relation("Fund25_fk_acc_fund_creator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fund_creator")
+  @@index([createdById], map: "idx_acc_fund_creator")
+  fund25_updatedById User @relation("Fund25_fk_acc_fund_updater", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fund_updater")
+  @@index([updatedById], map: "idx_acc_fund_updater")
+  fund25_fk_acc_release_target_back AccountingFundRelease[] @relation("Fund25_fk_acc_release_target")
+  fund25_fk_acc_draft_fund_back AccountingJournalDraft[] @relation("Fund25_fk_acc_draft_fund")
+  fund25_fk_acc_approval_fund_back AccountingApprovalRequest[] @relation("Fund25_fk_acc_approval_fund")
+}
+
+model AccountingFundRestriction {
+  draftLines AccountingJournalDraftLine[]
+  approvalRequests AccountingApprovalRequest[]
+  id                             String                  @id @default(uuid()) @map("fund_restriction_id") @db.Char(36)
+  accountingFundId               String                  @map("accounting_fund_id") @db.Char(36)
+  donorMemberId                  String?                 @map("donor_member_id") @db.Char(36)
+  restrictionKind                String                  @map("restriction_kind") @db.VarChar(12)
+  purposeText                    String?                 @map("purpose_text") @db.VarChar(1000)
+  effectiveOn                    DateTime?               @map("effective_on") @db.Date
+  releaseOn                      DateTime?               @map("release_on") @db.Date
+  supportingReference            String                  @map("supporting_reference") @db.VarChar(255)
+  status                         String                  @default("DRAFT") @db.VarChar(12)
+  createdAt                      DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                      DateTime                @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  revFkAccFundReleaseRestriction AccountingFundRelease[] @relation("fk_acc_fund_release_restriction")
+  relFkAccRestrictionDonor       Member?                 @relation("fk_acc_restriction_donor", fields: [donorMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_restriction_donor")
+  relFkAccRestrictionFund        AccountingFund          @relation("fk_acc_restriction_fund", fields: [accountingFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_restriction_fund")
+  revFkAccLineRestrictionFund    AccountingJournalLine[] @relation("fk_acc_line_restriction_fund")
+
+  @@unique([id, accountingFundId], map: "uk_acc_restriction_fund_pair")
+  @@unique([accountingFundId, supportingReference], map: "uk_acc_restriction_source")
+  @@index([donorMemberId], map: "idx_acc_restriction_donor")
+  @@map("arya_accounting_fund_restriction")
+  sourceJournalLineId String @map("source_journal_line_id") @db.Char(36)
+  originalAmount Decimal @map("original_amount") @db.Decimal(20,2)
+  termsEvidence String @map("terms_evidence") @db.VarChar(1000)
+  criteria Json @map("criteria")
+  eventCampaignId String? @map("event_campaign_id") @db.Char(36)
+  classificationJournalId String? @map("classification_journal_id") @unique(map: "uk_acc_restriction_classification") @db.Char(36)
+  revision Int @map("revision") @default(1) @db.UnsignedInt
+  createdById String @map("created_by") @db.Char(36)
+  updatedById String @map("updated_by") @db.Char(36)
+  fund25_createdById User @relation("Fund25_fk_acc_restriction_creator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_restriction_creator")
+  @@index([createdById], map: "idx_acc_restriction_creator")
+  fund25_updatedById User @relation("Fund25_fk_acc_restriction_updater", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_restriction_updater")
+  @@index([updatedById], map: "idx_acc_restriction_updater")
+  fund25_sourceJournalLineId AccountingJournalLine @relation("Fund25_fk_acc_restriction_source_line", fields: [sourceJournalLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_restriction_source_line")
+  @@index([sourceJournalLineId], map: "idx_acc_restriction_source_line")
+  fund25_eventCampaignId EventCampaign? @relation("Fund25_fk_acc_restriction_campaign", fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_restriction_campaign")
+  @@index([eventCampaignId], map: "idx_acc_restriction_campaign")
+  fund25_classificationJournalId AccountingJournal? @relation("Fund25_fk_acc_restriction_classification", fields: [classificationJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_restriction_classification")
+  fund25_fk_acc_draft_fund_restriction_back AccountingJournalDraft[] @relation("Fund25_fk_acc_draft_fund_restriction")
+}
+
+model AccountingFundDesignation {
+  id                       String         @id @default(uuid()) @map("fund_designation_id") @db.Char(36)
+  accountingFundId         String         @map("accounting_fund_id") @db.Char(36)
+  designationReference     String         @unique(map: "uk_acc_designation_ref") @map("designation_reference") @db.VarChar(100)
+  purposeText              String         @map("purpose_text") @db.VarChar(1000)
+  approvedAt DateTime?       @map("approved_at") @db.DateTime(3)
+  approvedById String?         @map("approved_by") @db.Char(36)
+  status                   String         @default("DRAFT") @db.VarChar(12)
+  createdAt                DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccDesignationActor User?           @relation("fk_acc_designation_actor", fields: [approvedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_designation_actor")
+  relFkAccDesignationFund  AccountingFund @relation("fk_acc_designation_fund", fields: [accountingFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_designation_fund")
+
+  @@index([approvedById], map: "idx_acc_designation_actor")
+  @@index([accountingFundId], map: "idx_acc_designation_fund")
+  @@map("arya_accounting_fund_designation")
+  amount Decimal @map("amount") @db.Decimal(20,2)
+  effectiveOn DateTime @map("effective_on") @db.Date
+  revision Int @map("revision") @default(1) @db.UnsignedInt
+  createdById String @map("created_by") @db.Char(36)
+  updatedById String @map("updated_by") @db.Char(36)
+  fund25_createdById User @relation("Fund25_fk_acc_designation_creator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_designation_creator")
+  @@index([createdById], map: "idx_acc_designation_creator")
+  fund25_updatedById User @relation("Fund25_fk_acc_designation_updater", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_designation_updater")
+  @@index([updatedById], map: "idx_acc_designation_updater")
+  fund25_fk_acc_draft_fund_designation_back AccountingJournalDraft[] @relation("Fund25_fk_acc_draft_fund_designation")
+  fund25_fk_acc_approval_designation_back AccountingApprovalRequest[] @relation("Fund25_fk_acc_approval_designation")
+}
+
+model AccountingOpeningBatch {
+  id                     String               @id @default(uuid()) @map("opening_batch_id") @db.Char(36)
+  fiscalYearId           String               @map("fiscal_year_id") @db.Char(36)
+  batchReference         String               @unique(map: "uk_acc_opening_ref") @map("batch_reference") @db.VarChar(100)
+  effectiveOn            DateTime             @map("effective_on") @db.Date
+  sourceReference        String               @map("source_reference") @db.VarChar(255)
+  journalId              String?              @unique(map: "uk_acc_opening_journal") @map("journal_id") @db.Char(36)
+  createdById            String               @map("created_by") @db.Char(36)
+  createdAt              DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccOpeningActor   User                 @relation("fk_acc_opening_actor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_opening_actor")
+  relFkAccOpeningFy      AccountingFiscalYear @relation("fk_acc_opening_fy", fields: [fiscalYearId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_opening_fy")
+  relFkAccOpeningJournal AccountingJournal?   @relation("fk_acc_opening_journal", fields: [journalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_opening_journal")
+
+  @@index([createdById], map: "idx_acc_opening_actor")
+  @@index([fiscalYearId], map: "idx_acc_opening_fy")
+  @@map("arya_accounting_opening_batch")
+}
+
+model AccountingDocument {
+  acquiredAssets AccountingFixedAsset[] @relation("AssetDocument")
+  accrualDraftId String? @map("accrual_draft_id") @db.Char(36)
+  accrualDraft AccountingJournalDraft? @relation("AccountingAccrualClearing", fields: [accrualDraftId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_accrual")
+  approvalRequests AccountingApprovalRequest[]
+  accountingDate DateTime @map("accounting_date") @db.Date
+  controlAccountId String @map("control_account_id") @db.Char(36)
+  recognitionBasis String @map("recognition_basis") @db.VarChar(1000)
+  revision Int @default(1) @db.UnsignedInt
+  controlAccount AccountingAccount @relation("AccountingDocumentControl", fields: [controlAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_control")
+  id                      String                           @id @default(uuid()) @map("accounting_document_id") @db.Char(36)
+  documentKind            String                           @map("document_kind") @db.VarChar(10)
+  counterpartyId          String                           @map("counterparty_id") @db.Char(36)
+  documentNumber          String                           @map("document_number") @db.VarChar(100)
+  sourceReference         String                           @map("source_reference") @db.VarChar(255)
+  documentDate            DateTime                         @map("document_date") @db.Date
+  dueDate                 DateTime                         @map("due_date") @db.Date
+  status                  String                           @default("DRAFT") @db.VarChar(12)
+  recognitionJournalId    String?                          @unique(map: "uk_acc_doc_journal") @map("recognition_journal_id") @db.Char(36)
+  createdById             String                           @map("created_by") @db.Char(36)
+  createdAt               DateTime                         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime                         @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  relFkAccDocActor        User                             @relation("fk_acc_doc_actor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_actor")
+  relFkAccDocCounterparty AccountingCounterparty           @relation("fk_acc_doc_counterparty", fields: [counterpartyId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_counterparty")
+  relFkAccDocJournal      AccountingJournal?               @relation("fk_acc_doc_journal", fields: [recognitionJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_journal")
+  revFkAccDocAdjustDoc    AccountingDocumentAdjustment[]   @relation("fk_acc_doc_adjust_doc")
+  revFkAccDocLineDoc      AccountingDocumentLine[]         @relation("fk_acc_doc_line_doc")
+  revFkAccScheduleDoc     AccountingSchedule[]             @relation("fk_acc_schedule_doc")
+  revFkAccAllocationDoc   AccountingSettlementAllocation[] @relation("fk_acc_allocation_doc")
+
+  @@unique([id, documentKind, counterpartyId], map: "uk_acc_doc_allocation_ref")
+  @@unique([documentKind, counterpartyId, documentNumber], map: "uk_acc_doc_number")
+  @@unique([documentKind, sourceReference], map: "uk_acc_doc_source")
+  @@index([counterpartyId], map: "fk_acc_doc_counterparty")
+  @@index([createdById], map: "idx_acc_doc_actor")
+  @@index([documentKind, status, dueDate], map: "idx_acc_doc_due")
+  @@index([controlAccountId, accountingDate], map: "idx_acc_doc_control_date")
+  @@map("arya_accounting_document")
+  @@index([accrualDraftId], map: "idx_acc_doc_accrual")
+}
+
+model AccountingDocumentLine {
+  id                      String             @id @default(uuid()) @map("accounting_document_line_id") @db.Char(36)
+  accountingDocumentId    String             @map("accounting_document_id") @db.Char(36)
+  lineNo                  Int                @map("line_no") @db.UnsignedInt
+  accountingAccountId     String             @map("accounting_account_id") @db.Char(36)
+  description             String             @db.VarChar(500)
+  amount                  Decimal            @db.Decimal(20, 2)
+  accountingFundId        String?            @map("accounting_fund_id") @db.Char(36)
+  eventCampaignId         String?            @map("event_campaign_id") @db.Char(36)
+  createdAt               DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccDocLineAccount  AccountingAccount  @relation("fk_acc_doc_line_account", fields: [accountingAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_line_account")
+  relFkAccDocLineCampaign EventCampaign?     @relation("fk_acc_doc_line_campaign", fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_line_campaign")
+  relFkAccDocLineDoc      AccountingDocument @relation("fk_acc_doc_line_doc", fields: [accountingDocumentId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_line_doc")
+  relFkAccDocLineFund     AccountingFund?    @relation("fk_acc_doc_line_fund", fields: [accountingFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_line_fund")
+
+  @@unique([accountingDocumentId, lineNo], map: "uk_acc_doc_line_no")
+  @@index([accountingAccountId], map: "idx_acc_doc_line_account")
+  @@index([eventCampaignId], map: "idx_acc_doc_line_campaign")
+  @@index([accountingFundId], map: "idx_acc_doc_line_fund")
+  @@map("arya_accounting_document_line")
+}
+
+model AccountingSettlement {
+  approvalRequests AccountingApprovalRequest[]
+  bankAccountId String @map("bank_account_id") @db.Char(36)
+  bankGlAccountId String @map("bank_gl_account_id") @db.Char(36)
+  sourceReference String @map("source_reference") @db.VarChar(255)
+  revision Int @default(1) @db.UnsignedInt
+  bankAccount BankAccount @relation("AccountingSettlementBankAccount", fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_settlement_bank_account")
+  bankGlAccount AccountingAccount @relation("AccountingSettlementBankGl", fields: [bankGlAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_settlement_bank_gl")
+  id                           String                           @id @default(uuid()) @map("accounting_settlement_id") @db.Char(36)
+  settlementKind               String                           @map("settlement_kind") @db.VarChar(10)
+  counterpartyId               String                           @map("counterparty_id") @db.Char(36)
+  settlementReference          String                           @map("settlement_reference") @db.VarChar(100)
+  settlementDate               DateTime                         @map("settlement_date") @db.Date
+  amount                       Decimal                          @db.Decimal(20, 2)
+  bankTransactionId            String?                          @map("bank_transaction_id") @db.Char(36)
+  postingJournalId             String?                          @unique(map: "uk_acc_settlement_journal") @map("posting_journal_id") @db.Char(36)
+  status                       String                           @default("DRAFT") @db.VarChar(12)
+  createdById                  String                           @map("created_by") @db.Char(36)
+  createdAt                    DateTime                         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                    DateTime                         @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  relFkAccSettlementActor      User                             @relation("fk_acc_settlement_actor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_settlement_actor")
+  relFkAccSettlementBank       BankTransaction?                 @relation("fk_acc_settlement_bank", fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_settlement_bank")
+  relFkAccSettlementCp         AccountingCounterparty           @relation("fk_acc_settlement_cp", fields: [counterpartyId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_settlement_cp")
+  relFkAccSettlementJournal    AccountingJournal?               @relation("fk_acc_settlement_journal", fields: [postingJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_settlement_journal")
+  revFkAccAllocationSettlement AccountingSettlementAllocation[] @relation("fk_acc_allocation_settlement")
+
+  @@unique([id, settlementKind, counterpartyId], map: "uk_acc_settlement_alloc_ref")
+  @@unique([settlementKind, settlementReference], map: "uk_acc_settlement_ref")
+  @@index([createdById], map: "idx_acc_settlement_actor")
+  @@index([bankTransactionId], map: "idx_acc_settlement_bank")
+  @@index([counterpartyId, settlementDate], map: "idx_acc_settlement_cp_date")
+  @@index([bankAccountId], map: "idx_acc_settlement_bank_account")
+  @@index([bankGlAccountId], map: "idx_acc_settlement_bank_gl")
+  @@map("arya_accounting_settlement")
+}
+
+model AccountingSettlementAllocation {
+  id                           String               @id @default(uuid()) @map("settlement_allocation_id") @db.Char(36)
+  accountingDocumentId         String               @map("accounting_document_id") @db.Char(36)
+  accountingSettlementId       String               @map("accounting_settlement_id") @db.Char(36)
+  documentKind                 String               @map("document_kind") @db.VarChar(10)
+  counterpartyId               String               @map("counterparty_id") @db.Char(36)
+  allocatedAmount              Decimal              @map("allocated_amount") @db.Decimal(20, 2)
+  createdAt                    DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccAllocationDoc        AccountingDocument   @relation("fk_acc_allocation_doc", fields: [accountingDocumentId, documentKind, counterpartyId], references: [id, documentKind, counterpartyId], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_allocation_doc")
+  relFkAccAllocationSettlement AccountingSettlement @relation("fk_acc_allocation_settlement", fields: [accountingSettlementId, documentKind, counterpartyId], references: [id, settlementKind, counterpartyId], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_allocation_settlement")
+
+  @@unique([accountingDocumentId, accountingSettlementId], map: "uk_acc_allocation_pair")
+  @@index([accountingDocumentId, documentKind, counterpartyId], map: "idx_acc_allocation_doc")
+  @@index([accountingSettlementId, documentKind, counterpartyId], map: "idx_acc_allocation_settlement")
+  @@map("arya_accounting_settlement_allocation")
+}
+
+model AccountingDocumentAdjustment {
+  id                       String             @id @default(uuid()) @map("document_adjustment_id") @db.Char(36)
+  accountingDocumentId     String             @map("accounting_document_id") @db.Char(36)
+  adjustmentReference      String             @unique(map: "uk_acc_doc_adjust_ref") @map("adjustment_reference") @db.VarChar(100)
+  adjustmentKind           String             @map("adjustment_kind") @db.VarChar(10)
+  amount                   Decimal            @db.Decimal(20, 2)
+  reason                   String             @db.VarChar(500)
+  adjustmentJournalId      String             @unique(map: "uk_acc_doc_adjust_journal") @map("adjustment_journal_id") @db.Char(36)
+  createdById              String             @map("created_by") @db.Char(36)
+  createdAt                DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccDocAdjustActor   User               @relation("fk_acc_doc_adjust_actor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_adjust_actor")
+  relFkAccDocAdjustDoc     AccountingDocument @relation("fk_acc_doc_adjust_doc", fields: [accountingDocumentId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_adjust_doc")
+  relFkAccDocAdjustJournal AccountingJournal  @relation("fk_acc_doc_adjust_journal", fields: [adjustmentJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_doc_adjust_journal")
+
+  @@index([createdById], map: "idx_acc_doc_adjust_actor")
+  @@index([accountingDocumentId], map: "idx_acc_doc_adjust_doc")
+  @@map("arya_accounting_document_adjustment")
+}
+
+model AccountingSchedule {
+  allocationMethod String @map("allocation_method") @db.VarChar(20)
+  policyEvidence String @map("policy_evidence") @db.VarChar(1000)
+  recognitionBasis String @map("recognition_basis") @db.VarChar(1000)
+  revision Int @default(1) @db.UnsignedInt
+  terminationJournalId String? @unique(map: "uk_acc_schedule_termination") @map("termination_journal_id") @db.Char(36)
+  terminatedOn DateTime? @map("terminated_on") @db.Date
+  terminationJournal AccountingJournal? @relation("AccountingScheduleTermination", fields: [terminationJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_termination")
+  approvals AccountingApprovalRequest[] @relation("AccountingScheduleApproval")
+  id                           String                     @id @default(uuid()) @map("accounting_schedule_id") @db.Char(36)
+  scheduleReference            String                     @unique(map: "uk_acc_schedule_ref") @map("schedule_reference") @db.VarChar(100)
+  scheduleKind                 String                     @map("schedule_kind") @db.VarChar(20)
+  sourceJournalLineId          String                     @map("source_journal_line_id") @db.Char(36)
+  accountingDocumentId         String?                    @map("accounting_document_id") @db.Char(36)
+  recognitionAccountId         String                     @map("recognition_account_id") @db.Char(36)
+  balanceAccountId             String                     @map("balance_account_id") @db.Char(36)
+  plannedAmount                Decimal                    @map("planned_amount") @db.Decimal(20, 2)
+  startDate                    DateTime                   @map("start_date") @db.Date
+  endDate                      DateTime                   @map("end_date") @db.Date
+  status                       String                     @default("DRAFT") @db.VarChar(12)
+  createdById                  String                     @map("created_by") @db.Char(36)
+  createdAt                    DateTime                   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                    DateTime                   @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  relFkAccScheduleActor        User                       @relation("fk_acc_schedule_actor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_actor")
+  relFkAccScheduleBalAccount   AccountingAccount          @relation("fk_acc_schedule_bal_account", fields: [balanceAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_bal_account")
+  relFkAccScheduleDoc          AccountingDocument?        @relation("fk_acc_schedule_doc", fields: [accountingDocumentId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_doc")
+  relFkAccScheduleRecAccount   AccountingAccount          @relation("fk_acc_schedule_rec_account", fields: [recognitionAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_rec_account")
+  relFkAccScheduleSource       AccountingJournalLine      @relation("fk_acc_schedule_source", fields: [sourceJournalLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_source")
+  revFkAccSchedulePeriodParent AccountingSchedulePeriod[] @relation("fk_acc_schedule_period_parent")
+
+  @@index([createdById], map: "idx_acc_schedule_actor")
+  @@index([balanceAccountId], map: "idx_acc_schedule_bal_account")
+  @@index([accountingDocumentId], map: "idx_acc_schedule_doc")
+  @@index([recognitionAccountId], map: "idx_acc_schedule_rec_account")
+  @@index([sourceJournalLineId], map: "idx_acc_schedule_source")
+  @@map("arya_accounting_schedule")
+}
+
+model AccountingSchedulePeriod {
+  recognitionDate DateTime @map("recognition_date") @db.Date
+  approvals AccountingApprovalRequest[] @relation("AccountingSchedulePeriodApproval")
+  id                            String             @id @default(uuid()) @map("schedule_period_id") @db.Char(36)
+  accountingScheduleId          String             @map("accounting_schedule_id") @db.Char(36)
+  accountingPeriodId            String             @map("accounting_period_id") @db.Char(36)
+  plannedAmount                 Decimal            @map("planned_amount") @db.Decimal(20, 2)
+  recognitionJournalId          String?            @unique(map: "uk_acc_schedule_rec_journal") @map("recognition_journal_id") @db.Char(36)
+  createdAt                     DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccSchedulePeriodJournal AccountingJournal? @relation("fk_acc_schedule_period_journal", fields: [recognitionJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_period_journal")
+  relFkAccSchedulePeriodParent  AccountingSchedule @relation("fk_acc_schedule_period_parent", fields: [accountingScheduleId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_period_parent")
+  relFkAccSchedulePeriodPeriod  AccountingPeriod   @relation("fk_acc_schedule_period_period", fields: [accountingPeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_schedule_period_period")
+
+  @@unique([accountingScheduleId, accountingPeriodId], map: "uk_acc_schedule_period")
+  @@index([accountingPeriodId], map: "idx_acc_schedule_period_period")
+  @@map("arya_accounting_schedule_period")
+}
+
+model AccountingAssetCategory {
+  gainAccountId String? @map("gain_account_id") @db.Char(36)
+  lossAccountId String? @map("loss_account_id") @db.Char(36)
+  impairmentExpenseAccountId String? @map("impairment_expense_account_id") @db.Char(36)
+  impairmentAllowanceAccountId String? @map("impairment_allowance_account_id") @db.Char(36)
+  disposalClearingAccountId String? @map("disposal_clearing_account_id") @db.Char(36)
+  policy Json?
+  revision Int @default(1) @db.UnsignedInt
+  gainAccount AccountingAccount? @relation("AssetCategoryGain", fields: [gainAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_gain")
+  lossAccount AccountingAccount? @relation("AssetCategoryLoss", fields: [lossAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_loss")
+  impairmentExpenseAccount AccountingAccount? @relation("AssetCategoryImpairmentExpense", fields: [impairmentExpenseAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_imp_exp")
+  impairmentAllowanceAccount AccountingAccount? @relation("AssetCategoryImpairmentAllowance", fields: [impairmentAllowanceAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_imp_allow")
+  disposalClearingAccount AccountingAccount? @relation("AssetCategoryClearing", fields: [disposalClearingAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_clearing")
+  id                               String                 @id @default(uuid()) @map("asset_category_id") @db.Char(36)
+  categoryCode                     String                 @unique(map: "uk_acc_asset_category_code") @map("category_code") @db.VarChar(40)
+  categoryName                     String                 @map("category_name") @db.VarChar(150)
+  assetAccountId                   String                 @map("asset_account_id") @db.Char(36)
+  accumulatedDepreciationAccountId String                 @map("accumulated_depreciation_account_id") @db.Char(36)
+  depreciationExpenseAccountId     String                 @map("depreciation_expense_account_id") @db.Char(36)
+  defaultUsefulLifeMonths          Int                    @map("default_useful_life_months") @db.UnsignedInt
+  defaultMethod                    String                 @default("STRAIGHT_LINE") @map("default_method") @db.VarChar(20)
+  activeFlag                       Boolean                @default(true) @map("active_flag")
+  createdAt                        DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccAssetCatAccum            AccountingAccount      @relation("fk_acc_asset_cat_accum", fields: [accumulatedDepreciationAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_accum")
+  relFkAccAssetCatAsset            AccountingAccount      @relation("fk_acc_asset_cat_asset", fields: [assetAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_asset")
+  relFkAccAssetCatExp              AccountingAccount      @relation("fk_acc_asset_cat_exp", fields: [depreciationExpenseAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_cat_exp")
+  revFkAccFixedAssetCat            AccountingFixedAsset[] @relation("fk_acc_fixed_asset_cat")
+
+  @@index([accumulatedDepreciationAccountId], map: "idx_acc_asset_cat_accum_account")
+  @@index([assetAccountId], map: "idx_acc_asset_cat_asset_account")
+  @@index([depreciationExpenseAccountId], map: "idx_acc_asset_cat_exp_account")
+  @@map("arya_accounting_asset_category")
+  @@index([gainAccountId], map: "idx_acc_asset_cat_gain")
+  @@index([lossAccountId], map: "idx_acc_asset_cat_loss")
+  @@index([impairmentExpenseAccountId], map: "idx_acc_asset_cat_imp_exp")
+  @@index([impairmentAllowanceAccountId], map: "idx_acc_asset_cat_imp_allow")
+  @@index([disposalClearingAccountId], map: "idx_acc_asset_cat_clearing")
+}
+
+model AccountingFixedAsset {
+  description String? @db.VarChar(1000)
+  location String? @db.VarChar(255)
+  custodianId String? @map("custodian_id") @db.Char(36)
+  vendorId String? @map("vendor_id") @db.Char(36)
+  sourceDocumentId String? @map("source_document_id") @db.Char(36)
+  createdById String @map("created_by") @db.Char(36)
+  updatedById String @map("updated_by") @db.Char(36)
+  revision Int @default(1) @db.UnsignedInt
+  depreciationStartOn DateTime @map("depreciation_start_on") @db.Date
+  policySnapshot Json? @map("policy_snapshot")
+  custodian User? @relation("AssetCustodian", fields: [custodianId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_custodian")
+  vendor AccountingCounterparty? @relation("AssetVendor", fields: [vendorId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_vendor")
+  sourceDocument AccountingDocument? @relation("AssetDocument", fields: [sourceDocumentId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_document")
+  createdBy User @relation("AssetCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_creator")
+  updatedBy User @relation("AssetUpdater", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_asset_updater")
+  changes AccountingJournalDraft[] @relation("AssetDraft")
+  approvals AccountingApprovalRequest[] @relation("AssetApproval")
+  id                         String                           @id @default(uuid()) @map("fixed_asset_id") @db.Char(36)
+  assetCategoryId            String                           @map("asset_category_id") @db.Char(36)
+  assetNumber                String                           @unique(map: "uk_acc_fixed_asset_number") @map("asset_number") @db.VarChar(80)
+  assetName                  String                           @map("asset_name") @db.VarChar(200)
+  acquiredOn                 DateTime                         @map("acquired_on") @db.Date
+  inServiceOn                DateTime                         @map("in_service_on") @db.Date
+  acquisitionCost            Decimal                          @map("acquisition_cost") @db.Decimal(20, 2)
+  residualValue              Decimal                          @default(0.00) @map("residual_value") @db.Decimal(20, 2)
+  usefulLifeMonths           Int                              @map("useful_life_months") @db.UnsignedInt
+  depreciationMethod         String                           @map("depreciation_method") @db.VarChar(20)
+  acquisitionJournalLineId   String                           @unique(map: "uk_acc_fixed_asset_source") @map("acquisition_journal_line_id") @db.Char(36)
+  eventCampaignId            String?                          @map("event_campaign_id") @db.Char(36)
+  status                     String                           @default("DRAFT") @db.VarChar(12)
+  disposalJournalId          String?                          @unique(map: "uk_acc_fixed_asset_disposal") @map("disposal_journal_id") @db.Char(36)
+  disposedOn                 DateTime?                        @map("disposed_on") @db.Date
+  createdAt                  DateTime                         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                  DateTime                         @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  revFkAccDepRunAssetAsset   AccountingDepreciationRunAsset[] @relation("fk_acc_dep_run_asset_asset")
+  relFkAccFixedAssetCampaign EventCampaign?                   @relation("fk_acc_fixed_asset_campaign", fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fixed_asset_campaign")
+  relFkAccFixedAssetCat      AccountingAssetCategory          @relation("fk_acc_fixed_asset_cat", fields: [assetCategoryId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fixed_asset_cat")
+  relFkAccFixedAssetDisposal AccountingJournal?               @relation("fk_acc_fixed_asset_disposal", fields: [disposalJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fixed_asset_disposal")
+  relFkAccFixedAssetSource   AccountingJournalLine            @relation("fk_acc_fixed_asset_source", fields: [acquisitionJournalLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fixed_asset_source")
+
+  @@index([eventCampaignId], map: "idx_acc_fixed_asset_campaign")
+  @@index([assetCategoryId], map: "idx_acc_fixed_asset_cat")
+  @@index([status, inServiceOn], map: "idx_acc_fixed_asset_status")
+  @@map("arya_accounting_fixed_asset")
+  @@index([custodianId], map: "idx_acc_asset_custodian")
+  @@index([vendorId], map: "idx_acc_asset_vendor")
+  @@index([sourceDocumentId], map: "idx_acc_asset_document")
+  @@index([createdById], map: "idx_acc_asset_creator")
+  @@index([updatedById], map: "idx_acc_asset_updater")
+}
+
+model AccountingDepreciationRun {
+  revision Int @default(1) @db.UnsignedInt
+  approvals AccountingApprovalRequest[] @relation("DepreciationRunApproval")
+  id                     String                           @id @default(uuid()) @map("depreciation_run_id") @db.Char(36)
+  accountingPeriodId     String                           @map("accounting_period_id") @db.Char(36)
+  runReference           String                           @unique(map: "uk_acc_dep_run_ref") @map("run_reference") @db.VarChar(100)
+  runDate                DateTime                         @map("run_date") @db.Date
+  status                 String                           @default("DRAFT") @db.VarChar(12)
+  postingJournalId       String?                          @unique(map: "uk_acc_dep_run_journal") @map("posting_journal_id") @db.Char(36)
+  createdById            String                           @map("created_by") @db.Char(36)
+  createdAt              DateTime                         @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccDepRunActor    User                             @relation("fk_acc_dep_run_actor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_run_actor")
+  relFkAccDepRunJournal  AccountingJournal?               @relation("fk_acc_dep_run_journal", fields: [postingJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_run_journal")
+  relFkAccDepRunPeriod   AccountingPeriod                 @relation("fk_acc_dep_run_period", fields: [accountingPeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_run_period")
+  revFkAccDepRunAssetRun AccountingDepreciationRunAsset[] @relation("fk_acc_dep_run_asset_run")
+
+  @@index([createdById], map: "idx_acc_dep_run_actor")
+  @@index([accountingPeriodId], map: "idx_acc_dep_run_period")
+  @@map("arya_accounting_depreciation_run")
+}
+
+model AccountingDepreciationRunAsset {
+  accountingPeriodId String @map("accounting_period_id") @db.Char(36)
+  activePeriodId String? @map("active_period_id") @db.Char(36)
+  assetSnapshot Json @map("asset_snapshot")
+  period AccountingPeriod @relation("DepreciationAssetPeriod", fields: [accountingPeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_asset_period")
+  activePeriod AccountingPeriod? @relation("DepreciationActivePeriod", fields: [activePeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_active_period")
+  id                       String                    @id @default(uuid()) @map("depreciation_run_asset_id") @db.Char(36)
+  depreciationRunId        String                    @map("depreciation_run_id") @db.Char(36)
+  fixedAssetId             String                    @map("fixed_asset_id") @db.Char(36)
+  plannedAmount            Decimal                   @map("planned_amount") @db.Decimal(20, 2)
+  expenseJournalLineId     String?                   @unique(map: "uk_acc_dep_run_exp_line") @map("expense_journal_line_id") @db.Char(36)
+  accumulatedJournalLineId String?                   @unique(map: "uk_acc_dep_run_accum_line") @map("accumulated_journal_line_id") @db.Char(36)
+  relFkAccDepRunAssetAccum AccountingJournalLine?    @relation("fk_acc_dep_run_asset_accum", fields: [accumulatedJournalLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_run_asset_accum")
+  relFkAccDepRunAssetAsset AccountingFixedAsset      @relation("fk_acc_dep_run_asset_asset", fields: [fixedAssetId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_run_asset_asset")
+  relFkAccDepRunAssetExp   AccountingJournalLine?    @relation("fk_acc_dep_run_asset_exp", fields: [expenseJournalLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_run_asset_exp")
+  relFkAccDepRunAssetRun   AccountingDepreciationRun @relation("fk_acc_dep_run_asset_run", fields: [depreciationRunId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_dep_run_asset_run")
+
+  @@unique([depreciationRunId, fixedAssetId], map: "uk_acc_dep_run_asset")
+  @@index([fixedAssetId], map: "idx_acc_dep_run_asset_asset")
+  @@map("arya_accounting_depreciation_run_asset")
+  @@index([accountingPeriodId], map: "idx_acc_dep_asset_period")
+  @@index([activePeriodId], map: "idx_acc_dep_active_period")
+  @@unique([fixedAssetId, activePeriodId], map: "uk_acc_dep_asset_active_period")
+}
+
+model AccountingFundRelease {
+  id                             String                    @id @default(uuid()) @map("fund_release_id") @db.Char(36)
+  fundRestrictionId              String                    @map("fund_restriction_id") @db.Char(36)
+  releaseReference               String                    @unique(map: "uk_acc_fund_release_ref") @map("release_reference") @db.VarChar(100)
+  releaseDate                    DateTime                  @map("release_date") @db.Date
+  releaseReason                  String                    @map("release_reason") @db.VarChar(500)
+  releaseJournalId               String                    @unique(map: "uk_acc_fund_release_journal") @map("release_journal_id") @db.Char(36)
+  createdById                    String                    @map("created_by") @db.Char(36)
+  createdAt                      DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  relFkAccFundReleaseActor       User                      @relation("fk_acc_fund_release_actor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fund_release_actor")
+  relFkAccFundReleaseJournal     AccountingJournal         @relation("fk_acc_fund_release_journal", fields: [releaseJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fund_release_journal")
+  relFkAccFundReleaseRestriction AccountingFundRestriction @relation("fk_acc_fund_release_restriction", fields: [fundRestrictionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_fund_release_restriction")
+
+  @@index([createdById], map: "idx_acc_fund_release_actor")
+  @@index([fundRestrictionId], map: "idx_acc_fund_release_restriction")
+  @@map("arya_accounting_fund_release")
+  amount Decimal @map("amount") @db.Decimal(20,2)
+  satisfactionDate DateTime @map("satisfaction_date") @db.Date
+  eligibilityEvidence String @map("eligibility_evidence") @db.VarChar(1000)
+  evidenceReference String @map("evidence_reference") @db.VarChar(255)
+  evidenceKey String @map("evidence_key") @db.VarChar(100)
+  activeEvidenceKey String? @map("active_evidence_key") @db.VarChar(100)
+  evidenceJournalLineId String? @map("evidence_journal_line_id") @db.Char(36)
+  targetFundId String @map("target_fund_id") @db.Char(36)
+  @@unique([fundRestrictionId, activeEvidenceKey], map: "uk_acc_release_active_evidence")
+  fund25_evidenceJournalLineId AccountingJournalLine? @relation("Fund25_fk_acc_release_evidence", fields: [evidenceJournalLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_release_evidence")
+  @@index([evidenceJournalLineId], map: "idx_acc_release_evidence")
+  fund25_targetFundId AccountingFund @relation("Fund25_fk_acc_release_target", fields: [targetFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_release_target")
+  @@index([targetFundId], map: "idx_acc_release_target")
+}
+
+model AccountingBankReconciliation {
+  id                       String                              @id @default(uuid()) @map("bank_reconciliation_id") @db.Char(36)
+  bankAccountId            String                              @map("bank_account_id") @db.Char(36)
+  accountingPeriodId       String                              @map("accounting_period_id") @db.Char(36)
+  statementUploadId        String?                             @map("statement_upload_id") @db.Char(36)
+  reconciliationReference  String                              @unique(map: "uk_acc_bank_recon_ref") @map("reconciliation_reference") @db.VarChar(100)
+  reconciliationDate       DateTime                            @map("reconciliation_date") @db.Date
+  statementClosingBalance  Decimal                             @map("statement_closing_balance") @db.Decimal(20, 2)
+  status                   String                              @default("OPEN") @db.VarChar(12)
+  closedAt                 DateTime?                           @map("closed_at") @db.DateTime(3)
+  closedById               String?                             @map("closed_by") @db.Char(36)
+  createdById              String                              @map("created_by") @db.Char(36)
+  createdAt                DateTime                            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime                            @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  relFkAccBankReconAccount BankAccount                         @relation("fk_acc_bank_recon_account", fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_recon_account")
+  relFkAccBankReconClosed  User?                               @relation("fk_acc_bank_recon_closed", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_recon_closed")
+  relFkAccBankReconCreated User                                @relation("fk_acc_bank_recon_created", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_recon_created")
+  relFkAccBankReconPeriod  AccountingPeriod                    @relation("fk_acc_bank_recon_period", fields: [accountingPeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_recon_period")
+  relFkAccBankReconUpload  BankStatementUpload?                @relation("fk_acc_bank_recon_upload", fields: [statementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_recon_upload")
+  revFkAccBankMatchRecon   AccountingBankReconciliationMatch[] @relation("fk_acc_bank_match_recon")
+
+  @@index([bankAccountId, accountingPeriodId], map: "idx_acc_bank_recon_account_period")
+  @@index([closedById], map: "idx_acc_bank_recon_closed_by")
+  @@index([createdById], map: "idx_acc_bank_recon_created_by")
+  @@index([accountingPeriodId], map: "idx_acc_bank_recon_period")
+  @@index([statementUploadId], map: "idx_acc_bank_recon_upload")
+  @@map("arya_accounting_bank_reconciliation")
+  bankGlAccountId String @map("bank_gl_account_id") @db.Char(36)
+  statementOpeningBalance Decimal @map("statement_opening_balance") @db.Decimal(20,2)
+  evidence Json @map("evidence")
+  revision Int @map("revision") @default(1) @db.UnsignedInt
+  final26_bankGlAccountId AccountingAccount @relation("Final26_fk_acc_bank_recon_gl", fields: [bankGlAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_recon_gl")
+  @@index([bankGlAccountId], map: "idx_acc_bank_recon_gl")
+  final26_fk_acc_draft_bank_recon_back AccountingJournalDraft[] @relation("Final26_fk_acc_draft_bank_recon")
+  final26_fk_acc_approval_bank_recon_back AccountingApprovalRequest[] @relation("Final26_fk_acc_approval_bank_recon")
+}
+
+model AccountingBankReconciliationMatch {
+  id                         String                       @id @default(uuid()) @map("bank_reconciliation_match_id") @db.Char(36)
+  bankReconciliationId       String                       @map("bank_reconciliation_id") @db.Char(36)
+  bankTransactionId          String                       @map("bank_transaction_id") @db.Char(36)
+  accountingJournalLineId    String                       @map("accounting_journal_line_id") @db.Char(36)
+  matchedAmount              Decimal                      @map("matched_amount") @db.Decimal(20, 2)
+  matchStatus                String                       @default("ACTIVE") @map("match_status") @db.VarChar(10)
+  matchedById                String                       @map("matched_by") @db.Char(36)
+  matchedAt                  DateTime                     @default(now()) @map("matched_at") @db.DateTime(3)
+  voidedAt                   DateTime?                    @map("voided_at") @db.DateTime(3)
+  voidedById                 String?                      @map("voided_by") @db.Char(36)
+  relFkAccBankMatchActor     User                         @relation("fk_acc_bank_match_actor", fields: [matchedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_match_actor")
+  relFkAccBankMatchBank      BankTransaction              @relation("fk_acc_bank_match_bank", fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_match_bank")
+  relFkAccBankMatchLine      AccountingJournalLine        @relation("fk_acc_bank_match_line", fields: [accountingJournalLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_match_line")
+  relFkAccBankMatchRecon     AccountingBankReconciliation @relation("fk_acc_bank_match_recon", fields: [bankReconciliationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_match_recon")
+  relFkAccBankMatchVoidActor User?                        @relation("fk_acc_bank_match_void_actor", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_bank_match_void_actor")
+
+  @@unique([bankTransactionId, accountingJournalLineId], map: "uk_acc_bank_match_pair")
+  @@index([matchedById], map: "idx_acc_bank_match_actor")
+  @@index([accountingJournalLineId], map: "idx_acc_bank_match_line")
+  @@index([bankReconciliationId], map: "idx_acc_bank_match_recon")
+  @@index([voidedById], map: "idx_acc_bank_match_void_actor")
+  @@map("arya_accounting_bank_reconciliation_match")
+}
+
+model AccountingJournalDraft {
+  fixedAssetId String? @map("fixed_asset_id") @db.Char(36)
+  assetMetadata Json? @map("asset_metadata")
+  assetSourceLineId String? @unique(map: "uk_acc_draft_asset_source") @map("asset_source_line_id") @db.Char(36)
+  assetCostLineId String? @unique(map: "uk_acc_draft_asset_cost") @map("asset_cost_line_id") @db.Char(36)
+  fixedAsset AccountingFixedAsset? @relation("AssetDraft", fields: [fixedAssetId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_asset")
+  assetSourceLine AccountingJournalLine? @relation("AssetDraftSource", fields: [assetSourceLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_asset_source")
+  assetCostLine AccountingJournalLine? @relation("AssetDraftCost", fields: [assetCostLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_asset_cost")
+  accrualMetadata Json? @map("accrual_metadata")
+  parentAccrualDraftId String? @map("parent_accrual_draft_id") @db.Char(36)
+  parentAccrual AccountingJournalDraft? @relation("AccountingAccrualAdjustments", fields: [parentAccrualDraftId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_accrual_parent")
+  accrualAdjustments AccountingJournalDraft[] @relation("AccountingAccrualAdjustments")
+  clearingDocuments AccountingDocument[] @relation("AccountingAccrualClearing")
+  id String @id @default(uuid()) @map("journal_draft_id") @db.Char(36)
+  draftNumber String @unique(map: "uk_acc_draft_number") @map("draft_number") @db.VarChar(60)
+  journalType String @map("journal_type") @db.VarChar(20)
+  sourceKind String @map("source_kind") @db.VarChar(30)
+  sourceReference String @map("source_reference") @db.VarChar(110)
+  accountingDate DateTime @map("accounting_date") @db.Date
+  description String? @db.Text
+  revision Int @default(1) @db.UnsignedInt
+  status String @default("DRAFT") @db.VarChar(12)
+  createdById String @map("created_by") @db.Char(36)
+  postedJournalId String? @unique(map: "uk_acc_draft_posted") @map("posted_journal_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  createdBy User @relation("AccountingDraftCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_creator")
+  postedJournal AccountingJournal? @relation("AccountingDraftPosted", fields: [postedJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_posted")
+  lines AccountingJournalDraftLine[]
+  approvalRequests AccountingApprovalRequest[]
+  @@unique([sourceKind, sourceReference], map: "uk_acc_draft_source")
+  @@index([createdById], map: "idx_acc_draft_creator")
+  @@index([accountingDate, status], map: "idx_acc_draft_date")
+  @@map("arya_accounting_journal_draft")
+  @@index([fixedAssetId], map: "idx_acc_draft_asset")
+  @@index([parentAccrualDraftId], map: "idx_acc_draft_accrual_parent")
+  accountingFundId String? @map("accounting_fund_id") @db.Char(36)
+  fundRestrictionId String? @map("fund_restriction_id") @db.Char(36)
+  fundDesignationId String? @map("fund_designation_id") @db.Char(36)
+  fundSourceLineId String? @map("fund_source_line_id") @db.Char(36)
+  fundBankTransactionId String? @map("fund_bank_transaction_id") @db.Char(36)
+  fundActiveBankId String? @map("fund_active_bank_id") @unique(map: "uk_acc_draft_fund_active_bank") @db.Char(36)
+  fundParentId String? @map("fund_parent_id") @db.Char(36)
+  fundMetadata Json? @map("fund_metadata")
+  fund25_accountingFundId AccountingFund? @relation("Fund25_fk_acc_draft_fund", fields: [accountingFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fund")
+  @@index([accountingFundId], map: "idx_acc_draft_fund")
+  fund25_fundRestrictionId AccountingFundRestriction? @relation("Fund25_fk_acc_draft_fund_restriction", fields: [fundRestrictionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fund_restriction")
+  @@index([fundRestrictionId], map: "idx_acc_draft_fund_restriction")
+  fund25_fundDesignationId AccountingFundDesignation? @relation("Fund25_fk_acc_draft_fund_designation", fields: [fundDesignationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fund_designation")
+  @@index([fundDesignationId], map: "idx_acc_draft_fund_designation")
+  fund25_fundSourceLineId AccountingJournalLine? @relation("Fund25_fk_acc_draft_fund_source", fields: [fundSourceLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fund_source")
+  @@index([fundSourceLineId], map: "idx_acc_draft_fund_source")
+  fund25_fundBankTransactionId BankTransaction? @relation("Fund25_fk_acc_draft_fund_bank", fields: [fundBankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fund_bank")
+  @@index([fundBankTransactionId], map: "idx_acc_draft_fund_bank")
+  fund25_fundActiveBankId BankTransaction? @relation("Fund25_fk_acc_draft_fund_active_bank", fields: [fundActiveBankId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fund_active_bank")
+  fund25_fundParentId AccountingJournalDraft? @relation("Fund25_fk_acc_draft_fund_parent", fields: [fundParentId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fund_parent")
+  fund25_fk_acc_draft_fund_parent_back AccountingJournalDraft[] @relation("Fund25_fk_acc_draft_fund_parent")
+  @@index([fundParentId], map: "idx_acc_draft_fund_parent")
+  finalizationMetadata Json? @map("finalization_metadata")
+  fiscalYearId String? @map("fiscal_year_id") @db.Char(36)
+  accountingPeriodId String? @map("accounting_period_id") @db.Char(36)
+  bankReconciliationId String? @map("bank_reconciliation_id") @db.Char(36)
+  final26_fk_acc_fy_policy_draft_back AccountingFiscalYear[] @relation("Final26_fk_acc_fy_policy_draft")
+  final26_fk_acc_fy_closing_draft_back AccountingFiscalYear[] @relation("Final26_fk_acc_fy_closing_draft")
+  final26_fk_acc_period_closing_draft_back AccountingPeriod[] @relation("Final26_fk_acc_period_closing_draft")
+  final26_fiscalYearId AccountingFiscalYear? @relation("Final26_fk_acc_draft_fiscal_year", fields: [fiscalYearId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_fiscal_year")
+  @@index([fiscalYearId], map: "idx_acc_draft_fiscal_year")
+  final26_accountingPeriodId AccountingPeriod? @relation("Final26_fk_acc_draft_period", fields: [accountingPeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_period")
+  @@index([accountingPeriodId], map: "idx_acc_draft_period")
+  final26_bankReconciliationId AccountingBankReconciliation? @relation("Final26_fk_acc_draft_bank_recon", fields: [bankReconciliationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_bank_recon")
+  @@index([bankReconciliationId], map: "idx_acc_draft_bank_recon")
+}
+
+model AccountingJournalDraftLine {
+  id String @id @default(uuid()) @map("journal_draft_line_id") @db.Char(36)
+  journalDraftId String @map("journal_draft_id") @db.Char(36)
+  lineNo Int @map("line_no") @db.UnsignedInt
+  accountId String @map("accounting_account_id") @db.Char(36)
+  debit Decimal @default(0) @db.Decimal(20,2)
+  credit Decimal @default(0) @db.Decimal(20,2)
+  bankAccountId String? @map("bank_account_id") @db.Char(36)
+  accountingFundId String? @map("accounting_fund_id") @db.Char(36)
+  fundRestrictionId String? @map("fund_restriction_id") @db.Char(36)
+  counterpartyId String? @map("counterparty_id") @db.Char(36)
+  draft AccountingJournalDraft @relation(fields: [journalDraftId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_line_draft")
+  account AccountingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_line_account")
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_line_bank")
+  fund AccountingFund? @relation(fields: [accountingFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_line_fund")
+  restriction AccountingFundRestriction? @relation(fields: [fundRestrictionId, accountingFundId], references: [id, accountingFundId], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_line_restriction")
+  counterparty AccountingCounterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_draft_line_cp")
+  @@unique([journalDraftId, lineNo], map: "uk_acc_draft_line_no")
+  @@index([accountId], map: "idx_acc_draft_line_account")
+  @@index([bankAccountId], map: "idx_acc_draft_line_bank")
+  @@index([accountingFundId], map: "idx_acc_draft_line_fund")
+  @@index([fundRestrictionId, accountingFundId], map: "idx_acc_draft_line_restriction")
+  @@index([counterpartyId], map: "idx_acc_draft_line_cp")
+  @@map("arya_accounting_journal_draft_line")
+}
+
+model AccountingApprovalRequest {
+  fixedAssetId String? @map("fixed_asset_id") @db.Char(36)
+  depreciationRunId String? @map("depreciation_run_id") @db.Char(36)
+  fixedAsset AccountingFixedAsset? @relation("AssetApproval", fields: [fixedAssetId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_asset")
+  depreciationRun AccountingDepreciationRun? @relation("DepreciationRunApproval", fields: [depreciationRunId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_dep_run")
+  accountingScheduleId String? @map("accounting_schedule_id") @db.Char(36)
+  accountingSchedulePeriodId String? @map("accounting_schedule_period_id") @db.Char(36)
+  schedule AccountingSchedule? @relation("AccountingScheduleApproval", fields: [accountingScheduleId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_schedule")
+  schedulePeriod AccountingSchedulePeriod? @relation("AccountingSchedulePeriodApproval", fields: [accountingSchedulePeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_schedule_period")
+  id String @id @default(uuid()) @map("accounting_approval_request_id") @db.Char(36)
+  requestKind String @map("request_kind") @db.VarChar(24)
+  sourceDocumentId String @map("source_document_id") @db.Char(36)
+  sourceVersion Int @map("source_version") @db.UnsignedInt
+  sourceDigest String @map("source_digest") @db.Char(64)
+  requestPayload Json? @map("request_payload")
+  status String @default("PENDING") @db.VarChar(12)
+  requestedById String @map("requested_by") @db.Char(36)
+  requestedAt DateTime @default(now()) @map("requested_at") @db.DateTime(3)
+  decidedById String? @map("decided_by") @db.Char(36)
+  decidedAt DateTime? @map("decided_at") @db.DateTime(3)
+  decisionRemark String? @map("decision_remark") @db.VarChar(1000)
+  appliedById String? @map("applied_by") @db.Char(36)
+  appliedAt DateTime? @map("applied_at") @db.DateTime(3)
+  appliedJournalId String? @unique(map: "uk_acc_approval_applied_journal") @map("applied_journal_id") @db.Char(36)
+  journalDraftId String? @map("journal_draft_id") @db.Char(36)
+  accountingDocumentId String? @map("accounting_document_id") @db.Char(36)
+  accountingSettlementId String? @map("accounting_settlement_id") @db.Char(36)
+  accountingPeriodId String? @map("accounting_period_id") @db.Char(36)
+  originalJournalId String? @map("original_journal_id") @db.Char(36)
+  fundRestrictionId String? @map("fund_restriction_id") @db.Char(36)
+  requestedBy User @relation("AccountingApprovalRequester", fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_requester")
+  decidedBy User? @relation("AccountingApprovalDecider", fields: [decidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_decider")
+  appliedBy User? @relation("AccountingApprovalApplier", fields: [appliedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_applier")
+  appliedJournal AccountingJournal? @relation("AccountingApprovalApplied", fields: [appliedJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_applied_journal")
+  journalDraft AccountingJournalDraft? @relation(fields: [journalDraftId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_draft")
+  document AccountingDocument? @relation(fields: [accountingDocumentId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_document")
+  settlement AccountingSettlement? @relation(fields: [accountingSettlementId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_settlement")
+  period AccountingPeriod? @relation(fields: [accountingPeriodId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_period")
+  originalJournal AccountingJournal? @relation("AccountingApprovalOriginal", fields: [originalJournalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_original")
+  restriction AccountingFundRestriction? @relation(fields: [fundRestrictionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_restriction")
+  approvers AccountingApprovalApprover[]
+  history AccountingApprovalHistory[]
+  @@unique([requestKind, sourceDocumentId, sourceVersion], map: "uk_acc_approval_source_version")
+  @@index([status, requestKind, requestedAt], map: "idx_acc_approval_queue")
+  @@index([requestedById], map: "idx_acc_approval_requester")
+  @@index([decidedById], map: "idx_acc_approval_decider")
+  @@index([appliedById], map: "idx_acc_approval_applier")
+  @@index([journalDraftId], map: "idx_acc_approval_draft")
+  @@index([accountingDocumentId], map: "idx_acc_approval_document")
+  @@index([accountingSettlementId], map: "idx_acc_approval_settlement")
+  @@index([accountingPeriodId], map: "idx_acc_approval_period")
+  @@index([originalJournalId], map: "idx_acc_approval_original")
+  @@index([fundRestrictionId], map: "idx_acc_approval_restriction")
+  @@map("arya_accounting_approval_request")
+  @@index([fixedAssetId], map: "idx_acc_approval_asset")
+  @@index([depreciationRunId], map: "idx_acc_approval_dep_run")
+  @@index([accountingScheduleId], map: "idx_acc_approval_schedule")
+  @@index([accountingSchedulePeriodId], map: "idx_acc_approval_schedule_period")
+  accountingFundId String? @map("accounting_fund_id") @db.Char(36)
+  fundDesignationId String? @map("fund_designation_id") @db.Char(36)
+  releaseEvidenceLineId String? @map("release_evidence_line_id") @db.Char(36)
+  fund25_accountingFundId AccountingFund? @relation("Fund25_fk_acc_approval_fund", fields: [accountingFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_fund")
+  @@index([accountingFundId], map: "idx_acc_approval_fund")
+  fund25_fundDesignationId AccountingFundDesignation? @relation("Fund25_fk_acc_approval_designation", fields: [fundDesignationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_designation")
+  @@index([fundDesignationId], map: "idx_acc_approval_designation")
+  fund25_releaseEvidenceLineId AccountingJournalLine? @relation("Fund25_fk_acc_approval_release_evidence", fields: [releaseEvidenceLineId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_release_evidence")
+  @@index([releaseEvidenceLineId], map: "idx_acc_approval_release_evidence")
+  fiscalYearId String? @map("fiscal_year_id") @db.Char(36)
+  bankReconciliationId String? @map("bank_reconciliation_id") @db.Char(36)
+  final26_fiscalYearId AccountingFiscalYear? @relation("Final26_fk_acc_approval_fiscal_year", fields: [fiscalYearId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_fiscal_year")
+  @@index([fiscalYearId], map: "idx_acc_approval_fiscal_year")
+  final26_bankReconciliationId AccountingBankReconciliation? @relation("Final26_fk_acc_approval_bank_recon", fields: [bankReconciliationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_bank_recon")
+  @@index([bankReconciliationId], map: "idx_acc_approval_bank_recon")
+}
+
+model AccountingApprovalApprover {
+  approvalRequestId String @map("accounting_approval_request_id") @db.Char(36)
+  approverUserId String @map("approver_user_id") @db.Char(36)
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.DateTime(3)
+  request AccountingApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_approver_request")
+  user User @relation(fields: [approverUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_approver_user")
+  @@id([approvalRequestId, approverUserId])
+  @@index([approverUserId], map: "idx_acc_approval_approver_user")
+  @@map("arya_accounting_approval_approver")
+}
+
+model AccountingApprovalHistory {
+  id String @id @default(uuid()) @map("accounting_approval_history_id") @db.Char(36)
+  approvalRequestId String @map("accounting_approval_request_id") @db.Char(36)
+  action String @db.VarChar(12)
+  statusBefore String? @map("status_before") @db.VarChar(12)
+  statusAfter String @map("status_after") @db.VarChar(12)
+  actorId String @map("actor_id") @db.Char(36)
+  actionAt DateTime @default(now()) @map("action_at") @db.DateTime(3)
+  sourceDigest String @map("source_digest") @db.Char(64)
+  remark String? @db.VarChar(1000)
+  request AccountingApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_history_request")
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_acc_approval_history_actor")
+  @@index([approvalRequestId, actionAt], map: "idx_acc_approval_history")
+  @@index([actorId], map: "idx_acc_approval_history_actor")
+  @@map("arya_accounting_approval_history")
 }

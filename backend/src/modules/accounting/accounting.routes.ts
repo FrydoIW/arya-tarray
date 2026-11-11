@@ -1,8 +1,27 @@
 import { Router } from "express";
 import { asyncHandler, privateErrorHandler } from "../../lib/http.js";
 import { accountingExportController, accountingJournalController, accountingReportController, accountingOptionsController } from "./accounting.controller.js";
+import { coaRouter } from "./coa/coa.routes.js";
+import { periodRouter } from "./period/period.routes.js";
+import { generalLedgerController, trialBalanceController } from "./ledger/ledger-report.controller.js";
+import { accountingApprovalRouter } from "./approval/approval.routes.js";
+import { aparRouter } from "./apar/apar.routes.js";
+import { scheduleRouter } from "./schedules/schedule.routes.js";
+import { assetRouter } from "./assets/asset.routes.js";
+import { fundRouter } from "./funds/fund.routes.js";
+import { finalizationRouter } from "./finalization/finalization.routes.js";
 
 export const accountingRouter = Router();
+accountingRouter.use(accountingApprovalRouter);
+accountingRouter.use(aparRouter);
+accountingRouter.use(scheduleRouter);
+accountingRouter.use(assetRouter);
+accountingRouter.use(fundRouter);
+accountingRouter.use(finalizationRouter);
+accountingRouter.use("/coa", coaRouter);
+accountingRouter.use("/periods", periodRouter);
+accountingRouter.get("/general-ledger", asyncHandler(generalLedgerController));
+accountingRouter.get("/trial-balance", asyncHandler(trialBalanceController));
 accountingRouter.get("/options", asyncHandler(accountingOptionsController));
 accountingRouter.get("/reports", asyncHandler(accountingReportController));
 accountingRouter.get("/export", asyncHandler(accountingExportController));

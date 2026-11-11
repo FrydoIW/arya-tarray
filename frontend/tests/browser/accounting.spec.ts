@@ -9,6 +9,11 @@ test("Accounting workspace distinguishes preview and review, renders reports and
   await page.route("**/api/auth/login", r => r.fulfill({ json: { token: "synthetic-browser-token", user: actor } }));
   await page.route("**/api/auth/me", r => r.fulfill({ json: actor }));
   await page.route("**/api/accounting/options?*", r => r.fulfill({ json: { banks: [], events: [], campaigns: [], members: [] } }));
+  await page.route("**/api/accounting/periods/fiscal-years", r => r.fulfill({ json: [] }));
+  await page.route("**/api/accounting/coa?*", r => r.fulfill({ json: { rows: [
+    { id: "bank", code: "1110", name: "Backend bank label", activeFlag: true },
+    { id: "income", code: "4110", name: "Backend income label", activeFlag: true }
+  ], page: 1, pageSize: 100, total: 2 } }));
   await page.route("**/api/accounting/reports?*", r => {
     const view = new URL(r.request().url()).searchParams.get("view");
     return r.fulfill({ json: { view, cutoverDate: "2026-11-01", coverage: "Phase 1 journals only; no backfill or opening balance",
@@ -27,6 +32,8 @@ test("Accounting workspace distinguishes preview and review, renders reports and
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page).toHaveURL(/\/accounting$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Accounting", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Open existing Accounting Reports", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Accounting Reports", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Pending Preview", exact: true }).click();
   await expect(page.getByText(/PREVIEW — NOT POSTED/)).toBeVisible();
   await expect(page.getByText("ACCOUNTING REVIEW REQUIRED", { exact: true })).toBeVisible();

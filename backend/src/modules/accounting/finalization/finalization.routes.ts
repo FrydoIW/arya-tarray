@@ -1,0 +1,38 @@
+import { Router } from "express";
+import { asyncHandler } from "../../../lib/http.js";
+import { requireMenuAccess } from "../../../middleware/authorization.js";
+import { ACCOUNTING_MANAGE, ACCOUNTING_POST } from "../approval/approval.repository.js";
+import { finalizationController as c } from "./finalization.controller.js";
+export const finalizationRouter = Router(); const manage = requireMenuAccess(ACCOUNTING_MANAGE), post = requireMenuAccess(ACCOUNTING_POST);
+finalizationRouter.post("/reporting-policies", manage, asyncHandler(c.policy));
+finalizationRouter.get("/finalization-sources/:id", asyncHandler(c.source));
+finalizationRouter.post("/finalization-sources/:id/submit", manage, asyncHandler(c.submit));
+finalizationRouter.post("/finalization-sources/:id/apply", post, asyncHandler(c.apply));
+finalizationRouter.get("/financial-statements", asyncHandler(c.report));
+finalizationRouter.get("/financial-statements/export", asyncHandler(c.export));
+finalizationRouter.get("/financial-statements/position", asyncHandler(c.statement("financialPosition")));
+finalizationRouter.get("/financial-statements/comprehensive-income", asyncHandler(c.statement("comprehensiveIncome")));
+finalizationRouter.get("/financial-statements/net-assets", asyncHandler(c.statement("changesInNetAssets")));
+finalizationRouter.get("/financial-statements/cash-flows", asyncHandler(c.statement("cashFlows")));
+finalizationRouter.get("/financial-statements/trial-balance", asyncHandler(c.statement("trialBalance")));
+finalizationRouter.get("/financial-statements/supporting-schedules", asyncHandler(c.notes));
+finalizationRouter.get("/financial-integrity", asyncHandler(c.integrity));
+finalizationRouter.get("/subledger-reconciliation", asyncHandler(c.reconcile));
+finalizationRouter.post("/report-snapshots", manage, asyncHandler(c.snapshot));
+finalizationRouter.get("/report-snapshots/:id", asyncHandler(c.snapshotDetail));
+for (const [path, type] of [["periods", "PERIOD"], ["fiscal-years", "YEAR"]] as const) {
+  finalizationRouter.get(`/${path}/:id/closing-preview`, asyncHandler(c.closePreview(type)));
+  finalizationRouter.post(`/${path}/:id/close-request`, manage, asyncHandler(c.closeRequest(type, false)));
+  finalizationRouter.post(`/${path}/:id/reopen-request`, manage, asyncHandler(c.closeRequest(type, true)));
+  finalizationRouter.post(`/${path}/:id/apply`, post, asyncHandler(c.apply));
+}
+finalizationRouter.get("/fiscal-years/:id/opening-preparation", asyncHandler(c.opening));
+finalizationRouter.get("/bank-reconciliations", asyncHandler(c.bankList));
+finalizationRouter.post("/bank-reconciliations", manage, asyncHandler(c.bankCreate));
+finalizationRouter.get("/bank-reconciliations/:id", asyncHandler(c.bankGet));
+finalizationRouter.post("/bank-reconciliations/:id/matches", manage, asyncHandler(c.bankMatch));
+finalizationRouter.post("/bank-reconciliations/:id/adjustment-drafts", manage, asyncHandler(c.bankAdjustment));
+finalizationRouter.post("/bank-reconciliations/:id/void-match", manage, asyncHandler(c.bankVoid));
+finalizationRouter.post("/bank-reconciliations/:id/submit", manage, asyncHandler(c.bankSubmit));
+finalizationRouter.post("/bank-reconciliations/:id/reopen-request", manage, asyncHandler(c.bankReopen));
+finalizationRouter.post("/bank-reconciliations/:id/apply", post, asyncHandler(c.apply));

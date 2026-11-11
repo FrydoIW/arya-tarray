@@ -1,12 +1,16 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { currentBusinessMonthValue } from "@/lib/business-time";
-import { exportAccounting, getAccountingJournal } from "../api/accounting.api";
+import { getWorkspaceCache, setWorkspaceCache } from "@/lib/workspace-cache";
+import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
+import { exportAccounting, getAccountingJournal, getAccountingReportAccounts } from "../api/accounting.api";
 import { useAccounting } from "../hooks/useAccounting";
+import { useAccountingRead } from "../hooks/useAccountingRead";
+import { AccountingWorkspaceNavigation, AccountingDataState } from "./AccountingFoundation";
 import type { AccountingRow, AccountingView, JournalDetail } from "../types";
 import styles from "./AccountingScreen.module.css";
 
@@ -26,20 +30,29 @@ function EvidenceTable({ rows, onJournal }: { rows: AccountingRow[]; onJournal?:
     </td>)}</tr>)}</tbody></table></div>;
 }
 
-export function AccountingScreen() {
-  const [view, setView] = useState<AccountingView>("journals");
-  const [filters, setFilters] = useState<Record<string, string>>({ from: `${currentBusinessMonthValue()}-01` });
-  const [memberSearch, setMemberSearch] = useState("");
-  const [page, setPage] = useState(1);
+type ReportSelection = { view: AccountingView; filters: Record<string, string>; memberSearch: string; page: number };
+export function AccountingScreen({ initialView, initialFilters = {}, initialPage }: { initialView?: AccountingView; initialFilters?: Record<string, string>; initialPage?: number }) {
+  const user = useAuthSession(), selectionKey = `accounting:${user.id}:report-selection`;
+  const saved = useRef(getWorkspaceCache<ReportSelection>(selectionKey)?.value);
+  const [view, setView] = useState<AccountingView>(initialView ?? saved.current?.view ?? "journals");
+  const [filters, setFilters] = useState<Record<string, string>>(() => ({ from: `${currentBusinessMonthValue()}-01`, ...saved.current?.filters, ...initialFilters }));
+  const [memberSearch, setMemberSearch] = useState(saved.current?.memberSearch ?? "");
+  const [page, setPage] = useState(initialPage ?? (initialView || Object.keys(initialFilters).length ? 1 : saved.current?.page ?? 1));
   const [detail, setDetail] = useState<JournalDetail | null>(null);
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const detailRequest = useRef<AbortController | null>(null);
   const query = useMemo(() => new URLSearchParams({ ...Object.fromEntries(Object.entries(filters).filter(([,v]) => v)), view, page: String(page) }).toString(), [filters, view, page]);
-  const { report, options, loading, error } = useAccounting(query, memberSearch);
+  const { report, options, loading, error, optionsError, refresh } = useAccounting(query, memberSearch);
+  const accounts = useAccountingRead(`accounting:${user.id}:legacy-report-accounts`, getAccountingReportAccounts);
+  useEffect(() => { setWorkspaceCache(selectionKey, { view, filters, memberSearch, page }); }, [selectionKey, view, filters, memberSearch, page]);
+  useEffect(() => { window.history.replaceState(window.history.state, "", `/accounting/reports?${query}`); }, [query]);
+  useEffect(() => () => detailRequest.current?.abort(), []);
   function change(key: string, value: string) { setFilters(f => ({ ...f, [key]: value })); setPage(1); }
   async function openJournal(id: string) {
-    try { setActionError(""); setDetail(await getAccountingJournal(id)); }
-    catch (e) { setActionError(e instanceof Error ? e.message : "Journal could not load"); }
+    detailRequest.current?.abort(); const controller = new AbortController(); detailRequest.current = controller;
+    try { setActionError(""); const value = await getAccountingJournal(id, controller.signal); if (!controller.signal.aborted) setDetail(value); }
+    catch (e) { if (!controller.signal.aborted) setActionError(e instanceof Error ? e.message : "Journal could not load"); }
   }
   async function download(format: "pdf" | "xlsx") {
     setBusy(true); setActionError("");
@@ -48,11 +61,12 @@ export function AccountingScreen() {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) { setActionError(e instanceof Error ? e.message : "Export failed"); } finally { setBusy(false); }
   }
-  return <main className={styles.page}>
-    <PageHeader breadcrumb={["Accounting", views.find(v => v[0] === view)![1]]} title="Accounting"
+  return <div className={styles.page}>
+    <PageHeader breadcrumb={["Accounting", views.find(v => v[0] === view)?.[1] ?? "Reports"]} title="Accounting Reports"
       description="Original donation recognition and immutable journal evidence. Operational Carry remains allocation evidence."
-      actions={<><Button variant="outline" disabled={busy || loading || !report} onClick={() => download("xlsx")}>Excel</Button>
+      actions={<><Button variant="outline" disabled={loading} onClick={refresh}>Refresh</Button><Button variant="outline" disabled={busy || loading || !report} onClick={() => download("xlsx")}>Excel</Button>
         <Button variant="outline" disabled={busy || loading || !report} onClick={() => download("pdf")}>PDF</Button></>} />
+    <AccountingWorkspaceNavigation />
     <nav className={styles.tabs} aria-label="Accounting reports">{views.map(([key, text]) => <Button key={key}
       variant={view === key ? "primary" : "ghost"} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{text}</Button>)}</nav>
     <Card className={styles.filters}>
@@ -65,9 +79,11 @@ export function AccountingScreen() {
       <label>Event Type<select value={filters.eventType ?? ""} onChange={e => change("eventType", e.target.value)}><option value="">All</option>{["STANDARD", "CAMPAIGN", "TIME_BASED"].map(t => <option key={t}>{t}</option>)}</select></label>
       <label>Journal Type<select value={filters.journalType ?? ""} onChange={e => change("journalType", e.target.value)}><option value="">All</option><option>RECOGNITION</option><option>RECLASSIFICATION</option></select></label>
       <label>Journal number<input value={filters.journalNumber ?? ""} onChange={e => change("journalNumber", e.target.value)} /></label>
-      {view === "ledger" ? <label>Account<select value={filters.accountCode ?? ""} onChange={e => change("accountCode", e.target.value)}><option value="">All</option><option value="1110">1110 Bank</option><option value="4110">4110 Contribution Revenue</option></select></label> : null}
+      {view === "ledger" ? <label>Account<select disabled={accounts.loading || !!accounts.error} value={filters.accountCode ?? ""} onChange={e => change("accountCode", e.target.value)}><option value="">All</option>{accounts.data?.map(account => <option key={account.id} value={account.code}>{account.code} {account.name}{account.activeFlag ? "" : " (inactive)"}</option>)}</select></label> : null}
     </Card>
-    {error || actionError ? <div className="ui-alert ui-alert-error" role="alert">{error || actionError}</div> : null}
+    {view === "ledger" ? <><AccountingDataState {...accounts} onRetry={accounts.refresh} /><p className={styles.coverage}>Account labels come from COA. This existing donation report supports only its original recognition accounts; full-GL account management is a later workspace.{accounts.data?.length === 0 ? " No compatible accounts are available." : ""}</p></> : null}
+    {optionsError ? <div className="ui-alert ui-alert-error" role="alert">{optionsError}<Button variant="ghost" size="sm" onClick={refresh}>Retry filters</Button></div> : null}
+    {error || actionError ? <div className="ui-alert ui-alert-error" role="alert">{error || actionError}{error ? <Button variant="ghost" size="sm" onClick={refresh}>Retry report</Button> : null}</div> : null}
     {loading ? <p role="status">Loading Accounting…</p> : report ? <>
       <p className={styles.coverage}>Cutover: {report.cutoverDate}. {report.coverage}. {report.preview ? "PREVIEW — NOT POSTED" : ""}</p>
       {!["pending", "reconciliation"].includes(view) ? <Card className={styles.totals}><span>Debit <strong>{report.totalDebit}</strong></span>
@@ -80,16 +96,18 @@ export function AccountingScreen() {
       </Card>
       {report.additions.length ? <Card><h2>Proposed manual additions — first {report.additionsLimit}</h2><p>ACCOUNTING REVIEW REQUIRED. Approval remains operational; no automatic GL.</p><EvidenceTable rows={report.additions} /></Card> : null}
     </> : null}
-    <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.journalNumber ?? "Journal evidence"} description="Immutable posted evidence">
+    <Modal open={!!detail} onClose={() => { detailRequest.current?.abort(); setDetail(null); }} title={detail?.journalNumber ?? "Journal evidence"} description="Immutable posted evidence">
       {detail ? <div className={styles.detail}><p>{detail.journalType} · {detail.accountingDate} · Posted {new Date(detail.postedAt).toLocaleString("en-GB", { timeZone: "Asia/Jakarta" })} Jakarta</p>
         <p className={styles.state} data-review={detail.state === "ACCOUNTING_REVIEW_REQUIRED"}>{detail.state.replaceAll("_", " ")}</p>
-        <p>Source: {detail.bankTransaction.id} · Statement: {detail.bankTransaction.statementUpload.fileName} ({detail.bankTransaction.statementUpload.id})</p>
-        <p>Approval: {detail.bankTransaction.statementUpload.approval?.id} · {detail.bankTransaction.statementUpload.approval?.status}</p>
+        {detail.bankTransaction ? <>
+          <p>Source: {detail.bankTransaction.id} · Statement: {detail.bankTransaction.statementUpload.fileName} ({detail.bankTransaction.statementUpload.id})</p>
+          <p>Approval: {detail.bankTransaction.statementUpload.approval?.id} · {detail.bankTransaction.statementUpload.approval?.status}</p>
+        </> : <p>Source: non-bank journal · {detail.sourceEventKey}</p>}
         <p>Idempotency evidence: {detail.sourceEventKey}</p><p>{detail.descriptionSnapshot}</p>
         {detail.correctionItem ? <p>Correction: {detail.correctionItem.id} · Proposal: {detail.correctionItem.proposalId}</p> : null}
         {detail.relatedJournalId ? <Button variant="ghost" onClick={() => openJournal(detail.relatedJournalId!)}>Original recognition</Button> : null}
         {detail.linkedJournals.map(j => <Button key={j.id} variant="ghost" onClick={() => openJournal(j.id)}>{j.journalType}: {j.journalNumber}</Button>)}
         <EvidenceTable rows={detail.lines} /></div> : null}
     </Modal>
-  </main>;
+  </div>;
 }

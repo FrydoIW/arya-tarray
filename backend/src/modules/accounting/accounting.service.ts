@@ -1,5 +1,5 @@
 import { accountingCutoverDate, accountingDateValue, accountingState, recognitionLines, reclassificationLines, accountingCents, accountingTotalCents } from "./accounting.domain.js";
-import { mapAccountingDimension, mapAccountingSource } from "./accounting.posting.js";
+import { bankAccountingDimension, mapAccountingDimension, mapAccountingSource } from "./accounting.posting.js";
 import { loadAccountingJournal, loadAccountingReport, loadAccountingOptions } from "./accounting.repository.js";
 import type { AccountingQuery } from "./accounting.schema.js";
 import { centsToDecimal } from "../../lib/money.js";
@@ -42,7 +42,9 @@ export async function getAccountingReport(q: AccountingQuery, exportAll = false)
       else if (item?.action === "MODIFIED" && recognition && source.transactionDate && source.transactionDate >= cutover) {
         const prior = row.accountingJournals.at(-1)?.lines.find(l => l.accountCodeSnapshot === "4110" && l.credit.greaterThan(0));
         const original = recognition.lines.find(l => l.accountCodeSnapshot === "4110" && l.credit.greaterThan(0));
-        if (prior && original) lines = reclassificationLines(original.credit.toFixed(2), prior, { ...mapAccountingDimension(row),
+        const previousDimension = prior ? bankAccountingDimension(prior) : null;
+        if (prior && !previousDimension) state = "ACCOUNTING_REVIEW_REQUIRED";
+        if (previousDimension && original) lines = reclassificationLines(original.credit.toFixed(2), previousDimension, { ...mapAccountingDimension(row),
           eventCodeId: item.proposedEventCodeId, eventCodeSnapshot: item.proposedEventCode?.code ?? null,
           eventNameSnapshot: item.proposedEventCode?.eventName ?? null, eventTypeSnapshot: item.proposedEventCode?.eventType ?? null,
           eventCampaignId: item.proposedEventCampaignId, campaignNameSnapshot: item.proposedEventCampaign?.campaignName ?? null });
@@ -80,6 +82,6 @@ export async function getAccountingJournal(id: string) {
   const journal = await loadAccountingJournal(id);
   if (!journal) throw new HttpError(404, "Accounting journal not found");
   return { ...journal, accountingDate: accountingDateValue(journal.accountingDate),
-    state: journal.bankTransaction.reconciliationExcludedAt ? "ACCOUNTING_REVIEW_REQUIRED" : "POSTED",
+    state: journal.bankTransaction?.reconciliationExcludedAt ? "ACCOUNTING_REVIEW_REQUIRED" : "POSTED",
     lines: journal.lines.map(line => ({ ...line, debit: line.debit.toFixed(2), credit: line.credit.toFixed(2) })) };
 }

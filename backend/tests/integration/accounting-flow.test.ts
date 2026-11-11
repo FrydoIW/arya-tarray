@@ -13,6 +13,7 @@ import { createCarryTransfer, createCampaignWalletTransfer, reverseCarryTransfer
 import { moveIdentity, detachIdentity } from "../../src/modules/member/data/member-data.repository.js";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
+import { assertConnectedTestDatabase, requireSafeTestDatabaseUrl } from "./test-database.js";
 
 async function scenario(work: (f: FinancialFixture) => Promise<void>) {
   const f = new FinancialFixture();
@@ -81,6 +82,58 @@ test("Accounting failure and serialization abort roll back the whole approval be
     assert.equal(await prisma.accountingJournal.count({ where: { bankTransactionId: row.transactionId } }), 1);
   } finally { client.$transaction = original as never; }
 }));
+
+test("missing cutover rolls back approval, statement finalization and all journal writes", async () => scenario(async f => {
+  const row = await receipt(f);
+  const cutover = process.env.ACCOUNTING_CUTOVER_DATE;
+  try {
+    delete process.env.ACCOUNTING_CUTOVER_DATE;
+    await assert.rejects(decideSignApprovalAtomic({ approvalId: row.approvalId!, userId: f.userId,
+      decision: "APPROVED" }), /ACCOUNTING_CUTOVER_DATE/);
+  } finally {
+    if (cutover === undefined) delete process.env.ACCOUNTING_CUTOVER_DATE;
+    else process.env.ACCOUNTING_CUTOVER_DATE = cutover;
+  }
+  assert.equal((await prisma.reconciliationApproval.findUniqueOrThrow({ where: { id: row.approvalId! } })).status, "PENDING");
+  assert.equal((await prisma.bankStatementUpload.findUniqueOrThrow({ where: { id: row.statementId } })).status, "CHECK");
+  assert.equal((await prisma.bankTransaction.findUniqueOrThrow({ where: { id: row.transactionId } })).status, "CHECK");
+  assert.equal(await prisma.accountingJournal.count({ where: { bankTransactionId: row.transactionId } }), 0);
+  assert.equal(await prisma.reconciliationApprovalHistory.count({ where: { approvalId: row.approvalId! } }), 0);
+}));
+
+test("closed period rejects bank donation and rolls back the complete finalization", async () => {
+  const fiscalYearId = randomUUID();
+  const periodId = randomUUID();
+  let created = false;
+  try {
+    await scenario(async f => {
+      await prisma.accountingFiscalYear.create({ data: { id: fiscalYearId,
+        yearCode: `T-${fiscalYearId.slice(0, 12)}`, startDate: new Date("3001-01-01"), endDate: new Date("3001-12-31") } });
+      created = true;
+      await prisma.accountingPeriod.create({ data: { id: periodId, fiscalYearId, periodNo: 11,
+        periodCode: `T-${periodId.slice(0, 12)}`, startDate: new Date("3001-11-01"),
+        endDate: new Date("3001-11-30"), status: "CLOSED", closedAt: new Date() } });
+      const row = await receipt(f, "STANDARD", "3001-11-01");
+      await assert.rejects(decideSignApprovalAtomic({ approvalId: row.approvalId!, userId: f.userId,
+        decision: "APPROVED" }), /open accounting period/);
+      assert.equal((await prisma.reconciliationApproval.findUniqueOrThrow({ where: { id: row.approvalId! } })).status, "PENDING");
+      assert.equal((await prisma.bankStatementUpload.findUniqueOrThrow({ where: { id: row.statementId } })).status, "CHECK");
+      assert.equal((await prisma.bankTransaction.findUniqueOrThrow({ where: { id: row.transactionId } })).status, "CHECK");
+      assert.equal(await prisma.accountingJournal.count({ where: { bankTransactionId: row.transactionId } }), 0);
+    });
+  } finally {
+    if (created) {
+      requireSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL,
+        { aryaEnv: process.env.ARYA_ENV, allowWrites: process.env.ALLOW_TEST_INTEGRATION_WRITES });
+      const selected = await prisma.$queryRaw<Array<{ name: string }>>`SELECT DATABASE() AS name`;
+      assertConnectedTestDatabase(selected[0]?.name);
+      await prisma.accountingPeriod.deleteMany({ where: { id: periodId } });
+      await prisma.accountingFiscalYear.deleteMany({ where: { id: fiscalYearId } });
+      assert.equal(await prisma.accountingPeriod.count({ where: { id: periodId } }), 0);
+      assert.equal(await prisma.accountingFiscalYear.count({ where: { id: fiscalYearId } }), 0);
+    }
+  }
+});
 
 test("Accounting pre-cutover and rejected receipts do not fabricate history", async () => scenario(async f => {
   const pre = await receipt(f, "STANDARD", "2026-09-30");

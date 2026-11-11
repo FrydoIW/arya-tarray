@@ -248,7 +248,7 @@ test("approved correction preserves proposal, remark evidence, snapshot, and FIN
   });
 });
 
-test("shared DEV cleanup preserves other ownership scopes and seeded configuration", async () => {
+test("TEST fixture cleanup preserves other ownership scopes and provisioned configuration", async () => {
   const first = new FinancialFixture();
   const retained = new FinancialFixture();
   try {

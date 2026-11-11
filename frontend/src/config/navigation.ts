@@ -154,17 +154,33 @@ export const navigation: NavigationGroup[] = [
   },
   {
     menuCode: "ACCOUNTING", label: "Accounting", icon: Landmark,
-    children: [{ menuCode: "ACCOUNTING_REPORT", label: "Accounting Reports", icon: Landmark, href: "/accounting", enabled: true }]
+    children: [{ menuCode: "ACCOUNTING_REPORT", label: "Accounting", icon: Landmark, href: "/accounting", enabled: true }]
   }
 ];
 
 export function getNavigationTitle(pathname: string) {
-  for (const group of navigation) {
-    const child = group.children.find((item) => item.href && (item.href === pathname || pathname.startsWith(`${item.href}/`)));
-    if (child) return child.label;
-  }
+  return getNavigationByPathname(pathname)?.label ?? "Arya Tarray";
+}
 
-  return "Arya Tarray";
+// Workspace subpages share the existing menu grant; they are not new registry/menu entries.
+export function getWorkspaceNavigationPages(): NavigationChild[] {
+  return [...navigation.flatMap(group => group.children),
+    ...[
+      ["/accounting/reports", "Accounting Reports"], ["/accounting/coa", "Chart of Accounts"],
+      ["/accounting/journals", "Accounting Journals"], ["/accounting/approvals", "Accounting Approval"],
+      ["/accounting/general-ledger", "General Ledger"], ["/accounting/trial-balance", "Trial Balance"],
+      ["/accounting/periods", "Fiscal Years & Periods"],
+      ["/accounting/payables", "Accounts Payable"], ["/accounting/receivables", "Accounts Receivable"],
+      ["/accounting/accruals", "Accruals"], ["/accounting/schedules", "Prepayments & Deferred Income"],
+      ["/accounting/assets", "Fixed Assets"],
+      ["/accounting/funds", "Fund Accounting"],
+      ["/accounting/financial-reports", "Financial Statements"],
+      ["/accounting/reconciliation/bank", "Bank-to-GL Reconciliation"],
+      ["/accounting/reconciliation/subledgers", "Subledger Reconciliation"],
+      ["/accounting/reconciliation", "Accounting Reconciliation"],
+      ["/accounting/closing", "Period & Year Closing"],
+      ["/accounting/counterparties", "Counterparties"]
+    ].map(([href, label]) => ({ menuCode: "ACCOUNTING_REPORT", label, icon: Landmark, href, enabled: true }))];
 }
 
 export function getNavigationByMenuCode(menuCode: string) {
@@ -178,12 +194,8 @@ export function getNavigationByMenuCode(menuCode: string) {
 }
 
 export function getNavigationByPathname(pathname: string) {
-  for (const group of navigation) {
-    const child = group.children.find((item) => item.href && (item.href === pathname || pathname.startsWith(`${item.href}/`)));
-    if (child) return child;
-  }
-
-  return undefined;
+  return getWorkspaceNavigationPages().filter(item => item.href && (item.href === pathname || pathname.startsWith(`${item.href}/`)))
+    .sort((left, right) => (right.href?.length ?? 0) - (left.href?.length ?? 0))[0];
 }
 
 export function getDefaultNavigationPath(menuCodes: string[]) {

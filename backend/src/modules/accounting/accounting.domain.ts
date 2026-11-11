@@ -1,5 +1,6 @@
 import { centsToDecimal, decimalStringToCents } from "../../lib/money.js";
 import { isOfficialDonationCandidate } from "../member/member-donation.rules.js";
+import { HttpError } from "../../lib/http.js";
 
 export const ACCOUNTING_MENU_CODE = "ACCOUNTING_REPORT";
 export const ACCOUNTING_ACCOUNTS = [
@@ -49,11 +50,11 @@ export type AccountingLineDraft = AccountingDimension & {
 /** Required deployment configuration; missing/invalid values never imply a historical cutover. */
 export function parseAccountingCutover(value: string | undefined): Date {
   if (!value || !/^\d{4}-(0[1-9]|1[0-2])-01$/.test(value)) {
-    throw new Error("ACCOUNTING_CUTOVER_DATE must be the approved first day of a month (YYYY-MM-01).");
+    throw new HttpError(409, "ACCOUNTING_CUTOVER_DATE must be the approved first day of a month (YYYY-MM-01).");
   }
   const date = new Date(`${value}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-    throw new Error("Invalid ACCOUNTING_CUTOVER_DATE.");
+    throw new HttpError(409, "Invalid ACCOUNTING_CUTOVER_DATE.");
   }
   return date;
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../src/lib/prisma.js";
-import { requireSafeTestDatabaseUrl, assertConnectedDevDatabase } from "./test-database.js";
+import { requireSafeTestDatabaseUrl, assertConnectedTestDatabase } from "./test-database.js";
 import { loadBackendTestEnvironment } from "./test-environment.js";
 
 const testDate = new Date("2026-09-01T00:00:00.000Z");
@@ -20,9 +20,9 @@ export class FinancialFixture {
   async setup() {
     loadBackendTestEnvironment();
     requireSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL,
-      { aryaEnv: process.env.ARYA_ENV, allowWrites: process.env.ALLOW_DEV_INTEGRATION_WRITES });
+      { aryaEnv: process.env.ARYA_ENV, allowWrites: process.env.ALLOW_TEST_INTEGRATION_WRITES });
     const selected = await prisma.$queryRaw<Array<{ name: string | null }>>`SELECT DATABASE() AS name`;
-    assertConnectedDevDatabase(selected[0]?.name);
+    assertConnectedTestDatabase(selected[0]?.name);
     await prisma.user.create({ data: {
       id: this.userId, fullName: "Integration Test Actor", email: `integration-${this.userId}@example.invalid`,
       passwordHash: "not-a-login-account", status: "ACTIVE"
@@ -102,9 +102,9 @@ export class FinancialFixture {
   async cleanup() {
     // Failed setup/guards must not run cleanup against an unverified connection either.
     requireSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL,
-      { aryaEnv: process.env.ARYA_ENV, allowWrites: process.env.ALLOW_DEV_INTEGRATION_WRITES });
+      { aryaEnv: process.env.ARYA_ENV, allowWrites: process.env.ALLOW_TEST_INTEGRATION_WRITES });
     const selected = await prisma.$queryRaw<Array<{ name: string | null }>>`SELECT DATABASE() AS name`;
-    assertConnectedDevDatabase(selected[0]?.name);
+    assertConnectedTestDatabase(selected[0]?.name);
     const memberId = { in: this.memberIds };
     const identityId = { in: this.identityIds };
     const statementId = { in: this.statementIds };
@@ -114,6 +114,7 @@ export class FinancialFixture {
 
     // Test-only, fixture-scoped cleanup; Accounting has no application deletion API.
     const accountingSource = { bankTransaction: { is: { statementUploadId: statementId } } };
+    await prisma.accountingJournalDraft.deleteMany({ where: { sourceKind: "FINALIZATION_AUDIT", createdById: this.userId, sourceReference: { startsWith: "JRNAUDIT-" } } });
     await prisma.accountingJournalLine.deleteMany({ where: { journal: { is: accountingSource } } });
     await prisma.accountingJournal.deleteMany({ where: { ...accountingSource, relatedJournalId: { not: null } } });
     await prisma.accountingJournal.deleteMany({ where: accountingSource });
@@ -144,5 +145,16 @@ export class FinancialFixture {
     await prisma.eventCode.deleteMany({ where: { id: { in: this.eventCodeIds } } });
     await prisma.bankAccount.deleteMany({ where: { id: this.bankAccountId } });
     await prisma.user.deleteMany({ where: { id: this.userId } });
+    const remaining = await Promise.all([
+      prisma.user.count({ where: { id: this.userId } }),
+      prisma.bankAccount.count({ where: { id: this.bankAccountId } }),
+      prisma.bankStatementUpload.count({ where: { id: statementId } }),
+      prisma.bankTransaction.count({ where: { id: transactionId } }),
+      prisma.member.count({ where: { id: memberId } }),
+      prisma.memberIdentity.count({ where: { id: identityId } }),
+      prisma.eventCode.count({ where: { id: { in: this.eventCodeIds } } }),
+      prisma.accountingJournal.count({ where: { postedById: this.userId } })
+    ]);
+    if (remaining.some(count => count !== 0)) throw new Error("TEST fixture cleanup left owned rows behind.");
   }
 }

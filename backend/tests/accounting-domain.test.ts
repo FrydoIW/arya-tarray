@@ -7,6 +7,7 @@ import {
   parseAccountingCutover, recognitionEligible, recognitionLines, reclassificationLines,
   type AccountingDimension, type AccountingSource
 } from "../src/modules/accounting/accounting.domain.js";
+import { bankAccountingDimension } from "../src/modules/accounting/accounting.posting.js";
 
 const cutover = parseAccountingCutover("2026-11-01");
 const source: AccountingSource = {
@@ -131,19 +132,32 @@ test("reclassification cannot inherit persisted journal/line keys", () => {
   for (const line of lines) for (const key of ["id", "journalId", "accountId", "createdAt"]) assert.equal(key in line, false);
 });
 
-test("schema-only integration snapshot matches every Prisma table without production patch execution", () => {
+test("Phase 1 bank dimension requires all original bank snapshots", () => {
+  assert.deepEqual(bankAccountingDimension(dimension), dimension);
+  for (const key of ["bankAccountId", "bankNameSnapshot", "bankAccountNoSnapshot", "bankAccountNameSnapshot"] as const) {
+    assert.equal(bankAccountingDimension({ ...dimension, [key]: null }), null);
+  }
+});
+
+test("baseline snapshot and reviewed Accounting migration cover every Prisma table", () => {
   const schema = readFileSync(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
   const sql = readFileSync(new URL("./integration/current-schema.mysql.sql", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../../database/accounting-full-accrual-stage1.mysql.sql", import.meta.url), "utf8");
+  const approvalSql = readFileSync(new URL("../../database/accounting-stage2-approval-proposal.mysql.sql", import.meta.url), "utf8");
   const models = [...schema.matchAll(/@@map\("(arya_[^"]+)"\)/g)].map(match => match[1]).sort();
   const tables = [...sql.matchAll(/^CREATE TABLE `([^`]+)`/gm)].map(match => match[1]);
-  assert.deepEqual(tables, models);
+  const added = [...migration.matchAll(/^CREATE TABLE `([^`]+)`/gm)].map(match => match[1]);
+  const approval = [...approvalSql.matchAll(/^CREATE TABLE `([^`]+)`/gm)].map(match => match[1]);
   assert.equal(tables.length, 35);
+  assert.equal(added.length, 21);
+  assert.equal(approval.length, 5);
+  assert.deepEqual([...tables, ...added, ...approval].sort(), models);
   assert.doesNotMatch(sql, /^\s*(?:INSERT|REPLACE|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE DATABASE|USE|GRANT|CREATE USER|LOAD DATA)\b/im);
   assert.match(sql, /ck_accounting_line_sides/);
   assert.match(sql, /uk_accounting_source_event/);
 });
 
-test("local manual SQL patches are ignored", () => {
-  assert.match(execFileSync("git", ["check-ignore", ".local/sql-patches/accounting-phase1-v1.mysql.sql"],
+test("local manual SQL patch path matches the ignore rule even when tracked", () => {
+  assert.match(execFileSync("git", ["check-ignore", "--no-index", ".local/sql-patches/accounting-phase1-v1.mysql.sql"],
     { cwd: new URL("../../", import.meta.url), encoding: "utf8" }), /accounting-phase1-v1/);
 });

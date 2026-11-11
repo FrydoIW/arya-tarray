@@ -11,8 +11,9 @@ Never run current Accounting code against the pre-Accounting PROD schema.
 
 ## Current approved local state
 
-- DEV: `arya_tarray_dev`, application and fixture-scoped integration tests.
-- DEV-only Accounting cutover: `2026-10-01`, based on transaction date; no backfill.
+- DEV: `arya_tarray_dev`, application database. Current Stage 2.1 instructions prohibit writing integration tests here; the previous shared-DEV fixture authorization is historical.
+- DEV-only Accounting cutover: `2026-10-01`, explicitly reapproved and activated under `AT-ST21-20261105-01` scope C, based on transaction date with no backfill. FY2026 is calendar-year OPEN; October/November/December periods are OPEN.
+- Current DEV: 61 tables, including 29 Accounting models after approved Stage 2.1. Isolated `arya_tarray_test` also has 61 tables and only minimal synthetic configuration masters. This separately approved provisioning did not restore retired data or run from test startup.
 - Local PROD: `arya_tarray_prod`, restored from only the former original database's
   private recovery section; 32 application tables plus preserved migration metadata.
   Existing presentation users/data were preserved, not reseeded. No Accounting
@@ -30,6 +31,14 @@ No legacy user credentials, donor/identity/bank/statement/transaction data or te
 journals were copied. Configure synthetic bank/approval settings in the UI as needed.
 This DEV provisioning is not an automatic workflow for another environment.
 
+The 35-table provisioning paragraph above is historical. Later Stage 1 reached
+56 tables and approved Stage 2.1 reached 61; see `accounting-stage2.1-complete.md`
+for current schema, backup and test evidence. Existing Statement Upload approval
+configuration remains unchanged. Accounting approvers are configured with
+`/api/accounting/approval-settings` under CONFIG_APPROVAL after the intended
+users receive the separate Accounting role/menu permissions. No new grants or
+approver assignments were applied automatically.
+
 The local server is MySQL 8.0.42 (supports the enforced constraints); the deployment
 target remains MySQL 8.4. DEV runtime principal `arya_tarray_dev_local` has only
 SELECT/INSERT/UPDATE/DELETE on the exact DEV database, no global/other database/DDL
@@ -40,17 +49,40 @@ URLs, passwords, tokens or reference contents in diagnostics or Git.
 
 ## Integration safety
 
-Set `ARYA_ENV=DEV` and `ALLOW_DEV_INTEGRATION_WRITES=true` in active `.env`.
-Both app/test URLs must match and select exactly loopback MySQL `arya_tarray_dev`.
-No URL query/fragment connection overrides are supported by the integration guard.
-The explicit loader refuses inherited conflicting mode, URLs, acknowledgment or
-cutover before connecting. `SELECT DATABASE()` must also match before fixtures.
+Current Stage 2.1 tests require a separately approved/provisioned loopback MySQL
+`arya_tarray_test` database and a TEST-only DML principal. No test command creates,
+restores, migrates or seeds a schema. Historical database retirement does not grant
+permission to recreate a database; new TEST provisioning needs its own approved
+operational record.
+
+Supply `ARYA_ENV=TEST`, `TEST_DATABASE_URL`, `ALLOW_TEST_INTEGRATION_WRITES=true`
+and an explicit fixture-compatible `ACCOUNTING_CUTOVER_DATE` to the test process.
+Do not change active `.env` for tests. The loader imports only non-selection local
+settings such as authentication configuration; it never imports the DEV database
+URL, cutover or old DEV write acknowledgment. An inherited `DATABASE_URL`, if set,
+must already match TEST. The selected URL must name exactly `arya_tarray_test`,
+with no query/fragment overrides; `SELECT DATABASE()` is checked again before
+schema inspection, fixture setup and cleanup. DEV and PROD are rejected.
 
 `npm run test:db:verify` and old alias `test:db:bootstrap` are read-only preflight,
 not provisioning/reset commands. Normal test startup never imports the SQL snapshot.
 Fixture setup/cleanup recheck safety and operate only on recorded UUID/ownership
-scopes. Run integration tests only on local DEV, not on legacy/test/PROD or
-any arbitrary database. Do not change configuration during a test run.
+scopes, then verify owned rows are absent. The TEST schema must match the current
+Prisma contract and have the required test masters and open period for the
+November 2026 Accounting fixtures. The TEST cutover must be after 2026-09-30 and
+no later than 2026-11-01; this is fixture configuration, not DEV/PROD policy.
+Do not change configuration during a test run. The approved TEST-only connection
+is now configured privately outside Git. To run without printing credentials or
+changing active DEV `.env`, use:
+
+```powershell
+node D:/arya-tarray-change-records/AT-ST21-20261105-01-execution/run-integration.mjs
+```
+
+37/37 integration tests passed. Verified cleanup leaves only 2 account masters,
+1 menu, 1 fiscal year and 3 periods. No fixture users, operational data, drafts,
+approval/history or journals remain. The temporary administrator connection file
+used for provisioning was removed; repeat test execution uses TEST DML only.
 
 ## DataGrip
 
@@ -86,6 +118,12 @@ existing user's password was available. Password login and browser rendering rem
 manual checks; users/password hashes were preserved without reset.
 
 ## Operational recovery and future release
+
+Current Stage 2.1 approval/execution records are in access-controlled
+`D:/arya-tarray-change-records/`, with the actual decision recorded in
+`AT-ST21-20261105-01-APPROVED.md` and completion in
+`AT-ST21-20261105-01-COMPLETED.md`. The historical AppData record location below
+is unavailable on this computer and was not treated as current approval evidence.
 
 Keep the private recovery dumps, env/datasource backups and archived one-time
 scripts access controlled. They are recovery evidence, not current setup tools.

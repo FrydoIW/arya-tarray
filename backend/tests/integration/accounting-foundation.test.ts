@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../../src/lib/prisma.js";
 import { FinancialFixture } from "./financial-fixture.js";
 import { Prisma } from "@prisma/client";
+import { readFileSync } from "node:fs";
 
 // The restricted DEV DML principal receives MySQL 1216 rather than detailed 1452/P2003.
 // Still require a specific FK/integrity error; arbitrary connection/query errors must fail.
@@ -13,11 +14,13 @@ function foreignKeyViolation(error: unknown): boolean {
       && /MysqlError \{ code: 1216, message: "Cannot add or update a child row: a foreign key constraint fails", state: "23000" \}/.test(error.message);
 }
 
-test("Accounting Foundation has the three tables and two approved posting accounts", async () => {
+test("Accounting Foundation matches the current Accounting model tables and approved posting accounts", async () => {
   const tables = await prisma.$queryRaw<Array<{ name: string }>>`SELECT TABLE_NAME AS name
     FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'arya_accounting_%' ORDER BY TABLE_NAME`;
-  assert.equal(tables.length, 3);
-  const accounts = await prisma.accountingAccount.findMany({ orderBy: { code: "asc" } });
+  const schema = readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
+  const expected = [...schema.matchAll(/@@map\("(arya_accounting_[^"]+)"\)/g)].map(match => match[1]).sort();
+  assert.deepEqual(tables.map(table => table.name), expected);
+  const accounts = await prisma.accountingAccount.findMany({ where: { code: { in: ["1110", "4110"] } }, orderBy: { code: "asc" } });
   assert.deepEqual(accounts.map(a => [a.code, a.accountType, a.normalBalance, a.postingFlag, a.activeFlag]),
     [["1110", "ASSET", "DEBIT", true, true], ["4110", "REVENUE", "CREDIT", true, true]]);
 });

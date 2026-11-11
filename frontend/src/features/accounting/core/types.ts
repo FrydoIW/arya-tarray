@@ -1,0 +1,41 @@
+import type { AccountingAccount, AccountingPage } from '../types';
+import type { accountTypes, normalBalances, draftJournalTypes } from './contracts.generated';
+
+export type AccountInput = {
+  code: string; name: string; accountType: typeof accountTypes[number];
+  normalBalance: typeof normalBalances[number]; parentAccountId: string | null;
+  accountClassification: string | null; reportSection: string | null;
+  contraFlag: boolean; postingFlag: boolean; activeFlag: boolean;
+};
+export type DraftLine = { id?: string; lineNo?: number; accountId: string; debit: string; credit: string;
+  bankAccountId?: string | null; accountingFundId?: string | null; fundRestrictionId?: string | null; counterpartyId?: string | null };
+export type DraftInput = { journalType: typeof draftJournalTypes[number]; accountingDate: string;
+  sourceReference: string; description: string | null; lines: DraftLine[] };
+export type DraftHeader = { id: string; draftNumber: string; journalType: string; accountingDate: string;
+  description: string | null; revision: number; status: string; postedJournalId: string | null };
+export type Draft = DraftHeader & DraftInput & { createdById: string; sourceKind: string };
+export type Approval = { id: string; requestKind: string; sourceDocumentId: string; sourceVersion: number;
+  sourceDigest: string; requestedById: string; requestedAt: string; status: string;
+  decidedById: string | null; decidedAt: string | null; decisionRemark: string | null;
+  appliedJournalId: string | null };
+export type ApprovalDetail = Approval & { approvers: { approverUserId: string }[];
+  history: { id: string; action: string; statusBefore: string | null; statusAfter: string; actorId: string; actionAt: string; sourceDigest: string; remark: string | null }[];
+  historyLimit: number; source: unknown; requestPayload: unknown };
+export type LedgerLine = { id: string; lineNo: number; accountId: string; accountCodeSnapshot: string;
+  accountNameSnapshot: string; debit: string; credit: string; runningBalance: string | null;
+  journal: { id: string; journalNumber: string; journalType: string; accountingDate: string;
+    sourceKind: string; sourceReference: string | null; postedAt: string } };
+export type Ledger = AccountingPage<LedgerLine> & { openingBalances: { accountId: string; balance: string }[];
+  closingBalances: { accountId: string; balance: string }[]; totalDebit: string; totalCredit: string };
+export type TrialRow = Pick<AccountingAccount, 'id' | 'code' | 'name' | 'accountType' | 'normalBalance'> & {
+  openingDebit: string; openingCredit: string; movementDebit: string; movementCredit: string;
+  closingDebit: string; closingCredit: string; accountClassification: string | null; reportSection: string | null };
+export type Trial = AccountingPage<TrialRow> & { asOf: string; totalDebit: string; totalCredit: string; balanced: boolean };
+export type CoreJournal = { id: string; journalNumber: string; journalType: string; accountingDate: string;
+  postedAt: string; postedById: string | null; createdById?: string; accountingPeriodId: string | null;
+  sourceKind: string; sourceReference: string | null; sourceEventKey: string; state: string;
+  descriptionSnapshot: string | null; relatedJournalId: string | null; reversalOfJournalId: string | null;
+  linkedJournals: { id: string; journalNumber: string; journalType: string }[];
+  lines: { id: string; lineNo: number; accountId: string; accountCodeSnapshot: string; accountNameSnapshot: string;
+    debit: string; credit: string; accountingFundId: string | null; bankAccountId: string | null }[];
+  bankTransaction: { id: string; referenceNo: string | null; statementUpload: { id: string; fileName: string } } | null };

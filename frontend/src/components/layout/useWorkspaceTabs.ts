@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getDefaultNavigationPath, getNavigationByPathname, navigation } from "@/config/navigation";
+import { getDefaultNavigationPath, getNavigationByPathname, getWorkspaceNavigationPages } from "@/config/navigation";
 import { WORKSPACE_TABS_KEY } from "@/lib/workspace-tabs-session";
 
 export type WorkspaceTab = {
@@ -11,7 +11,7 @@ export type WorkspaceTab = {
 };
 
 function availablePages(allowedMenuCodes: Set<string>) {
-  return navigation.flatMap((group) => group.children).filter((page) =>
+  return getWorkspaceNavigationPages().filter((page) =>
     page.enabled && page.href && allowedMenuCodes.has(page.menuCode)
   );
 }
