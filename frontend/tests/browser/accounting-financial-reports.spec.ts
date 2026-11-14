@@ -140,7 +140,7 @@ test('Stage38 exports use the existing DRAFT CSV/XLSX backend contract and exact
   const f = await setupFinancialReportsBrowser(page);
   await page.goto(financialReports());
   await expect(page.getByRole('heading', { name: 'Statement of Financial Position', exact: true })).toBeVisible();
-  for (const [label, format] of [['Export CSV', 'csv'], ['Export XLSX', 'xlsx']] as const) {
+  for (const [label, format] of [['Export DRAFT Summary + TB (CSV)', 'csv'], ['Export DRAFT Summary + TB (XLSX)', 'xlsx']] as const) {
     const wait = page.waitForEvent('download');
     await page.getByRole('button', { name: label, exact: true }).click();
     expect((await wait).suggestedFilename()).toBe(`AryaTarray-financial-DRAFT-2026-12-31.${format}`);
@@ -148,6 +148,37 @@ test('Stage38 exports use the existing DRAFT CSV/XLSX backend contract and exact
     expect(call?.query.get('from')).toBe('2026-10-01');
     expect(call?.query.get('to')).toBe('2026-12-31');
   }
+  expect(f.errors).toEqual([]);
+});
+
+test('Stage38 export labels and DRAFT scope disclosure appear on every statement tab', async ({ page }) => {
+  const f = await setupFinancialReportsBrowser(page);
+  await page.goto(financialReports());
+  const views: Array<[string, string]> = [
+    ['Financial Position', 'Statement of Financial Position'],
+    ['Comprehensive Income', 'Statement of Comprehensive Income'],
+    ['Changes in Net Assets', 'Statement of Changes in Net Assets'],
+    ['Cash Flows', 'Statement of Cash Flows'],
+    ['Supporting Schedules', 'Accounting policy & adopted mappings']
+  ];
+  for (const [tab, heading] of views) {
+    await page.getByRole('link', { name: tab, exact: true }).click();
+    await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export DRAFT Summary + TB (CSV)', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export DRAFT Summary + TB (XLSX)', exact: true })).toBeVisible();
+    await expect(page.getByText(/contains only the DRAFT financial summary/)).toBeVisible();
+    await expect(page.getByText('This export is not an official financial statement.')).toBeVisible();
+  }
+  expect(f.errors).toEqual([]);
+});
+
+test('Stage38 export backend errors are displayed without claiming success', async ({ page }) => {
+  const f = await setupFinancialReportsBrowser(page);
+  await page.goto(financialReports());
+  await expect(page.getByRole('button', { name: 'Export DRAFT Summary + TB (CSV)', exact: true })).toBeEnabled();
+  await page.route('**/api/accounting/financial-statements/export**', route => route.fulfill({ status: 503, json: { message: 'Synthetic export service unavailable' } }));
+  await page.getByRole('button', { name: 'Export DRAFT Summary + TB (CSV)', exact: true }).click();
+  await expect(page.locator('.ui-alert-error')).toContainText('Synthetic export service unavailable');
   expect(f.errors).toEqual([]);
 });
 
@@ -188,7 +219,7 @@ test('Stage38 report-only access can read and export but receives no posting, ap
   const f = await setupFinancialReportsBrowser(page, ['ACCOUNTING_REPORT']);
   await page.goto(financialReports());
   await expect(page.getByRole('heading', { name: 'Statement of Financial Position', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Export CSV', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Export DRAFT Summary + TB (CSV)', exact: true })).toBeEnabled();
   await expect(page.locator('.page-stage').getByRole('button', { name: /Approve|Post|Close|Create|Submit/ })).toHaveCount(0);
   expect(f.calls.every(call => call.method === 'GET')).toBe(true);
   expect(f.errors).toEqual([]);

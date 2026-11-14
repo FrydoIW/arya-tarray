@@ -20,6 +20,9 @@ import { day } from "../../src/modules/accounting/finalization/finalization.repo
 import { createFiscalYear, createPeriod } from "../../src/modules/accounting/period/period.service.js";
 import { createDesignation, createFundCommand } from "../../src/modules/accounting/funds/fund.service.js";
 import { fundCommandSchema } from "../../src/modules/accounting/funds/fund.schema.js";
+import { getSchedule } from "../../src/modules/accounting/schedules/schedule.service.js";
+import { submitScheduleCommand } from "../../src/modules/accounting/schedules/schedule.workflow.js";
+import type { ScheduleCommand } from "../../src/modules/accounting/schedules/schedule.schema.js";
 import jwt from "jsonwebtoken";
 async function readyDonation(f: FinalizationFixture) {
   await f.policy(); const d = await f.donation(); await f.signBank("20000000.00", "2026-11", [{ bankId: d.bank.transactionId, lineId: d.bankLine.id, amount: "20000000.00" }]); return d;
@@ -245,4 +248,63 @@ test("Stage26 HTTP reports, permissions, reconciliation and DRAFT exports preser
     const report = await (await fetch(`${url}/financial-statements?${query}`, { headers })).json(); assert.equal(report.financialPosition.assets, "20000000.00"); const csv = await fetch(`${url}/financial-statements/export?${query}&format=csv`, { headers }); assert.equal(csv.status, 200); assert.match(await csv.text(), /DRAFT|20000000.00/); const xlsx = await fetch(`${url}/financial-statements/export?${query}&format=xlsx`, { headers }); assert.equal(xlsx.status, 200); assert.ok((await xlsx.arrayBuffer()).byteLength > 1000);
     const role = f.approval.roleIds[3]; assert.ok(role); await prisma.roleMenu.deleteMany({ where: { roleId: role } }); const denied = await fetch(`${url}/financial-statements?${query}`, { headers: { Authorization: `Bearer ${jwt.sign({ sub: f.approval.outsiderId }, env.jwtSecret)}` } }); assert.equal(denied.status, 403);
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+}));
+
+async function closedOctoberPrepaymentSchedule(f: FinalizationFixture) {
+  const counterparty = await f.counterparty("PAYABLE"), input = f.documentInput("PAYABLE", counterparty, "12000000.00");
+  input.documentDate = "2026-10-01"; input.accountingDate = "2026-10-02"; input.dueDate = "2026-10-31";
+  input.lines[0].accountingAccountId = f.arControl;
+  const document = await createDocument(f.actor, "PAYABLE", input), request = await submitSource(f.actor, "PAYABLE", "DOCUMENT", document.id, document.revision);
+  await f.approve(request.id); const journal = await postSource(f.poster, "PAYABLE", "DOCUMENT", document.id, request.id);
+  const sourceLine = journal.lines.find(row => row.accountId === f.arControl); assert.ok(sourceLine);
+  const scheduleInput = f.scheduleInput("PREPAYMENT", sourceLine.id, "12000000.00"); scheduleInput.startDate = "2026-10-01"; scheduleInput.endDate = "2026-12-31";
+  const schedule = await f.schedule(scheduleInput), october = schedule.revFkAccSchedulePeriodParent[0];
+  const recognized = await f.recognize(october.id); const octoberJournal = recognized.journal; assert.ok(octoberJournal);
+  await f.policy(); await f.signBank("0.00", "2026-10"); await f.close("2026-10");
+  return { schedule, october, octoberJournal };
+}
+
+test("Stage23 schedule CHANGE after October close uses the first open unposted period and preserves closed evidence", async () => finalScenario(async f => {
+  const { schedule, october, octoberJournal } = await closedOctoberPrepaymentSchedule(f);
+  const before = await getSchedule(f.actor, schedule.id), pending = before.revFkAccSchedulePeriodParent.filter(period => !period.recognitionJournalId);
+  assert.equal(before.remaining, "8000000.00"); assert.equal(pending.length, 2);
+  assert.equal((await prisma.accountingPeriod.findUniqueOrThrow({ where: { id: october.accountingPeriodId } })).status, "CLOSED");
+  const change: ScheduleCommand = { action: "CHANGE", reason: "Synthetic TEST reviewed prospective post-close reallocation", periods: pending.map(period => ({
+    accountingPeriodId: period.accountingPeriodId, recognitionDate: period.recognitionDate.toISOString().slice(0, 10), plannedAmount: "4000000.00" })) };
+  const request = await submitScheduleCommand(f.actor, schedule.id, before.revision, change);
+  await assert.rejects(decideApproval(f.approval.outsiderId, request.id, "APPROVED", null), { status: 403 });
+  await f.approve(request.id); const applied = await applyApprovedAction(f.poster, request.id);
+  assert.equal("action" in applied ? applied.action : null, "CHANGE");
+  assert.equal("financialJournalCreated" in applied ? applied.financialJournalCreated : true, false);
+  const after = await getSchedule(f.actor, schedule.id), storedOctober = after.revFkAccSchedulePeriodParent.find(period => period.id === october.id);
+  assert.equal(after.status, "ACTIVE"); assert.equal(after.remaining, "8000000.00"); assert.equal(after.controlReconciliation.reconciled, true);
+  assert.equal(storedOctober?.recognitionJournalId, octoberJournal.id);
+  assert.equal(after.revFkAccSchedulePeriodParent.filter(period => period.recognitionJournalId).length, 1);
+  assert.equal(await prisma.accountingJournal.count({ where: { sourceKind: "SCHEDULE_RECOGNITION", postedById: { in: f.approval.actorIds } } }), 1);
+  assert.equal((await prisma.accountingJournal.findUniqueOrThrow({ where: { id: octoberJournal.id } })).accountingDate.toISOString().slice(0, 10), "2026-10-31");
+  const retroactive: ScheduleCommand = { action: "CHANGE", reason: "Synthetic TEST retroactive October change attempt", periods: after.revFkAccSchedulePeriodParent.map(period => ({
+    accountingPeriodId: period.accountingPeriodId, recognitionDate: period.recognitionDate.toISOString().slice(0, 10), plannedAmount: "4000000.00" })) };
+  await assert.rejects(submitScheduleCommand(f.actor, schedule.id, after.revision, retroactive), /existing unposted periods/);
+  const november = await prisma.accountingPeriod.findUniqueOrThrow({ where: { periodCode: "2026-11" } });
+  try {
+    await prisma.accountingPeriod.update({ where: { id: november.id }, data: { status: "CLOSED", closedAt: new Date() } });
+    await assert.rejects(submitScheduleCommand(f.actor, schedule.id, after.revision, change), /must be OPEN/);
+    await assert.rejects(submitScheduleCommand(f.actor, schedule.id, after.revision, { action: "CANCEL", reason: "Synthetic TEST closed-period cancellation attempt" }), /must be OPEN/);
+  } finally {
+    await prisma.accountingPeriod.update({ where: { id: november.id }, data: { status: november.status, closedAt: november.closedAt } });
+  }
+}));
+
+test("Stage23 schedule CANCEL after October close remains nonfinancial and preserves the unamortized GL balance", async () => finalScenario(async f => {
+  const { schedule, octoberJournal } = await closedOctoberPrepaymentSchedule(f);
+  const before = await getSchedule(f.actor, schedule.id);
+  assert.equal(before.remaining, "8000000.00");
+  const request = await submitScheduleCommand(f.actor, schedule.id, before.revision, { action: "CANCEL", reason: "Synthetic TEST prospective cancellation after October close" });
+  await f.approve(request.id); const applied = await applyApprovedAction(f.poster, request.id);
+  assert.equal("action" in applied ? applied.action : null, "CANCEL");
+  assert.equal("financialJournalCreated" in applied ? applied.financialJournalCreated : true, false);
+  const after = await getSchedule(f.actor, schedule.id);
+  assert.equal(after.status, "CANCELLED"); assert.equal(after.remaining, "8000000.00"); assert.equal(after.controlReconciliation.reconciled, true);
+  assert.equal(await prisma.accountingJournal.count({ where: { sourceKind: "SCHEDULE_RECOGNITION", postedById: { in: f.approval.actorIds } } }), 1);
+  assert.ok(await prisma.accountingJournal.findUnique({ where: { id: octoberJournal.id } }));
 }));

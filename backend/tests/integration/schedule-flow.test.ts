@@ -254,3 +254,14 @@ test("A reversed termination cannot fund a new recognition before restoration da
   const input = f.scheduleInput("PREPAYMENT", source.line.id, "6000000.00"); input.startDate = "2026-12-01"; input.endDate = "2026-12-15";
   await assert.rejects(createSchedule(f.actor, input), /cannot predate/);
 }));
+
+test("Schedule CANCEL of a draft schedule is nonfinancial and releases unused source capacity", async () => scheduleScenario(async f => {
+  const source = await f.source("PREPAYMENT"), schedule = await f.schedule(f.scheduleInput("PREPAYMENT", source.line.id), false);
+  assert.equal(schedule.status, "DRAFT");
+  await f.command(schedule.id, schedule.revision, { action: "CANCEL", reason: "Synthetic TEST draft cancellation evidence" });
+  const cancelled = await getSchedule(f.actor, schedule.id);
+  assert.equal(cancelled.status, "CANCELLED"); assert.equal(cancelled.remaining, "12000000.00");
+  assert.equal(await prisma.accountingJournal.count({ where: { sourceKind: "SCHEDULE_RECOGNITION", postedById: { in: f.approval.actorIds } } }), 0);
+  const next = await f.schedule({ ...f.scheduleInput("PREPAYMENT", source.line.id), startDate: "2026-12-01", endDate: "2026-12-31" });
+  assert.equal(next.plannedAmount.toFixed(2), "12000000.00");
+}));

@@ -10,7 +10,7 @@ const sourceSelect = {
   originalJournal: { select: { id: true } },
   period: { select: periodDates },
   final26_fiscalYearId: { select: periodDates },
-  schedule: { select: { id: true, startDate: true } },
+  schedule: { select: { id: true, startDate: true, revFkAccSchedulePeriodParent: { select: { recognitionDate: true, recognitionJournalId: true } } } },
   schedulePeriod: { select: { id: true, recognitionDate: true, relFkAccSchedulePeriodPeriod: { select: periodDates } } },
   fixedAsset: { select: { id: true, relFkAccFixedAssetSource: { select: { journal: { select: { accountingDate: true } } } } } },
   depreciationRun: { select: { id: true, runDate: true, relFkAccDepRunPeriod: { select: periodDates } } },
@@ -29,6 +29,10 @@ function datedPeriod(value: unknown, period: { startDate: Date; endDate: Date })
   const date = day(value), start = day(period.startDate), end = day(period.endDate);
   return date && start && end && start <= date && date <= end ? date : null;
 }
+function earliestUnposted(schedule: { revFkAccSchedulePeriodParent: { recognitionDate: Date; recognitionJournalId: string | null }[] } | null | undefined) {
+  return (schedule?.revFkAccSchedulePeriodParent ?? []).filter(period => !period.recognitionJournalId)
+    .map(period => day(period.recognitionDate)).filter((value): value is string => Boolean(value)).sort()[0] ?? null;
+}
 /** Dates mirror each existing source adapter; requestedAt is deliberately not selected. */
 export function closingApprovalDate(r: ClosingApprovalSource): string | null {
   const same = (source: { id: string } | null) => source?.id === r.sourceDocumentId;
@@ -45,8 +49,10 @@ export function closingApprovalDate(r: ClosingApprovalSource): string | null {
     case "JOURNAL_REVERSAL": return same(r.originalJournal) ? day(payload?.accountingDate) : null;
     case "PERIOD_CLOSE": case "PERIOD_REOPEN": return same(r.period) ? day(r.period?.endDate) : null;
     case "YEAR_CLOSE": case "YEAR_REOPEN": return same(r.final26_fiscalYearId) ? day(r.final26_fiscalYearId?.endDate) : null;
-    case "SCHEDULE_SETUP": case "SCHEDULE_CHANGE": case "SCHEDULE_CANCEL":
-      return same(r.schedule) && command?.action === r.requestKind.slice(9) ? day(r.schedule?.startDate) : null;
+    case "SCHEDULE_SETUP":
+      return same(r.schedule) && command?.action === "SETUP" ? day(r.schedule?.startDate) : null;
+    case "SCHEDULE_CHANGE": case "SCHEDULE_CANCEL":
+      return same(r.schedule) && command?.action === r.requestKind.slice(9) ? earliestUnposted(r.schedule) : null;
     case "SCHEDULE_TERMINATE": return same(r.schedule) && command?.action === "TERMINATE" ? day(command.accountingDate) : null;
     case "SCHEDULE_PERIOD": return same(r.schedulePeriod) && r.schedulePeriod ? datedPeriod(r.schedulePeriod.recognitionDate, r.schedulePeriod.relFkAccSchedulePeriodPeriod) : null;
     case "ASSET_ACTIVATE": return same(r.fixedAsset) ? day(r.fixedAsset?.relFkAccFixedAssetSource.journal.accountingDate) : null;

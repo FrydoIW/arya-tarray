@@ -11,6 +11,14 @@ import type { PlanInput, ScheduleInput, ScheduleCommand } from "./schedule.schem
 export function configuredPeriods(tx: Prisma.TransactionClient, start: string, end: string) {
   return tx.accountingPeriod.findMany({ where: { startDate: { lte: day(end) }, endDate: { gte: day(start) } }, orderBy: { startDate: "asc" }, take: 241 });
 }
+async function requireOpenSchedulePeriods(tx: Prisma.TransactionClient, periodIds: string[]) {
+  const ids = [...new Set(periodIds)];
+  if (!ids.length) throw new HttpError(409, "Schedule command requires at least one unposted accounting period.");
+  const periods = await tx.accountingPeriod.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, relFkAccPeriodFy: { select: { status: true } } } });
+  if (periods.length !== ids.length || periods.some(period => period.status !== "OPEN" || period.relFkAccPeriodFy.status !== "OPEN")) {
+    throw new HttpError(409, "Every affected accounting period and fiscal year must be OPEN.");
+  }
+}
 export function previewSchedule(actorId: string, input: PlanInput) {
   return aparTransaction(async tx => { await requireAccountingPermission(tx, actorId, ACCOUNTING_MANAGE);
     if (day(input.startDate) < accountingCutoverDate()) throw new HttpError(409, "Schedule cannot predate Accounting cutover.");
@@ -66,6 +74,10 @@ export async function validateScheduleCommand(tx: Prisma.TransactionClient, id: 
       await configuredPeriods(tx, dateText(schedule.startDate), dateText(schedule.endDate)));
     const last = periods.filter(p => p.recognitionJournalId).at(-1)?.recognitionDate ?? schedule.relFkAccScheduleSource.journal.accountingDate;
     if (command.periods.some(p => day(p.recognitionDate) < last)) throw new HttpError(409, "Revised recognition cannot predate posted activity.");
+    await requireOpenSchedulePeriods(tx, command.periods.map(p => p.accountingPeriodId));
+  }
+  if (command.action === "CANCEL") {
+    await requireOpenSchedulePeriods(tx, periods.filter(p => !p.recognitionJournalId).map(p => p.accountingPeriodId));
   }
   if (command.action === "TERMINATE") {
     if (schedule.status !== "ACTIVE" || accountingCents(scheduleAmounts(schedule).remaining) <= 0n) throw new HttpError(409, "Only an active remaining balance can be terminated.");

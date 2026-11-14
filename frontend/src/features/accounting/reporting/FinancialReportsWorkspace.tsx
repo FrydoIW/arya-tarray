@@ -123,8 +123,8 @@ export function FinancialReportsWorkspace({ initialStatement = 'position', initi
   const refreshing = activeRead.loading || fiscal.loading;
   return <CorePage title="Financial Statements" description="Posted-GL financial statements, policy readiness and supporting evidence. Official publication requires approved accounting policy and professional review."
     actions={<><Button variant="outline" disabled={!reportScope || refreshing} onClick={() => { fiscal.refresh(); activeRead.refresh(); }}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
-      <Button variant="outline" disabled={!canExport} onClick={() => void download('csv')}>{exporting === 'csv' ? 'Preparing CSV…' : 'Export CSV'}</Button>
-      <Button variant="outline" disabled={!canExport} onClick={() => void download('xlsx')}>{exporting === 'xlsx' ? 'Preparing XLSX…' : 'Export XLSX'}</Button></>}>
+      <Button variant="outline" disabled={!canExport} onClick={() => void download('csv')}>{exporting === 'csv' ? 'Preparing DRAFT CSV…' : 'Export DRAFT Summary + TB (CSV)'}</Button>
+      <Button variant="outline" disabled={!canExport} onClick={() => void download('xlsx')}>{exporting === 'xlsx' ? 'Preparing DRAFT XLSX…' : 'Export DRAFT Summary + TB (XLSX)'}</Button></>}>
     <CoreCard>
       <div className={styles.filters}>
         <CoreField label="Fiscal year"><Select aria-label="Fiscal year" value={scope.yearId} disabled={fiscal.loading} onChange={event => changeYear(event.target.value)}>
@@ -146,6 +146,7 @@ export function FinancialReportsWorkspace({ initialStatement = 'position', initi
       {dateMessage ? <p role="alert" className={styles.warning}>{dateMessage}</p> : null}
       {selectedPeriod ? <div className={styles.actions}><AccountingStatusIndicator status={selectedPeriod.status} /><span className={styles.note}>Selected period {selectedPeriod.periodCode}: {day(selectedPeriod.startDate)}–{day(selectedPeriod.endDate)}. The report uses the explicit dates above.</span></div> : null}
       <p className={styles.note}>The request uses these exact calendar dates and the selected fiscal year. There is no silent fallback to a different reporting period. Comparative dates are resolved by the backend to the fiscal year and adopted policy that cover them.</p>
+      <p className={styles.note}><strong>Export contents:</strong> CSV/XLSX contains only the DRAFT financial summary (position totals and surplus/deficit) and Trial Balance lines. It does not contain the full statement views or supporting schedules. This export is not an official financial statement.</p>
       <div className={styles.actions}><Link className={styles.link} href={glHref()}>Open General Ledger</Link><Link className={styles.link} href={tbHref}>Open Trial Balance</Link><Link className={styles.link} href="/accounting/reports">Existing donation reports</Link><Link className={styles.link} href="/accounting/reconciliation">Reconciliation & closing</Link></div>
     </CoreCard>
     <nav className={styles.statementTabs} aria-label="Financial statement views">

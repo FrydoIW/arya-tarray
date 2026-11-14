@@ -16,6 +16,10 @@ export const isScheduleKind = (kind: string) => ["SCHEDULE_SETUP", "SCHEDULE_CHA
 export const isStage23Kind = (kind: string) => isAccrualKind(kind) || isScheduleKind(kind);
 type RequestSource = { id?: string; requestKind: string; sourceDocumentId: string; requestPayload?: unknown };
 export const commandPayload = (payload: unknown) => z.object({ command: scheduleCommandSchema }).passthrough().parse(payload).command;
+function earliestUnposted(schedule: Awaited<ReturnType<typeof loadSchedule>>) {
+  return schedule.revFkAccSchedulePeriodParent.filter(period => !period.recognitionJournalId)
+    .sort((left, right) => left.recognitionDate.getTime() - right.recognitionDate.getTime())[0]?.recognitionDate;
+}
 function header(schedule: Awaited<ReturnType<typeof loadSchedule>>) {
   return { id: schedule.id, revision: String(schedule.revision), status: schedule.status, kind: schedule.scheduleKind,
     sourceLine: schedule.sourceJournalLineId, document: schedule.accountingDocumentId, recognition: schedule.recognitionAccountId,
@@ -44,9 +48,10 @@ export async function stage23Identity(tx: Prisma.TransactionClient, request: Req
   if (command && `SCHEDULE_${command.action}` !== request.requestKind) throw new HttpError(409, "Schedule action does not match its approval kind.");
   const material = { header: header(schedule), command, recognitionEvidence: evidence ?? null, periods: rows.map(p => ({ id: p.id,
     accountingPeriodId: p.accountingPeriodId, date: dateText(p.recognitionDate), amount: p.plannedAmount.toFixed(2), journal: p.recognitionJournalId })) };
+  const prospectiveDate = command?.action === "SETUP" ? schedule.startDate : earliestUnposted(schedule) ?? schedule.startDate;
   return { material, sourceDigest: accountingApprovalDigest(material), sourceVersion: schedule.revision,
     requesterId: schedule.createdById, accountingDate: data?.row.recognitionDate
-      ?? (command?.action === "TERMINATE" ? day(command.accountingDate) : schedule.startDate),
+      ?? (command?.action === "TERMINATE" ? day(command.accountingDate) : prospectiveDate),
     sourceLink: data ? { accountingSchedulePeriodId: data.row.id } : { accountingScheduleId: schedule.id } };
 }
 export async function validateStage23Request(tx: Prisma.TransactionClient, request: RequestSource) {

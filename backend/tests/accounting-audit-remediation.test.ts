@@ -36,7 +36,8 @@ for (const k of ["AP_INVOICE", "AR_DOCUMENT", "AR_ADJUSTMENT"]) sources.push({ .
 sources.push({ ...approval("SETTLEMENT"), settlement: { id: "source", settlementDate: date } }, { ...approval("JOURNAL_REVERSAL"), originalJournal: { id: "source" }, requestPayload: { accountingDate: "2026-10-20" } });
 for (const k of ["PERIOD_CLOSE", "PERIOD_REOPEN"]) sources.push({ ...approval(k), period });
 for (const k of ["YEAR_CLOSE", "YEAR_REOPEN"]) sources.push({ ...approval(k), final26_fiscalYearId: period });
-for (const action of ["SETUP", "CHANGE", "CANCEL", "TERMINATE"]) sources.push({ ...approval(`SCHEDULE_${action}`), schedule: { id: "source", startDate: date }, requestPayload: { command: { action, accountingDate: "2026-10-20" } } });
+for (const action of ["SETUP", "CHANGE", "CANCEL", "TERMINATE"]) sources.push({ ...approval(`SCHEDULE_${action}`), schedule: { id: "source", startDate: date,
+  revFkAccSchedulePeriodParent: [{ recognitionDate: date, recognitionJournalId: null }] }, requestPayload: { command: { action, accountingDate: "2026-10-20" } } });
 sources.push({ ...approval("SCHEDULE_PERIOD"), schedulePeriod: { id: "source", recognitionDate: date, relFkAccSchedulePeriodPeriod: period } },
   { ...approval("ASSET_ACTIVATE"), fixedAsset: { id: "source", relFkAccFixedAssetSource: { journal: { accountingDate: date } } } },
   { ...approval("DEPRECIATION_RUN"), depreciationRun: { id: "source", runDate: date, relFkAccDepRunPeriod: period } },
