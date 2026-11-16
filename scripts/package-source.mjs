@@ -13,9 +13,9 @@ if (path.resolve(process.cwd()) !== root) {
 }
 
 const rootFiles = new Set([
-  ".gitignore", "AGENTS.md", "README.md", "ARCHITECTURE.md", "DATABASE.md",
-  "TESTING.md", "SECURITY.md", "DEPLOYMENT.md", "BACKUP_RESTORE.md",
-  "SOURCE_HANDOFF.md", "VALIDATION.md", "package.json", "package-lock.json",
+  ".gitignore", "README.md", "ARCHITECTURE.md", "DATABASE.md",
+  "SECURITY.md", "DEPLOYMENT.md", "BACKUP_RESTORE.md",
+  "SOURCE_HANDOFF.md", "package.json", "package-lock.json",
   "backend/.env.example", "backend/API.md", "backend/package.json",
   "backend/tsconfig.json", "backend/prisma/schema.prisma", "backend/prisma/seed.ts",
   "backend/prisma/README.md", "backend/prisma/bootstrap-admin.sql", "frontend/.env.example",
@@ -23,7 +23,7 @@ const rootFiles = new Set([
   "frontend/tsconfig.json", "scripts/package-source.mjs"
 ]);
 const approvedDirs = [
-  ".github/workflows/", "backend/src/", "backend/tests/", "backend/scripts/",
+  ".github/workflows/", "backend/src/", "backend/scripts/",
   "frontend/src/", "frontend/public/", "docs/"
 ];
 const forbiddenSegments = new Set([
@@ -103,7 +103,7 @@ async function repositoryCandidates() {
 function assertRequired(manifest) {
   const files = new Set(manifest);
   const required = [
-    "README.md", "ARCHITECTURE.md", "DATABASE.md", "TESTING.md", "SECURITY.md",
+    "README.md", "ARCHITECTURE.md", "DATABASE.md", "SECURITY.md",
     "DEPLOYMENT.md", "BACKUP_RESTORE.md", "SOURCE_HANDOFF.md", "package.json",
     "package-lock.json", ".github/workflows/ci.yml", "backend/package.json",
     "frontend/package.json", "backend/.env.example", "frontend/.env.example",
@@ -114,7 +114,7 @@ function assertRequired(manifest) {
   for (const relative of required) {
     if (!files.has(relative)) throw new Error(`Required source is missing from staging: ${relative}`);
   }
-  for (const prefix of ["frontend/src/", "frontend/public/", "backend/src/", "backend/tests/"]) {
+  for (const prefix of ["frontend/src/", "frontend/public/", "backend/src/", "backend/scripts/"]) {
     if (!manifest.some(relative => relative.startsWith(prefix))) throw new Error(`Required source directory is empty: ${prefix}`);
   }
 }

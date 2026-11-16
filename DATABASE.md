@@ -13,10 +13,6 @@ npx prisma validate
 
 `prisma validate` validates the model only; `prisma generate` updates the client only. Neither command verifies or changes a physical database.
 
-## Local integration-test schema only
-
-`backend/tests/integration/current-schema.mysql.sql` is a reviewed schema-only snapshot for bootstrapping a **new empty local** `arya_tarray_test` database. It is not a production or staging bootstrap and does not certify any other environment. `npm run test:db:bootstrap` requires `TEST_DATABASE_URL`, applies only to the guarded local test database, refuses a nonempty schema, and never drops or resets a database. See [TESTING.md](TESTING.md).
-
 ## Prohibited commands
 
 Do not run `prisma migrate dev`, `prisma migrate deploy`, `prisma db push`, `prisma db pull`, `prisma migrate reset`, or any drop/recreate workflow against an Arya Tarray target. Do not infer a target's condition from source history.

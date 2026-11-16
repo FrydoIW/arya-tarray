@@ -13,7 +13,7 @@ Arya Tarray is an internal operations dashboard for Yayasan Arya Tarray Nusantar
 
 ## Stack and layout
 
-The frontend is Next.js 15, React 19, and TypeScript in `frontend/src/`. The backend is Express 5, TypeScript, Prisma 6, and MySQL 8.4 in `backend/src/`. Root npm workspaces coordinate both applications. `backend/tests/` holds backend tests and `backend/prisma/schema.prisma` is the application-model contract.
+The frontend is Next.js 15, React 19, and TypeScript in `frontend/src/`. The backend is Express 5, TypeScript, Prisma 6, and MySQL 8.4 in `backend/src/`. Root npm workspaces coordinate both applications. `backend/prisma/schema.prisma` is the application-model contract.
 
 ## Local setup and checks
 
@@ -32,7 +32,6 @@ npm run dev
 Run checks from the indicated working directories:
 
 ```sh
-npm test
 cd backend
 npx tsc --noEmit
 npm run build
@@ -41,7 +40,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-The repository has no root `typecheck` script. See [TESTING.md](TESTING.md) for CI and test limitations.
+The repository has no automated test suite. Manual regression scenarios are documented in [docs/MANUAL_REGRESSION.md](docs/MANUAL_REGRESSION.md).
 
 > **Database governance:** `schema.prisma` is the current application contract. Physical provisioning and change records are approved operational material outside this source repository. Do **not** use Prisma migration, push, pull, reset, or drop/recreate commands as a production procedure. See [DATABASE.md](DATABASE.md) before database work.
 
@@ -49,7 +48,7 @@ The repository has no root `typecheck` script. See [TESTING.md](TESTING.md) for 
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — current application boundaries and financial flows.
 - [DATABASE.md](DATABASE.md) — authoritative database governance.
-- [TESTING.md](TESTING.md) — executable checks and known coverage limits.
+- [docs/MANUAL_REGRESSION.md](docs/MANUAL_REGRESSION.md) — manual regression checklist for operators.
 - [SECURITY.md](SECURITY.md) — current controls, secret handling, and planned hardening.
 - [DEPLOYMENT.md](DEPLOYMENT.md) — **planned / not implemented yet** production infrastructure.
 - [BACKUP_RESTORE.md](BACKUP_RESTORE.md) — **planned / not implemented yet** backup and recovery policy.

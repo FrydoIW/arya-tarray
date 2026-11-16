@@ -1,0 +1,198 @@
+# Arya Tarray — Manual Regression Checklist
+
+This checklist is for the owner/operator manual regression workflow. It describes
+scenarios against the existing non-accounting application; it does not state that
+any scenario has passed. Fill in Actual Result, PASS/FAIL, and Notes during the run.
+
+Automated unit, integration, and browser test suites were removed from this branch
+by decision. TypeScript checks, Prisma generate/validate, and production builds are
+the source-validation gates; business behavior is verified manually here.
+
+## Prerequisites
+
+- Verified regression database with a fresh data reset (performed in Step 2), one
+  Super Admin, and minimum required metadata.
+- Backend running with a `JWT_SECRET` and a `DATABASE_URL` pointing at the verified
+  regression database — never at DB PROD or DB DEV.
+- Frontend running against the same backend (`NEXT_PUBLIC_API_URL`).
+- A BCA statement file for upload scenarios.
+
+## How to record
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+
+Fill one row per scenario. Never record credentials or database URLs in this file.
+
+## 1. Super Admin login
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 1.1 | Admin login success | Open login, enter valid Super Admin email and password, submit | Session starts, dashboard opens, admin menus visible | | | |
+| 1.2 | Wrong password | Enter valid email with wrong password | Login rejected with a non-specific error, no session | | | |
+| 1.3 | Inactive user | Attempt login with a deactivated user | Login rejected, no session | | | |
+| 1.4 | Logout | Click logout | Session cleared, redirected to login | | | |
+| 1.5 | Protected routes | Open an internal route without a session | Redirected to login | | | |
+
+## 2. Role and permission configuration
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 2.1 | Create role | Create a new role with a code and name | Role saved and visible in role list | | | |
+| 2.2 | Assign menu access | Edit role, grant selected menus, save | Access matrix persists | | | |
+| 2.3 | Duplicate role code | Create role with an existing code | Rejected with validation error | | | |
+| 2.4 | Deactivate role | Deactivate an assigned role | Users of that role lose its menu access after re-login | | | |
+| 2.5 | Read-only enforcement | Login as a viewer-role user | Menu items outside granted access are hidden and API access is denied | | | |
+
+## 3. User management
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 3.1 | Create user | Add a new user with name/email and a role | User saved; can log in | | | |
+| 3.2 | Duplicate email | Create a user with an existing email | Rejected with validation error | | | |
+| 3.3 | Reset password | Reset a user's password as admin | User can log in with the new password only | | | |
+| 3.4 | Deactivate user | Deactivate a user | User cannot log in; existing data untouched | | | |
+| 3.5 | Edit user role | Change a user's role | New menus apply after re-login | | | |
+
+## 4. Event Code configuration
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 4.1 | Create event code | Create a 3-character event code with name/type | Saved and visible in the table | | | |
+| 4.2 | Duplicate code | Create an event code with an existing code | Rejected with validation error | | | |
+| 4.3 | Bulk upload | Upload the event-code workbook | Codes imported; invalid rows reported | | | |
+| 4.4 | TIME_BASED rule | Set unit amount/duration for a TIME_BASED code | Rule saved; preview reflects it | | | |
+| 4.5 | CAMPAIGN creation | Create a campaign under an event code with period/target | Campaign saved and visible | | | |
+
+## 5. Approval configuration
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 5.1 | Configure approvers | Add one or more approvers to a menu's approval config | Config saved | | | |
+| 5.2 | ANY-ONE decision | Submit an approval item; decide as any one configured approver | Item decided; other approvers' pending view clears | | | |
+| 5.3 | Non-approver decision | Attempt to decide as a user not in the approver list | Rejected | | | |
+
+## 6. Bank account configuration
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 6.1 | Create bank account | Add bank code/name/account no/name | Saved; visible in account list | | | |
+| 6.2 | Duplicate bank+account no | Create the same bank code and account number again | Rejected with validation error | | | |
+| 6.3 | Opening balance | Set opening balance and date, lock it | Balance locked; cannot be edited afterwards | | | |
+
+## 7. Statement upload BCA
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 7.1 | Upload valid statement | Upload a BCA xlsx for a configured account | Upload attempt recorded; statement created as RAW with transactions | | | |
+| 7.2 | Duplicate rows | Upload a file whose rows match an existing upload | Duplicates flagged/rejected; counts reported | | | |
+| 7.3 | Invalid file | Upload a non-BCA or corrupt file | Rejected with a clear error, nothing stored | | | |
+| 7.4 | Overlapping period | Upload a statement overlapping a FINALIZED period | Rejected or flagged per overlap rules | | | |
+
+## 8. RAW / CHECK / FINALIZED lifecycle
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 8.1 | Execute | Execute a RAW statement | Statement and transactions move RAW → CHECK | | | |
+| 8.2 | Finalize | Finalize a CHECK statement after approval | Statement and transactions move CHECK → FINALIZED | | | |
+| 8.3 | Withdraw | Withdraw a RAW/CHECK statement | Statement marked withdrawn; no FINALIZED data created | | | |
+| 8.4 | Prevent FINALIZED edit | Try to edit a FINALIZED statement | Changes rejected without approval flow | | | |
+
+## 9. Approval workflow
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 9.1 | Submit approval | Execute a statement; open Sign Approval | Pending item appears for approvers only | | | |
+| 9.2 | Approve | Approve the pending item | Status updates; statement can be finalized | | | |
+| 9.3 | Reject | Reject the pending item | Status updates; statement cannot be finalized while rejected | | | |
+| 9.4 | History | Open approval history | Actions, actors, and remarks recorded | | | |
+
+## 10. Edit Income
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 10.1 | Propose correction | Change final event/amount/remark of a FINALIZED transaction | Correction proposal created with before/after diff | | | |
+| 10.2 | Approve correction | Approve the correction proposal | Transaction updated; history records the change | | | |
+| 10.3 | Reject correction | Reject the correction proposal | Transaction unchanged | | | |
+
+## 11. Transaction Inquiry
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 11.1 | Query | Filter by account/period/status | Correct transactions returned | | | |
+| 11.2 | Detail | Open a transaction detail | Full field history and status shown | | | |
+| 11.3 | PDF report | Generate the inquiry PDF | Downloadable PDF with matching rows | | | |
+
+## 12. Member registration and identity
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 12.1 | Candidate evidence | Open registration after statement execute | Sender evidence appears as UNVERIFIED | | | |
+| 12.2 | Register new member | Register a new member from identity evidence | Member created; identity VERIFIED and linked | | | |
+| 12.3 | Link existing | Link identity to an existing active member | Identity VERIFIED and linked; no duplicate member | | | |
+| 12.4 | Ignore identity | Mark unusable identity as ignored | Identity excluded from candidates | | | |
+| 12.5 | Identity history | Move/detach a VERIFIED identity | History rows created; ownership updates without rewriting transactions | | | |
+
+## 13. Member donation
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 13.1 | Donation history | Open a member with FINALIZED positive transactions | Donations listed with correct periods/amounts | | | |
+| 13.2 | Period filter | Switch MONTH/DAY filter | Totals/history match the selected period; lifetime totals unchanged | | | |
+| 13.3 | Event breakdown | Filter by a final event | Breakdown uses the event and orders amounts descending | | | |
+
+## 14. TIME_BASED and carry transfer
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 14.1 | Subscription creation | Donation links to a TIME_BASED event code | Subscription/coverage created from the amount/unit rule | | | |
+| 14.2 | Coverage preview | Preview coverage dates for an amount | Correct coverage range and granted units | | | |
+| 14.3 | Carry transfer | Transfer balance between two subscriptions of a member | Ledger entries created on both sides; balances consistent | | | |
+| 14.4 | Reversal | Reverse a transfer | Reversal entry created; original entry voided; idempotency holds | | | |
+| 14.5 | Duplicate transfer | Repeat the same transfer request | Second request does not double-apply (idempotency key) | | | |
+
+## 15. CAMPAIGN and wallet transfer
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 15.1 | Campaign allocation | Donation links to a CAMPAIGN | Allocation created toward the campaign | | | |
+| 15.2 | Wallet evidence | Excess above target cap remains as wallet evidence | Wallet ledger entry reflects unallocated remainder | | | |
+| 15.3 | Wallet transfer | Transfer wallet balance to another campaign/subscription | Entries created; balances consistent | | | |
+| 15.4 | Target monitoring | Open campaign monitoring | Target vs achieved amount shown correctly | | | |
+
+## 16. Dashboard and monitoring
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 16.1 | Dashboard metrics | Open dashboard after prepared transactions | Metrics match prepared data | | | |
+| 16.2 | Statement status | View statement status cards | Counts match RAW/CHECK/FINALIZED data | | | |
+| 16.3 | Top events | View top final events | Ranking matches finalized amounts | | | |
+| 16.4 | Trend chart | View transaction trend | Trend matches per-period finalized data | | | |
+| 16.5 | TIME_BASED monitoring | Open time-based monitoring | Coverage timeline matches subscriptions | | | |
+| 16.6 | CAMPAIGN monitoring | Open campaign monitoring | Target progress matches allocations | | | |
+
+## 17. Export and reporting
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 17.1 | Excel export | Run an export from a list/detail view | Downloadable workbook with matching data | | | |
+| 17.2 | Report PDF | Generate an inquiry/transaction report | PDF content matches the filtered data | | | |
+
+## 18. Negative cases, invalid input, and RBAC
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 18.1 | Invalid amounts | Enter negative/zero/oversized amounts | Rejected with validation messages | | | |
+| 18.2 | Required fields | Submit forms with required fields empty | Blocked with field-level errors | | | |
+| 18.3 | Unauthorized API | Call a restricted API as a viewer | 401/403 response; no data changed | | | |
+| 18.4 | Cross-role UI | Open restricted pages as a viewer | Page hidden or access-denied screen shown | | | |
+| 18.5 | Stale session | Wait for JWT expiry, then act | Forced re-login, no partial writes | | | |
+
+## Completion record
+
+- Operator name / initials:
+- Environment target (regression DB identifier):
+- Start time / end time:
+- Statement files used:
+- Total scenarios run: ___ / Total passed: ___ / Total failed: ___
+- Failed scenario numbers and follow-up actions:

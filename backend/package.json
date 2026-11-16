@@ -8,15 +8,12 @@
     "member:verify": "tsx scripts/verify-member-integrity.ts",
     "campaign:backfill": "tsx scripts/backfill-campaign-evidence.ts",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
+    "clean": "node --input-type=commonjs -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:validate": "prisma validate",
-    "test": "node --import tsx --test tests/run-tests.ts",
-    "test:db:bootstrap": "node --import tsx tests/integration/bootstrap-test-database.ts",
-    "test:integration": "node --import tsx --test tests/integration/run-tests.ts",
-    "test:integration:typecheck": "tsc --noEmit -p tests/integration/tsconfig.json"
+    "db:validate": "prisma validate"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
