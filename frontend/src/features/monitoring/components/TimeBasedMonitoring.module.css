@@ -87,3 +87,18 @@
   .metrics :global(.ui-metric-card) { min-height: 100px; }
   .metrics :global(.ui-metric-icon) { width: 31px; height: 31px; }
 }
+
+.overviewBlock { border-bottom: 1px solid #e6ecf4; }
+.childStockRows { margin-left: 30px; border-left: 2px solid #dce7f5; background: #f8fafd; }
+.childStockRow { min-height: 36px; display: grid; grid-template-columns: 170px minmax(0,1fr) 220px 120px; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px dashed #e3eaf3; }
+.childStockRow:last-child { border-bottom: 0; }
+.childIdentity { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.childIdentity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #33415c; font-size: 12px; }
+.childIdentity em { font-style: normal; font-size: 9px; font-weight: 800; color: #8b6d1f; background: #fdf3d8; border-radius: 6px; padding: 2px 6px; }
+.childIdentity em.childWarn { color: #9b3418; background: #fde3d8; }
+.childCode { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 800; color: #245cce; background: #edf3ff; border-radius: 6px; padding: 2px 6px; }
+.childRule { color: #56637a; font-size: 11px; }
+.childStock { display: grid; gap: 2px; }
+.childStock strong { color: #33415c; font-size: 11px; }
+.childStock small { color: #8490a3; font-size: 10px; }
+.childCarry { text-align: right; color: #33415c; font-weight: 750; font-size: 12px; }

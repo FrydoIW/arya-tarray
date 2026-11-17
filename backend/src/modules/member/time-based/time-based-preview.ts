@@ -8,24 +8,28 @@ export const timeBasedHistoryInclude = {
     where: { entryType: "PAYMENT" },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { entryType: true, entryStatus: true, subscriptionId: true, amountDelta: true,
-      unitAmountSnapshot: true, durationMonthsSnapshot: true, subscription: { select: { eventCodeId: true } } }
+      unitAmountSnapshot: true, durationMonthsSnapshot: true, subscription: { select: { eventCodeId: true, eventCodeChildId: true } } }
   },
   memberEventCoverages: {
     where: { coverageSource: "TRANSACTION" },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { coverageStatus: true, subscriptionId: true, unitAmountSnapshot: true,
-      durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true } } }
+      durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true, eventCodeChildId: true } } }
   }
 } satisfies Prisma.BankTransactionInclude;
 
 type DecimalValue = { toString(): string };
 type PreviewPayment = {
-  eventCodeId: string | null; originalAmount: DecimalValue; baseAmount: DecimalValue | null;
+  eventCodeId: string | null;
+  eventCodeChildId: string | null;
+  originalAmount: DecimalValue;
+  baseAmount: DecimalValue | null;
   eventCode: { eventType: string; timeRule: { unitAmount: DecimalValue; durationMonths: number; activeFlag: boolean } | null } | null;
+  eventCodeChild: { id: string; eventCodeId: string; childCode: string; childName: string; activeFlag: boolean; capacity: number | null; unitAmount: DecimalValue | null; durationMonths: number | null } | null;
   memberEventBalanceLedger: Array<{ entryType: string; entryStatus: string; subscriptionId: string; amountDelta: DecimalValue;
-    unitAmountSnapshot: DecimalValue | null; durationMonthsSnapshot: number | null; subscription: { eventCodeId: string } }>;
+    unitAmountSnapshot: DecimalValue | null; durationMonthsSnapshot: number | null; subscription: { eventCodeId: string; eventCodeChildId: string | null } }>;
   memberEventCoverages: Array<{ coverageStatus: string; subscriptionId: string; unitAmountSnapshot: DecimalValue | null;
-    durationMonthsSnapshot: number | null; grantedUnits: number | null; amountApplied: DecimalValue | null; subscription: { eventCodeId: string } }>;
+    durationMonthsSnapshot: number | null; grantedUnits: number | null; amountApplied: DecimalValue | null; subscription: { eventCodeId: string; eventCodeChildId: string | null } }>;
 };
 
 /** Read-only display of the same historical rate selection used by allocation. */
@@ -36,19 +40,26 @@ export function timeBasedPaymentPreview(payment: PreviewPayment, recalculate = f
   const principal = decimalStringToCents(payment.originalAmount.toString());
   if (principal <= 0n) return null;
   const entries = payment.memberEventBalanceLedger.slice().sort((a, b) => Number(b.entryStatus === "ACTIVE") - Number(a.entryStatus === "ACTIVE"));
-  const historical = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId, principalAmount: payment.originalAmount,
+  const historical = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId, eventCodeChildId: payment.eventCodeChildId,
+    principalAmount: payment.originalAmount,
     alternativePrincipalAmount: payment.baseAmount, recalculate, entries });
   const legacy = historical ? null : selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCodeId,
+    eventCodeChildId: payment.eventCodeChildId,
     principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate, coverages: payment.memberEventCoverages.map(row => ({
       coverageStatus: row.coverageStatus, subscriptionEventCodeId: row.subscription.eventCodeId,
+      subscriptionEventCodeChildId: row.subscription.eventCodeChildId,
       unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot,
       grantedUnits: row.grantedUnits, amountApplied: row.amountApplied
     })) });
   try {
-    const rate = historical ?? legacy ?? resolveTimeBasedUnits({ eventCode: payment.eventCode,
+    const childRate = payment.eventCodeChild && payment.eventCodeChild.unitAmount && payment.eventCodeChild.durationMonths
+      ? { unitAmount: payment.eventCodeChild.unitAmount.toString(), durationMonths: payment.eventCodeChild.durationMonths }
+      : null;
+    const rate = historical ?? legacy ?? childRate ?? resolveTimeBasedUnits({ eventCode: payment.eventCode,
       rule: payment.eventCode.timeRule, transaction: payment, requiresClassification: true });
     if (!rate) return null;
     const paymentMatches = (amount: bigint) => entries.find(row => row.subscription.eventCodeId === payment.eventCodeId
+      && (row.subscription.eventCodeChildId ?? null) === (payment.eventCodeChildId ?? null)
       && decimalStringToCents(row.amountDelta.toString()) === amount);
     const fullPayment = paymentMatches(principal);
     const legacyPayment = decimalStringToCents(payment.baseAmount.toString()) === principal ? null

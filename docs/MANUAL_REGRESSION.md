@@ -190,6 +190,68 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 14.4 | Reversal | Reverse a transfer | Reversal entry created; original entry voided; idempotency holds | | | |
 | 14.5 | Duplicate transfer | Repeat the same transfer request | Second request does not double-apply (idempotency key) | | | |
 
+## 14b. TIME_BASED Child Subscription & Stock
+
+### Configuration
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 14b.1 | Complete child config | For a TIME_BASED child set capacity, unit amount, duration | Saved; child shows occupied 0 / available = capacity; configurationComplete | | | |
+| 14b.2 | Incomplete config | Set capacity only (no rate/duration) | Rejected: configuration must be complete | | | |
+| 14b.3 | Config on non-TIME_BASED child | Try capacity/rate on a STANDARD/CAMPAIGN child | Rejected (capacity only for TIME_BASED children) | | | |
+| 14b.4 | Capacity decrease | Reduce capacity with fewer occupied slots than the new value | Allowed; capacity change audited (capacity-change table) | | | |
+| 14b.5 | Capacity below occupied | Reduce capacity under the occupied slot count | Rejected with actionable error | | | |
+| 14b.6 | Rate change with unresolved payments | Change unit amount while a pending official payment exists for that child | Rejected (resolve payments first) | | | |
+| 14b.7 | Rate change with outstanding carry | Change unit amount while subscriptions of that child have positive carry | Rejected (resolve carry first) | | | |
+| 14b.8 | Deactivate referenced child | Deactivate a child with historical coverage | Allowed; historical records remain readable; no new enrollment accepted | | | |
+| 14b.9 | Legacy child migration | Open a TIME_BASED child created before Enhancement 2 | Kept as-is; marked "Belum dikonfigurasi"; enrollment blocked until configured | | | |
+
+### Enrollment & stock (no overbooking)
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 14b.10 | Enroll to child | Member subscribes to a configured TIME_BASED child | Subscription created with child association; occupied +1 | | | |
+| 14b.11 | Capacity = 1, concurrent enrollments | Two operators enroll two different members nearly simultaneously to the same child with capacity 1 | Exactly one succeeds; the other gets a clear capacity conflict | | | |
+| 14b.12 | Duplicate enrollment | Same member enrolls twice on the same child | Rejected (one enrollment per member+child) | | | |
+| 14b.13 | Multi-child same parent | One member subscribes to Amitabha and Kwan Im (same parent) | Both subscriptions exist independently | | | |
+| 14b.14 | Pending reservation | Member enrolls without any payment yet | Slot occupied; no coverage fabricated; shows pending state | | | |
+| 14b.15 | Full child blocks payment allocation | Payment targets a child whose capacity is full and member has no slot | Payment stays FINALIZED but unresolved (no coverage/ledger); no silent subscription creation | | | |
+| 14b.16 | Unconfigured child blocks payment | Payment targets a child without complete config | Payment stays unresolved; statement approval is not blocked by allocation | | | |
+| 14b.17 | Slot release on expiry | Subscription coverage ends | Occupancy calculation no longer counts it (availability computed at request time); records preserved | | | |
+| 14b.18 | Expired with carry | Expired subscription keeps positive carry | Carry remains recorded and transferable; no automatic new slot | | | |
+| 14b.19 | Re-enroll expired when full | Expired member re-enrolls while child is full | Rejected with capacity conflict | | | |
+| 14b.20 | Renewal same slot | Payment renews a subscription that still occupies its slot | Same subscription extended; occupied count unchanged | | | |
+
+### Payment matching & corrections
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 14b.21 | Payment → correct child | Payment parent 017 + child Amitabha | Allocates to Amitabha subscription only, never Kwan Im | | | |
+| 14b.22 | Legacy payment → legacy program | Historical payment without child | Matches parent-only subscription (legacy compatibility) | | | |
+| 14b.23 | Retry allocation | Retry an unresolved payment with exactly one compatible subscription | Allocates; repeated retry is a no-op | | | |
+| 14b.24 | Manual allocation | Allocate a payment to a chosen subscription | Child-aware matching; wrong child rejected | | | |
+| 14b.25 | Child-only correction | Correct Amitabha → Kwan Im after allocation | Proposal stores before/proposed child; approval re-syncs financial records; no double posting | | | |
+| 14b.26 | Correction to full child | Correct a payment to a child whose capacity is full | Approval aborted with actionable conflict; no partial write | | | |
+| 14b.27 | Stale child correction | Propose child, deactivate it, then approve | Approval aborted (stale configuration) | | | |
+
+### Transfer & reversal
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 14b.28 | Child-aware transfer | Transfer Amitabha carry → Kwan Im subscription | Source/destination validated by subscription id; ledgers posted; snapshots kept | | | |
+| 14b.29 | Transfer reactivates expired child | Transfer into an expired child subscription | Slot checked atomically; rejected when full | | | |
+| 14b.30 | Reverse child transfer | Reverse a child-to-child transfer | Restores carry only; no duplicate ledger; no negative carry; no new slot creation | | | |
+| 14b.31 | TIME_BASED → CAMPAIGN / CAMPAIGN → TIME_BASED | Run existing transfer paths with child subscriptions present | All four transfer routes still work | | | |
+
+### Monitoring & member data
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 14b.32 | Monitoring child stock | Open TIME_BASED monitoring | Each child row shows capacity, occupied, available, pending, active, expired, carry | | | |
+| 14b.33 | Member sponsorship UI | Open Member Data sponsorship for a member with child subscriptions | Child shown on cards; child select in "Tambah Program" shows price/duration/availability; incomplete/full children disabled | | | |
+| 14b.34 | Identity reassignment | Reassign verified identity between members | Child-aware re-synchronization; no double allocation | | | |
+| 14b.35 | RBAC | Attempt child config / subscription ops as viewer role | Denied by existing menu permissions | | | |
+
 ## 15. CAMPAIGN and wallet transfer
 
 | # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |

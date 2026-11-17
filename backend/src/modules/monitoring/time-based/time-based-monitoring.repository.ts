@@ -27,12 +27,17 @@ export async function loadTimeBasedMonitoring(today: Date, expiringUntil: Date, 
   timelinePage: number; timelinePageSize: number; timelineFilter: TimelineFilter;
   window: { start: Date; end: Date; monthCount: number };
 }) {
-  const [ledgerGroups, activePrograms, covered, expiring, expired, withoutCoverage] = await Promise.all([
+  const [ledgerGroups, activePrograms, childRecords, covered, expiring, expired, withoutCoverage] = await Promise.all([
     prisma.memberEventBalanceLedger.groupBy({ by: ["subscriptionId"], where: { entryStatus: "ACTIVE" }, _sum: { amountDelta: true } }),
     prisma.memberEventSubscription.findMany({ where: { activeFlag: true }, select: {
-      id: true, eventCodeId: true, startDate: true, validUntil: true,
-      eventCode: { select: { code: true, eventName: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }
+      id: true, eventCodeId: true, eventCodeChildId: true, startDate: true, validUntil: true,
+      eventCode: { select: { code: true, eventName: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
+      eventCodeChild: { select: { id: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true, displayOrder: true } }
     } }),
+    prisma.eventCodeChild.findMany({ where: { eventCode: { is: { eventType: "TIME_BASED" } }, OR: [
+      { capacity: { not: null } },
+      { subscriptions: { some: {} } }
+    ] }, select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true, displayOrder: true } }),
     prisma.memberEventSubscription.count({ where: { activeFlag: true, validUntil: { gte: today }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
     prisma.memberEventSubscription.count({ where: { activeFlag: true, validUntil: { gte: today, lte: expiringUntil }, OR: [{ startDate: null }, { startDate: { lte: today } }] } }),
     prisma.memberEventSubscription.count({ where: { activeFlag: true, validUntil: { lt: today } } }),
@@ -53,6 +58,7 @@ export async function loadTimeBasedMonitoring(today: Date, expiringUntil: Date, 
         id: true, activeFlag: true, validUntil: true,
         member: { select: { id: true, memberCode: true, memberName: true } },
         eventCode: { select: { id: true, code: true, eventName: true } },
+        eventCodeChild: { select: { id: true, childCode: true, childName: true } },
         coverages: { where: { ...activeCoverage, OR: [
           { coverageFrom: { lte: window.end }, coverageTo: { gte: window.start } }, currentCoverageWhere(today)
         ] }, orderBy: [{ coverageFrom: "asc" }, { id: "asc" }], select: { id: true, coverageFrom: true, coverageTo: true, coverageSource: true, coverageStatus: true } }
@@ -81,17 +87,56 @@ export async function loadTimeBasedMonitoring(today: Date, expiringUntil: Date, 
     groups.set(row.eventCodeId, current);
   }
 
+  // Child subscription item stock: capacity is slot count, occupied is the
+  // number of active enrollments currently holding a slot, pending means an
+  // enrollment without coverage evidence, expired means coverage end has passed.
+  const childSubscriptionsByChild = new Map<string, typeof activePrograms>();
+  for (const row of activePrograms) {
+    if (!row.eventCodeChildId) continue;
+    const list = childSubscriptionsByChild.get(row.eventCodeChildId) ?? [];
+    list.push(row);
+    childSubscriptionsByChild.set(row.eventCodeChildId, list);
+  }
+  const childGroups = childRecords.map((child) => {
+    const subs = childSubscriptionsByChild.get(child.id) ?? [];
+    const occupied = subs.filter((sub) => !sub.validUntil || sub.validUntil >= today).length;
+    const pendingEnrollment = subs.filter((sub) => !sub.validUntil).length;
+    const activeSubscriptions = subs.filter((sub) => sub.validUntil && sub.validUntil >= today).length;
+    const expiredSubscriptions = subs.filter((sub) => sub.validUntil && sub.validUntil < today).length;
+    const outstandingCarry = centsToDecimal(subs.reduce((sum, sub) => sum + (balanceById.get(sub.id) ?? 0n), 0n));
+    const configurationComplete = child.capacity !== null && child.capacity > 0 && child.durationMonths !== null && child.durationMonths > 0 && child.unitAmount !== null;
+    return {
+      eventCodeId: child.eventCodeId,
+      eventCodeChildId: child.id,
+      childCode: child.childCode,
+      childName: child.childName,
+      activeFlag: child.activeFlag,
+      capacity: child.capacity,
+      occupiedSlots: occupied,
+      availableSlots: child.capacity !== null ? Math.max(0, child.capacity - occupied) : null,
+      pendingEnrollment,
+      activeSubscriptions,
+      expiredSubscriptions,
+      outstandingCarry,
+      configurationComplete,
+      unitAmount: child.unitAmount?.toString() ?? null,
+      durationMonths: child.durationMonths
+    };
+  }).sort((left, right) => left.childCode.localeCompare(right.childCode));
+
   const carrySummary = summarizeTimeBasedCarry(ledgerGroups);
   return {
     summary: { activePrograms: activePrograms.length, currentlyCovered: covered, expiringSoon: expiring, expiredCoverage: expired, programsWithoutCoverage: withoutCoverage, ...carrySummary },
     eventGroups: [...groups.entries()].map(([eventCodeId, row]) => ({ ...row, notCurrentlyCovered: row.activePrograms - row.currentlyCovered,
-      outstandingCarry: centsToDecimal(carryByEvent.get(eventCodeId) ?? 0n) })).sort((left, right) => left.code.localeCompare(right.code)),
+      outstandingCarry: centsToDecimal(carryByEvent.get(eventCodeId) ?? 0n),
+      children: childGroups.filter((child) => child.eventCodeId === eventCodeId) })).sort((left, right) => left.code.localeCompare(right.code)),
     timeline: {
       window: { start: dateOnly(window.start), end: dateOnly(window.end), monthCount: window.monthCount },
       rows: timelineSubscriptions.map(subscription => {
         const currentlyCovered = currentCoverageIds.has(subscription.id);
         const coverageStatus = !subscription.activeFlag ? "INACTIVE" : currentlyCovered ? "COVERED" : historicalCoverageIds.has(subscription.id) && !futureCoverageIds.has(subscription.id) ? "EXPIRED" : "NO_COVERAGE";
         return { member: subscription.member, subscriptionId: subscription.id, activeFlag: subscription.activeFlag, program: subscription.eventCode,
+          eventCodeChild: subscription.eventCodeChild ? { eventCodeChildId: subscription.eventCodeChild.id, childCode: subscription.eventCodeChild.childCode, childName: subscription.eventCodeChild.childName } : null,
           currentlyCovered, coverageStatus, validUntil: dateOnly(subscription.validUntil), carryBalance: centsToDecimal(balanceById.get(subscription.id) ?? 0n),
           coverageSegments: subscription.coverages.filter(coverage => isTimelineSegmentVisible(coverage, window)).map(coverage => ({
             coverageId: coverage.id, coverageFrom: dateOnly(coverage.coverageFrom), coverageTo: dateOnly(coverage.coverageTo), source: coverage.coverageSource

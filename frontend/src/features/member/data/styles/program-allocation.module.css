@@ -202,3 +202,5 @@
 .campaignFigures b { color: var(--ink); font-size: 12px; }
 .campaignCard .cardActions { padding: 8px 0 0; }
 @media (max-width: 720px) { .campaignFigures { grid-template-columns: 1fr; } }
+
+.childKicker { font-style: normal; color: #8a6d2b; font-size: 0.85em; }

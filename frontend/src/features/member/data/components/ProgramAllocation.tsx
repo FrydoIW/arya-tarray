@@ -18,7 +18,7 @@ import { TransferHistoryPanel } from "./TransferHistoryPanel";
 import styles from "../styles/program-allocation.module.css";
 
 type FormMode = "create" | "edit" | "opening" | "void-opening" | null;
-const emptySubscription: SubscriptionInput = { eventCodeId: "", referenceNo: null, displayName: null, remark: null };
+const emptySubscription: SubscriptionInput = { eventCodeId: "", eventCodeChildId: "", referenceNo: null, displayName: null, remark: null };
 
 function campaignPeriodLabel(startDate: string | null, endDate: string | null) {
   const date = startDate ?? endDate;
@@ -210,7 +210,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
 
   function editSubscription(sub: SponsorshipSubscription) {
     setSubscriptionId(sub.subscriptionId);
-    setForm({ eventCodeId: sub.event.eventCodeId, referenceNo: sub.referenceNo, displayName: sub.displayName,
+    setForm({ eventCodeId: sub.event.eventCodeId, eventCodeChildId: sub.eventCodeChild?.eventCodeChildId ?? "", referenceNo: sub.referenceNo, displayName: sub.displayName,
       remark: sub.remark });
     setFormError(""); setMode("edit");
   }
@@ -273,7 +273,8 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         <div className={styles.sectionHead}><div><h2 id="pa-attention-title">Perlu Tindakan</h2><p>Pembayaran TIME BASED yang belum dapat diselesaikan alokasinya.</p></div></div>
         <div className={styles.attentionList}>
           {data.pendingPayments.map(payment => {
-            const compatible = data.subscriptions.filter(sub => sub.activeFlag && sub.event.eventCodeId === payment.event?.eventCodeId);
+            const compatible = data.subscriptions.filter(sub => sub.activeFlag && sub.event.eventCodeId === payment.event?.eventCodeId
+              && (sub.event.eventCodeChildId ?? null) === (payment.eventCodeChildId ?? null));
             return <article key={payment.transactionId} className={styles.attentionRow}>
               <span className={styles.attentionIcon} aria-hidden="true"><CircleAlert size={18} /></span>
               <div className={styles.attentionDetail}>
@@ -343,16 +344,22 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
       description={mode === "create" ? "Tambahkan metadata program. Coverage dan ledger tersimpan sebagai audit." : "Perbarui metadata program. Riwayat coverage dan ledger tetap tersimpan sebagai audit."} onClose={() => !busy && setMode(null)}>
       <form className={`${styles.modalBody} ${styles.subscriptionModalBody}`} onSubmit={event => {
         event.preventDefault();
-        if (mode === "create") void performSponsorship(() => api.createSubscription(memberId, form), "Program ditambahkan.", setFormError);
+        if (mode === "create") void performSponsorship(() => api.createSubscription(memberId, { ...form, eventCodeChildId: form.eventCodeChildId || undefined }), "Program ditambahkan.", setFormError);
         else void performSponsorship(() => api.updateSubscription(memberId, subscriptionId, { referenceNo: form.referenceNo, displayName: form.displayName,
           remark: form.remark }), "Program diperbarui.", setFormError);
       }}>
         {formError ? <div className="ui-alert ui-alert-error" role="alert">{formError}</div> : null}
-        <label className={`${styles.field} ${mode === "edit" ? styles.readOnlyField : ""}`}>Program<select value={form.eventCodeId} disabled={busy || mode === "edit"} onChange={event => setForm(value => ({ ...value, eventCodeId: event.target.value }))}>
+        <label className={`${styles.field} ${mode === "edit" ? styles.readOnlyField : ""}`}>Program<select value={form.eventCodeId} disabled={busy || mode === "edit"} onChange={event => setForm(value => ({ ...value, eventCodeId: event.target.value, eventCodeChildId: "" }))}>
             {mode === "edit" && editedSubscription && !data?.eventOptions.some(item => item.eventCodeId === editedSubscription.event.eventCodeId)
               ? <option value={editedSubscription.event.eventCodeId}>{editedSubscription.event.code} · {editedSubscription.event.eventName} (historis)</option> : null}
             {data?.eventOptions.map(item => <option key={item.eventCodeId} value={item.eventCodeId}>{item.code} · {item.eventName}</option>)}
           </select>{mode === "edit" ? <small className={styles.helper}>Program tidak dapat diubah setelah dibuat.</small> : null}</label>
+        {mode === "create" && (data?.childOptions ?? []).filter(child => child.eventCodeId === form.eventCodeId).length > 0 ? <label className={styles.field}>Subscription Item (Child)<select required value={form.eventCodeChildId ?? ""} disabled={busy} onChange={event => setForm(value => ({ ...value, eventCodeChildId: event.target.value }))}>
+          <option value="">Pilih Child…</option>
+          {(data?.childOptions ?? []).filter(child => child.eventCodeId === form.eventCodeId).map(child => <option key={child.eventCodeChildId} value={child.eventCodeChildId} disabled={!child.activeFlag || !child.configurationComplete || child.availableSlots === 0}>
+            {child.childCode} — {child.childName} · {child.unitAmount ? `${formatMoney(child.unitAmount)} / ${child.durationMonths} bln` : "belum dikonfigurasi"} · tersedia {child.availableSlots ?? 0}/{child.capacity ?? 0}
+          </option>)}
+        </select><small className={styles.helper}>Harga, durasi, dan slot mengikuti konfigurasi child. Child yang belum dikonfigurasi atau penuh tidak dapat dipilih.</small></label> : null}
         <div className={styles.subscriptionFormGrid}>
           <label className={styles.field}>Nama Tampilan<input value={form.displayName ?? ""} maxLength={200} onChange={event => setForm(value => ({ ...value, displayName: event.target.value || null }))} /></label>
           <label className={styles.field}>Referensi<input value={form.referenceNo ?? ""} maxLength={100} onChange={event => setForm(value => ({ ...value, referenceNo: event.target.value || null }))} /></label>
@@ -366,7 +373,7 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         </div>
         <label className={styles.field}>Catatan<textarea rows={3} maxLength={1000} value={form.remark ?? ""} onChange={event => setForm(value => ({ ...value, remark: event.target.value || null }))} /></label>
         <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Batal</Button>
-          <Button type="submit" disabled={busy || !form.eventCodeId}>{busy ? "Menyimpan…" : "Simpan"}</Button></div>
+          <Button type="submit" disabled={busy || !form.eventCodeId || (mode === "create" && (data?.childOptions ?? []).some(child => child.eventCodeId === form.eventCodeId) && !form.eventCodeChildId)}>{busy ? "Menyimpan…" : "Simpan"}</Button></div>
       </form>
     </Modal>
 

@@ -69,6 +69,12 @@ export type EventCodeChild = {
   description: string | null;
   displayOrder: number;
   activeFlag: boolean;
+  capacity: number | null;
+  unitAmount: string | null;
+  durationMonths: number | null;
+  occupiedSlots: number;
+  availableSlots: number | null;
+  configurationComplete: boolean;
   eventCode: { id: string; code: string; eventName: string; eventType: EventType; activeFlag: boolean };
   transactionCount: number;
   correctionCount: number;
@@ -76,7 +82,7 @@ export type EventCodeChild = {
   updatedBy?: EventCodeUser | null;
 };
 
-export type ChildInput = Pick<EventCodeChild, "eventCodeId" | "childCode" | "childName" | "description" | "displayOrder" | "activeFlag">;
+export type ChildInput = Pick<EventCodeChild, "eventCodeId" | "childCode" | "childName" | "description" | "displayOrder" | "activeFlag" | "capacity" | "unitAmount" | "durationMonths">;
 
 export type EventCodeExecutePayload = {
   creates: EventCodeInput[];

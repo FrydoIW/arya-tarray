@@ -8,6 +8,7 @@ import { memberTransaction } from "../member-identity/member-transaction.js";
 import { allocatePostingSequences, assertNoUnresolvedDependencies, laterSubscriptionDependencies, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
 import { loadMemberCarryTransfers } from "./member-carry-transfer.repository.js";
 import { addCalendarMonthsInclusive, refreshSubscriptionStartDate, refreshSubscriptionValidity } from "./member-time-based.service.js";
+import { childConfigurationComplete, subscriptionOccupiesSlot, businessDayUtcStart, tryResolveChildSlot } from "./time-based-child-domain.js";
 import { allocateCampaignWalletPostingSequences, campaignTransferAmountIsAllowed, campaignWalletCents,
   lockCampaignsForPosting, requireCampaignCarryDestination } from "../campaign/member-campaign-wallet.service.js";
 
@@ -22,7 +23,7 @@ const transferHeaderSelect = {
 } as const;
 
 const subscriptionSelect = {
-  id: true, memberId: true, eventCodeId: true, activeFlag: true
+  id: true, memberId: true, eventCodeId: true, eventCodeChildId: true, activeFlag: true, validUntil: true
 } as const;
 
 const eventSelect = {
@@ -385,10 +386,34 @@ export async function forwardCarryTransferRecord(tx: Tx, input: {
   if (!destinationEvent || destinationEvent.eventType !== "TIME_BASED")
     throw new HttpError(409, "The destination must be a TIME_BASED Event Code.");
   if (!destinationEvent.activeFlag) throw new HttpError(409, "The destination Event Code is not active.");
-  const rule = destinationEvent.timeRule;
-  if (!rule || !rule.activeFlag) throw new HttpError(409, "The destination program requires an active Time Rule.");
-  const unitCents = decimalStringToCents(rule.unitAmount.toString());
-  if (unitCents <= 0n || rule.durationMonths <= 0) throw new HttpError(409, "The destination Time Rule is invalid.");
+
+  let rule: { unitAmount: string; durationMonths: number };
+  if (destination.eventCodeChildId) {
+    const child = await tx.eventCodeChild.findUnique({
+      where: { id: destination.eventCodeChildId },
+      select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true }
+    });
+    if (!child || child.eventCodeId !== destination.eventCodeId)
+      throw new HttpError(409, "The destination Child does not belong to the destination Event Code.");
+    if (!childConfigurationComplete(child))
+      throw new HttpError(409, `Child ${child.childCode} belum memiliki konfigurasi lengkap (capacity, unit amount, duration).`);
+    const unitCents = decimalStringToCents(child.unitAmount!.toString());
+    if (unitCents <= 0n || child.durationMonths! <= 0) throw new HttpError(409, "The destination Child rule is invalid.");
+    if (!subscriptionOccupiesSlot(destination, businessDayUtcStart())) {
+      const slot = await tryResolveChildSlot(tx, { childId: child.id, memberId: input.memberId, excludeSubscriptionId: destination.id });
+      if (slot.state !== "AVAILABLE") {
+        throw new HttpError(409, `Child ${child.childCode} tidak memiliki slot tersedia untuk mengaktifkan kembali subscription ini (${slot.state === "CAPACITY_FULL" ? `penuh ${slot.occupied}/${child.capacity}` : "belum dikonfigurasi"}).`);
+      }
+    }
+    rule = { unitAmount: child.unitAmount!.toString(), durationMonths: child.durationMonths! };
+  } else {
+    const parentRule = destinationEvent.timeRule;
+    if (!parentRule || !parentRule.activeFlag) throw new HttpError(409, "The destination program requires an active Time Rule.");
+    const unitCents = decimalStringToCents(parentRule.unitAmount.toString());
+    if (unitCents <= 0n || parentRule.durationMonths <= 0) throw new HttpError(409, "The destination Time Rule is invalid.");
+    rule = { unitAmount: parentRule.unitAmount.toString(), durationMonths: parentRule.durationMonths };
+  }
+  const unitCents = decimalStringToCents(rule.unitAmount);
 
   const destinationCarryBefore = await activeCarryCents(tx, destination.id);
   const availableCents = destinationCarryBefore + amountCents;

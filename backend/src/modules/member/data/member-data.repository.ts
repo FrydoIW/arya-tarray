@@ -163,18 +163,21 @@ export function pendingTimeBasedPaymentsWhere(memberId: string): Prisma.BankTran
 
 export function loadMemberSponsorship(memberId: string) {
   return prisma.$transaction(async tx => {
-    const [member, subscriptions, pending, eventOptions, contributionGroups, legacyCampaignContributionGroups, campaignAllocations, campaignWalletEntries, campaignParticipations, campaignOptions] = await Promise.all([
+    const [member, subscriptions, pending, eventOptions, contributionGroups, legacyCampaignContributionGroups, campaignAllocations, campaignWalletEntries, campaignParticipations, campaignOptions, timeBasedChildren, childSlotGroups] = await Promise.all([
       tx.member.findUnique({ where: { id: memberId }, select: { id: true } }),
       tx.memberEventSubscription.findMany({ where: { memberId }, include: {
         eventCode: { select: { id: true, code: true, eventName: true, eventType: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
+        eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true } },
         coverages: { include: { bankTransaction: { select: { id: true, transactionDate: true, referenceNo: true, originalAmount: true, baseAmount: true } } }, orderBy: [{ coverageFrom: "desc" }, { id: "desc" }] },
         balanceLedger: { select: { id: true, bankTransactionId: true, entryType: true, entryStatus: true, amountDelta: true, effectiveDate: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, voidReason: true, createdAt: true, bankTransaction: { select: { referenceNo: true } } }, orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }, { id: "desc" }], take: 24 }
       }, orderBy: [{ activeFlag: "desc" }, { validUntil: "asc" }, { id: "asc" }] }),
       tx.bankTransaction.findMany({ where: pendingTimeBasedPaymentsWhere(memberId), select: {
         id: true, transactionDate: true, referenceNo: true, originalAmount: true, baseAmount: true,
-        memberEventCoverages: { where: { coverageSource: "TRANSACTION" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { coverageStatus: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true } } } },
-        memberEventBalanceLedger: { where: { entryType: "PAYMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { entryType: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, subscription: { select: { eventCodeId: true } } } },
-        eventCode: { select: { id: true, code: true, eventName: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }
+        eventCodeId: true, eventCodeChildId: true,
+        memberEventCoverages: { where: { coverageSource: "TRANSACTION" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { coverageStatus: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true, eventCodeChildId: true } } } },
+        memberEventBalanceLedger: { where: { entryType: "PAYMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { entryType: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true, subscription: { select: { eventCodeId: true, eventCodeChildId: true } } } },
+        eventCode: { select: { id: true, code: true, eventName: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
+        eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true } }
       }, orderBy: [{ transactionDate: "desc" }, { id: "desc" }] }),
       tx.eventCode.findMany({ where: { eventType: "TIME_BASED", activeFlag: true, timeRule: { is: { activeFlag: true } } }, select: { id: true, code: true, eventName: true }, orderBy: [{ code: "asc" }, { eventName: "asc" }] }),
       tx.bankTransaction.groupBy({
@@ -205,6 +208,16 @@ export function loadMemberSponsorship(memberId: string) {
         ], AND: [{ OR: [{ endDate: null }, { endDate: { gte: new Date(`${currentBusinessDayValue()}T00:00:00.000Z`) } }] }] },
         select: { id: true, campaignName: true, eventCodeId: true, targetAmount: true, activeFlag: true, startDate: true, endDate: true, eventCode: { select: { code: true, eventName: true, activeFlag: true } } },
         orderBy: [{ campaignName: "asc" }, { id: "asc" }]
+      }),
+      tx.eventCodeChild.findMany({
+        where: { eventCode: { is: { eventType: "TIME_BASED" } }, OR: [{ capacity: { not: null } }, { subscriptions: { some: {} } }] },
+        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true, displayOrder: true },
+        orderBy: [{ eventCodeId: "asc" }, { displayOrder: "asc" }, { childCode: "asc" }]
+      }),
+      tx.memberEventSubscription.groupBy({
+        by: ["eventCodeChildId"],
+        where: { activeFlag: true, OR: [{ validUntil: null }, { validUntil: { gte: new Date(`${currentBusinessDayValue()}T00:00:00.000Z`) } }] },
+        _count: { _all: true }
       })
     ]);
     const balances = subscriptions.length ? await tx.memberEventBalanceLedger.groupBy({
@@ -248,7 +261,7 @@ export function loadMemberSponsorship(memberId: string) {
     ]) : [[], []];
     return { member, subscriptions, paymentDates, pending, eventOptions, balances, appliedHistoricalRateEntries, contributionGroups, legacyCampaignContributionGroups, contributionEvents,
       contributionCampaigns, campaignMasters: contributionCampaigns, campaignAllocations, campaignWalletEntries, campaignParticipations, campaignOptions,
-      campaignAppliedGroups, campaignLegacyAppliedGroups };
+      campaignAppliedGroups, campaignLegacyAppliedGroups, timeBasedChildren, childSlotGroups };
   });
 }
 

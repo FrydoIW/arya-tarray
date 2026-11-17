@@ -60,7 +60,7 @@ export function TimeBasedCoverageTimeline({
         <div className={timelineStyles.identityRuler} aria-hidden="true" />
         {timeline.rows.map(row => <div className={timelineStyles.identityRow} key={row.subscriptionId}>
           <div className={styles.memberCell}>{canViewMemberData ? <Link href={`/member/data/${row.member.id}`}>{row.member.memberName}</Link> : <strong>{row.member.memberName}</strong>}</div>
-          <div className={styles.programCell}><strong>{row.program.code} · {row.program.eventName}</strong>{!row.activeFlag ? <em>INACTIVE</em> : null}</div>
+          <div className={styles.programCell}><strong>{row.program.code} · {row.program.eventName}{row.eventCodeChild ? ` · ${row.eventCodeChild.childCode} — ${row.eventCodeChild.childName}` : ""}</strong>{!row.activeFlag ? <em>INACTIVE</em> : null}</div>
         </div>)}
       </div>
       <div className={timelineStyles.canvasScroll}>
@@ -80,7 +80,7 @@ export function TimeBasedCoverageTimeline({
     {timeline.rows.length ? <div className={timelineStyles.summary} aria-label="Coverage summary">
       <div className={timelineStyles.summaryTitle}><strong>Carry &amp; coverage status</strong><span>For the programs shown on this page</span></div>
       <div className={timelineStyles.summaryHeader}><span>Donor</span><span>Program / Event</span><span>Carry</span><span>Status</span></div>
-      {timeline.rows.map(row => { const status = coverageStatus(row); return <div className={timelineStyles.summaryRow} key={row.subscriptionId}><strong>{row.member.memberName}</strong><span>{row.program.code} · {row.program.eventName}</span><strong className={timelineStyles.carry}>{formatMoney(row.carryBalance)}</strong><span className={timelineStyles.status} data-tone={status.tone}>{status.label}</span></div>; })}
+      {timeline.rows.map(row => { const status = coverageStatus(row); return <div className={timelineStyles.summaryRow} key={row.subscriptionId}><strong>{row.member.memberName}</strong><span>{row.program.code} · {row.program.eventName}{row.eventCodeChild ? ` · ${row.eventCodeChild.childCode}` : ""}</span><strong className={timelineStyles.carry}>{formatMoney(row.carryBalance)}</strong><span className={timelineStyles.status} data-tone={status.tone}>{status.label}</span></div>; })}
       {pagination.totalPages > 1 ? <div className={timelineStyles.summaryPager}><button type="button" disabled={pagination.page <= 1} onClick={() => onPageChange(pagination.page - 1)}>Previous</button><span>Page {pagination.page} of {pagination.totalPages} · {pagination.total} programs</span><button type="button" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)}>Next</button></div> : null}
     </div> : null}
   </section>;

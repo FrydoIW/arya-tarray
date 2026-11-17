@@ -3,7 +3,7 @@ import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js";
-import { assertCorrectionApprovalCampaignValid } from "../../reconciliation/correction-approval-campaign.js";
+import { assertCorrectionApprovalCampaignValid, assertCorrectionChildCapacityValid } from "../../reconciliation/correction-approval-campaign.js";
 import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-time-based.service.js";
 import { synchronizeCampaignContribution } from "../../member/campaign/member-campaign-wallet.service.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
@@ -194,7 +194,7 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                   timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } }
                 }
               },
-              eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
+              eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true } },
               eventCampaign: { select: { id: true, campaignName: true } },
               ...timeBasedHistoryInclude
             },
@@ -383,7 +383,8 @@ export async function decideSignApprovalAtomic(input: {
                     reconciliationExcludedAt: true,
                     transactionDate: true,
                     transactionType: true,
-                    originalAmount: true
+                    originalAmount: true,
+                    memberIdentity: { select: { memberId: true, verificationStatus: true } }
                   }
                 }
               },
@@ -422,12 +423,13 @@ export async function decideSignApprovalAtomic(input: {
 
     if (correctionProposal) {
       if (input.decision === "APPROVED") {
-        // A proposal only stages intent: the Event Code or its Campaign may have
+        // A proposal only stages intent: the Event Code, its Child, or its Campaign may have
         // been reconfigured between Execute and Sign Approval. Revalidate the
         // values that are about to become official against the CURRENT persisted
         // configuration before the first BankTransaction mutation, so a stale
         // proposal aborts the whole decision transaction with no partial writes.
         await assertCorrectionApprovalCampaignValid(tx, correctionProposal.items);
+        await assertCorrectionChildCapacityValid(tx, correctionProposal.items);
 
         for (const item of correctionProposal.items) {
           if (item.action === "MODIFIED") {
@@ -589,7 +591,7 @@ export async function decideSignApprovalAtomic(input: {
     if (input.decision === "APPROVED") {
       const changedTimeBasedTransactionIds = new Set(
         correctionProposal?.items
-          .filter((item) => item.bankTransactionId && (item.action === "EXCLUDED" || (item.action === "MODIFIED" && item.beforeEventCodeId !== item.proposedEventCodeId)))
+          .filter((item) => item.bankTransactionId && (item.action === "EXCLUDED" || (item.action === "MODIFIED" && (item.beforeEventCodeId !== item.proposedEventCodeId || item.beforeEventCodeChildId !== item.proposedEventCodeChildId))))
           .map((item) => item.bankTransactionId!) ?? []
       );
       const timeBasedTransactions = await tx.bankTransaction.findMany({

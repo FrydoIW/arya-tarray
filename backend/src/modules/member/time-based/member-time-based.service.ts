@@ -3,6 +3,7 @@ import { HttpError } from "../../../lib/http.js";
 import { decimalStringToCents } from "../../../lib/money.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { allocatePostingSequences, assertRebuildHasNoActiveTransferRelation, lockSubscriptionsForPosting } from "./member-carry-transfer.foundation.js";
+import { tryResolveChildSlot, assertChildSlotAvailable, childConfigurationComplete } from "./time-based-child-domain.js";
 
 type Tx = Prisma.TransactionClient;
 const activeCoverage = { coverageStatus: "ACTIVE" } as const;
@@ -37,40 +38,86 @@ export function addCalendarMonthsInclusive(from: Date, months: number) {
   return addDays(nextStart, -1);
 }
 
-export function isCurrentTimeBasedAllocation(input: { subscriptionMemberId: string; subscriptionEventCodeId: string; paymentMemberId: string | null | undefined; paymentEventCodeId: string | null; verificationStatus: string | null | undefined }) {
-  return input.subscriptionMemberId === input.paymentMemberId && input.subscriptionEventCodeId === input.paymentEventCodeId && input.verificationStatus === "VERIFIED";
+export function isCurrentTimeBasedAllocation(input: {
+  subscriptionMemberId: string;
+  subscriptionEventCodeId: string;
+  subscriptionEventCodeChildId: string | null | undefined;
+  paymentMemberId: string | null | undefined;
+  paymentEventCodeId: string | null;
+  paymentEventCodeChildId: string | null | undefined;
+  verificationStatus: string | null | undefined;
+}) {
+  return input.subscriptionMemberId === input.paymentMemberId
+    && input.subscriptionEventCodeId === input.paymentEventCodeId
+    && (input.subscriptionEventCodeChildId ?? null) === (input.paymentEventCodeChildId ?? null)
+    && input.verificationStatus === "VERIFIED";
 }
-export function historicalCoverageEntitlement(input: { eventCodeId: string; subscriptionEventCodeId: string; unitAmount: { toString(): string } | null; durationMonths: number | null; grantedUnits: number | null; amountApplied: { toString(): string } | null }) {
-  if (input.eventCodeId !== input.subscriptionEventCodeId || !input.unitAmount || !input.durationMonths || !input.grantedUnits || !input.amountApplied) return null;
+export function historicalCoverageEntitlement(input: {
+  eventCodeId: string;
+  eventCodeChildId: string | null;
+  subscriptionEventCodeId: string;
+  subscriptionEventCodeChildId: string | null;
+  unitAmount: { toString(): string } | null;
+  durationMonths: number | null;
+  grantedUnits: number | null;
+  amountApplied: { toString(): string } | null;
+}) {
+  if (input.eventCodeId !== input.subscriptionEventCodeId) return null;
+  if ((input.eventCodeChildId ?? null) !== (input.subscriptionEventCodeChildId ?? null)) return null;
+  if (!input.unitAmount || !input.durationMonths || !input.grantedUnits || !input.amountApplied) return null;
   return { unitAmount: input.unitAmount.toString(), durationMonths: input.durationMonths, grantedUnits: input.grantedUnits, amountApplied: input.amountApplied.toString() };
 }
 export function selectHistoricalCoverageEntitlement(input: {
-  eventCodeId: string | null; principalAmount: { toString(): string }; alternativePrincipalAmount?: { toString(): string } | null; recalculate: boolean;
-  coverages: Array<{ coverageStatus: string; subscriptionEventCodeId: string; unitAmount: { toString(): string } | null;
-    durationMonths: number | null; grantedUnits: number | null; amountApplied: { toString(): string } | null }>;
+  eventCodeId: string | null;
+  eventCodeChildId: string | null;
+  principalAmount: { toString(): string };
+  alternativePrincipalAmount?: { toString(): string } | null;
+  recalculate: boolean;
+  coverages: Array<{
+    coverageStatus: string;
+    subscriptionEventCodeId: string;
+    subscriptionEventCodeChildId: string | null;
+    unitAmount: { toString(): string } | null;
+    durationMonths: number | null;
+    grantedUnits: number | null;
+    amountApplied: { toString(): string } | null;
+  }>;
 }) {
   if (!input.eventCodeId || input.recalculate) return null;
   const matches = (amount: { toString(): string } | null) => amount
     ? input.coverages.find(row => row.subscriptionEventCodeId === input.eventCodeId
+      && (row.subscriptionEventCodeChildId ?? null) === (input.eventCodeChildId ?? null)
       && row.amountApplied && cents(row.amountApplied) === cents(amount)) : undefined;
   // Prefer the full PAYMENT amount. The alternative is only a legacy snapshot
-  // fallback, and remains constrained to this Event Code and transaction.
+  // fallback, and remains constrained to this Event Code, Child, and transaction.
   const historical = matches(input.principalAmount)
     ?? (input.alternativePrincipalAmount && cents(input.alternativePrincipalAmount) !== cents(input.principalAmount)
       ? matches(input.alternativePrincipalAmount) : undefined);
   return historical ? historicalCoverageEntitlement({ eventCodeId: input.eventCodeId,
-    subscriptionEventCodeId: historical.subscriptionEventCodeId, unitAmount: historical.unitAmount,
+    eventCodeChildId: input.eventCodeChildId, subscriptionEventCodeId: historical.subscriptionEventCodeId,
+    subscriptionEventCodeChildId: historical.subscriptionEventCodeChildId, unitAmount: historical.unitAmount,
     durationMonths: historical.durationMonths, grantedUnits: historical.grantedUnits,
     amountApplied: historical.amountApplied }) : null;
 }
 export function selectHistoricalPaymentSnapshot(input: {
-  eventCodeId: string | null; principalAmount: { toString(): string }; alternativePrincipalAmount?: { toString(): string } | null; recalculate: boolean;
-  entries: Array<{ entryType: string; amountDelta: { toString(): string }; unitAmountSnapshot: { toString(): string } | null;
-    durationMonthsSnapshot: number | null; subscription: { eventCodeId: string } }>;
+  eventCodeId: string | null;
+  eventCodeChildId: string | null;
+  principalAmount: { toString(): string };
+  alternativePrincipalAmount?: { toString(): string } | null;
+  recalculate: boolean;
+  entries: Array<{
+    entryType: string;
+    amountDelta: { toString(): string };
+    unitAmountSnapshot: { toString(): string } | null;
+    durationMonthsSnapshot: number | null;
+    subscription: { eventCodeId: string; eventCodeChildId: string | null };
+  }>;
 }) {
   if (!input.eventCodeId || input.recalculate) return null;
   const matches = (amount: { toString(): string }) => input.entries.find(item => item.entryType === "PAYMENT"
-    && item.subscription.eventCodeId === input.eventCodeId && cents(item.amountDelta) === cents(amount)
+    && item.subscription.eventCodeId === input.eventCodeId
+    && (item.subscription.eventCodeChildId ?? null) === (input.eventCodeChildId ?? null)
+    && cents(item.amountDelta) === cents(amount)
     && item.unitAmountSnapshot && item.durationMonthsSnapshot);
   const row = matches(input.principalAmount)
     ?? (input.alternativePrincipalAmount && cents(input.alternativePrincipalAmount) !== cents(input.principalAmount)
@@ -87,17 +134,19 @@ export function resolveCoverageStart(input: { latestCoverageTo: Date | null; sta
 
 const paymentSelect = {
   id: true, transactionDate: true, originalAmount: true, baseAmount: true, status: true,
-  reconciliationExcludedAt: true, eventCodeId: true,
+  reconciliationExcludedAt: true, eventCodeId: true, eventCodeChildId: true,
   eventCode: { select: { id: true, eventType: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
+  eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true } },
   memberIdentity: { select: { memberId: true, verificationStatus: true } }
 } as const;
 type Payment = Prisma.BankTransactionGetPayload<{ select: typeof paymentSelect }>;
-function eligible(payment: Payment, sub: { memberId: string; eventCodeId: string }) {
+function eligible(payment: Payment, sub: { memberId: string; eventCodeId: string; eventCodeChildId: string | null }) {
   return payment.status === "FINALIZED" && !payment.reconciliationExcludedAt && !!payment.transactionDate
     && !!payment.baseAmount && cents(payment.baseAmount) > 0n && cents(payment.originalAmount) > 0n
     && payment.eventCode?.eventType === "TIME_BASED"
     && isCurrentTimeBasedAllocation({ subscriptionMemberId: sub.memberId, subscriptionEventCodeId: sub.eventCodeId,
-      paymentMemberId: payment.memberIdentity?.memberId, paymentEventCodeId: payment.eventCodeId,
+      subscriptionEventCodeChildId: sub.eventCodeChildId, paymentMemberId: payment.memberIdentity?.memberId,
+      paymentEventCodeId: payment.eventCodeId, paymentEventCodeChildId: payment.eventCodeChildId,
       verificationStatus: payment.memberIdentity?.verificationStatus });
 }
 
@@ -118,7 +167,7 @@ export async function lockActiveTimeBasedProgram(tx: Tx, memberId: string, event
 export async function ensureActiveTimeBasedProgram(tx: Tx, input: { memberId: string; eventCodeId: string; userId: string }) {
   await lockActiveTimeBasedProgram(tx, input.memberId, input.eventCodeId);
   const matches = await tx.memberEventSubscription.findMany({ where: { memberId: input.memberId,
-    eventCodeId: input.eventCodeId, activeFlag: true }, select: { id: true } });
+    eventCodeId: input.eventCodeId, activeFlag: true, eventCodeChildId: null }, select: { id: true } });
   if (matches.length === 1) return matches[0].id;
   if (matches.length > 1) return null;
   const created = await tx.memberEventSubscription.create({ data: {
@@ -128,38 +177,100 @@ export async function ensureActiveTimeBasedProgram(tx: Tx, input: { memberId: st
   return created.id;
 }
 
+export type ChildProgramResolution =
+  | { state: "ALLOCATED"; subscriptionId: string }
+  | { state: "CAPACITY_FULL" }
+  | { state: "NOT_CONFIGURED" }
+  | { state: "AMBIGUOUS" };
+
+/**
+ * Child-aware program resolution for payments that carry a child. A valid
+ * first finalized payment establishes the Member + Parent + Child program, but
+ * only when the child is configured and a slot is actually available. Capacity
+ * exhaustion never fabricates a program and never loses the payment: the
+ * payment remains an unresolved official payment.
+ */
+export async function ensureActiveTimeBasedChildProgram(tx: Tx, input: {
+  memberId: string;
+  eventCodeId: string;
+  eventCodeChildId: string;
+  userId: string;
+}): Promise<ChildProgramResolution> {
+  await lockActiveTimeBasedProgram(tx, input.memberId, input.eventCodeId);
+  const matches = await tx.memberEventSubscription.findMany({ where: {
+    memberId: input.memberId, eventCodeId: input.eventCodeId, eventCodeChildId: input.eventCodeChildId, activeFlag: true
+  }, select: { id: true } });
+  if (matches.length === 1) return { state: "ALLOCATED", subscriptionId: matches[0].id };
+  if (matches.length > 1) return { state: "AMBIGUOUS" };
+  const slot = await tryResolveChildSlot(tx, {
+    childId: input.eventCodeChildId, memberId: input.memberId
+  });
+  if (slot.state !== "AVAILABLE") {
+    if (slot.state === "MISSING" || slot.state === "INACTIVE" || slot.state === "NOT_CONFIGURED") return { state: "NOT_CONFIGURED" };
+    return { state: "CAPACITY_FULL" };
+  }
+  const created = await tx.memberEventSubscription.create({ data: {
+    memberId: input.memberId, eventCodeId: input.eventCodeId, eventCodeChildId: input.eventCodeChildId,
+    activeFlag: true, createdById: input.userId, updatedById: input.userId
+  }, select: { id: true } });
+  return { state: "ALLOCATED", subscriptionId: created.id };
+}
+
 function hasResolvableCurrentTimeRule(payment: Payment) {
   try {
-    return Boolean(resolveTimeBasedUnits({ eventCode: payment.eventCode, rule: payment.eventCode?.timeRule ?? null,
-      transaction: payment, requiresClassification: true }));
+    return Boolean(resolveEffectiveTimeBasedRate(payment));
   } catch { return false; }
 }
-async function snapshot(tx: Tx, payment: Payment, recalculate: boolean) {
+
+/**
+ * Effective rate for a payment: the child's own configuration when the payment
+ * carries a TIME_BASED child, otherwise the parent Time Rule (legacy path).
+ * No silent fallback: an incomplete child configuration blocks allocation and
+ * keeps the payment unresolved.
+ */
+export function resolveEffectiveTimeBasedRate(payment: {
+  eventCodeId: string | null;
+  eventCodeChildId: string | null;
+  baseAmount: { toString(): string } | null;
+  eventCode: { eventType: string; timeRule: { unitAmount: { toString(): string }; durationMonths: number; activeFlag: boolean } | null } | null;
+  eventCodeChild: { id: string; eventCodeId: string; childCode: string; childName: string; activeFlag: boolean; capacity: number | null; unitAmount: { toString(): string } | null; durationMonths: number | null } | null;
+}) {
+  if (payment.eventCodeChildId && payment.eventCodeChild) {
+    if (!childConfigurationComplete(payment.eventCodeChild)) {
+      throw new HttpError(409, `Child ${payment.eventCodeChild.childCode} belum memiliki konfigurasi lengkap (capacity, unit amount, duration). Payment tidak dapat dialokasikan.`);
+    }
+    return { unitAmount: payment.eventCodeChild.unitAmount!.toString(), durationMonths: payment.eventCodeChild.durationMonths! };
+  }
+  return resolveTimeBasedUnits({ eventCode: payment.eventCode, rule: payment.eventCode?.timeRule ?? null,
+    transaction: { baseAmount: payment.baseAmount, originalAmount: { toString: () => "0" } }, requiresClassification: true });
+}
+
+async function snapshot(tx: Tx, payment: Payment, recalculate: boolean): Promise<{ unitAmount: string; durationMonths: number }> {
   if (!payment.baseAmount || !payment.eventCodeId) throw new HttpError(400, "TIME_BASED principal and Event Code are required");
   if (!recalculate) {
     const [entries, coverages] = await Promise.all([
       tx.memberEventBalanceLedger.findMany({ where: { bankTransactionId: payment.id, entryType: "PAYMENT" },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: { entryType: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true,
-          subscription: { select: { eventCodeId: true } } } }),
+          subscription: { select: { eventCodeId: true, eventCodeChildId: true } } } }),
       tx.memberEventCoverage.findMany({ where: { bankTransactionId: payment.id, coverageSource: "TRANSACTION" },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: { coverageStatus: true, unitAmountSnapshot: true, durationMonthsSnapshot: true,
-          grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true } } } })
+          grantedUnits: true, amountApplied: true, subscription: { select: { eventCodeId: true, eventCodeChildId: true } } } })
     ]);
-    const old = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId,
+    const old = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId, eventCodeChildId: payment.eventCodeChildId,
       principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false, entries })
-      ?? selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCodeId,
+      ?? selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCodeId, eventCodeChildId: payment.eventCodeChildId,
         principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false,
         coverages: coverages.map(row => ({ coverageStatus: row.coverageStatus,
-          subscriptionEventCodeId: row.subscription.eventCodeId, unitAmount: row.unitAmountSnapshot,
-          durationMonths: row.durationMonthsSnapshot, grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });
+          subscriptionEventCodeId: row.subscription.eventCodeId, subscriptionEventCodeChildId: row.subscription.eventCodeChildId,
+          unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot,
+          grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });
     if (old) return old;
   }
-  const current = resolveTimeBasedUnits({ eventCode: payment.eventCode, rule: payment.eventCode?.timeRule ?? null,
-    transaction: payment, requiresClassification: true });
+  const current = resolveEffectiveTimeBasedRate(payment);
   if (!current) throw new HttpError(400, "This payment has no TIME_BASED rule");
-  return { unitAmount: current.unitAmount, durationMonths: current.durationMonths };
+  return current;
 }
 export async function refreshSubscriptionValidity(tx: Tx, subscriptionId: string) {
   const latest = await tx.memberEventCoverage.findFirst({ where: { subscriptionId, ...activeCoverage },
@@ -197,7 +308,7 @@ async function appendForwardTimeBasedPayment(tx: Tx, subscriptionId: string, pay
   if (recalculate || !payment.transactionDate) return false;
   await lockSubscriptionsForPosting(tx, [subscriptionId]);
   const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId },
-    select: { id: true, memberId: true, eventCodeId: true } });
+    select: { id: true, memberId: true, eventCodeId: true, eventCodeChildId: true } });
   if (!sub || !eligible(payment, sub)) return false;
   const existing = await tx.memberEventBalanceLedger.findFirst({ where: { subscriptionId, bankTransactionId: payment.id,
     entryType: "PAYMENT", ...activeEntry }, select: { id: true } });
@@ -242,7 +353,7 @@ async function rebuildSubscription(tx: Tx, subscriptionId: string, userId: strin
   await lockSubscriptionsForPosting(tx, [subscriptionId]);
   await assertRebuildHasNoActiveTransferRelation(tx, subscriptionId);
   const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId },
-    select: { id: true, memberId: true, eventCodeId: true, startDate: true, validUntil: true } });
+    select: { id: true, memberId: true, eventCodeId: true, eventCodeChildId: true, startDate: true, validUntil: true } });
   if (!sub) return;
   const [ledger, coverage, openings, activeLedger, transferIns] = await Promise.all([
     tx.memberEventBalanceLedger.findMany({ where: { subscriptionId, entryType: "PAYMENT", ...activeEntry },
@@ -358,9 +469,9 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
   const [activePayments, legacyCoverage] = await Promise.all([
     tx.memberEventBalanceLedger.findMany({ where: { bankTransactionId: transactionId, entryType: "PAYMENT", ...activeEntry },
       select: { subscriptionId: true, amountDelta: true, unitAmountSnapshot: true, durationMonthsSnapshot: true,
-        subscription: { select: { memberId: true, eventCodeId: true } } } }),
+        subscription: { select: { memberId: true, eventCodeId: true, eventCodeChildId: true } } } }),
     tx.memberEventCoverage.findMany({ where: { bankTransactionId: transactionId, coverageSource: "TRANSACTION", ...activeCoverage },
-      select: { subscriptionId: true, subscription: { select: { memberId: true, eventCodeId: true } } } })
+      select: { subscriptionId: true, subscription: { select: { memberId: true, eventCodeId: true, eventCodeChildId: true } } } })
   ]);
   const oldIds = [...new Set([...activePayments, ...legacyCoverage].map(row => row.subscriptionId))];
   const memberId = payment.memberIdentity?.verificationStatus === "VERIFIED" ? payment.memberIdentity.memberId : null;
@@ -368,18 +479,20 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
     && payment.eventCode?.eventType === "TIME_BASED" && !!payment.transactionDate
     && !!payment.baseAmount && cents(payment.baseAmount) > 0n && cents(payment.originalAmount) > 0n;
   let destination: string | null = null;
-  let pending: "PENDING_MEMBER" | "PENDING_SUBSCRIPTION" | "AMBIGUOUS" | "NOT_TIME_BASED" = "NOT_TIME_BASED";
+  let pending: "PENDING_MEMBER" | "PENDING_SUBSCRIPTION" | "PENDING_CAPACITY" | "AMBIGUOUS" | "NOT_TIME_BASED" = "NOT_TIME_BASED";
   const pinned = official ? [...activePayments, ...legacyCoverage].find(row =>
     isCurrentTimeBasedAllocation({ subscriptionMemberId: row.subscription.memberId,
-      subscriptionEventCodeId: row.subscription.eventCodeId, paymentMemberId: memberId,
-      paymentEventCodeId: payment.eventCodeId, verificationStatus: payment.memberIdentity?.verificationStatus })) : null;
+      subscriptionEventCodeId: row.subscription.eventCodeId,
+      subscriptionEventCodeChildId: row.subscription.eventCodeChildId, paymentMemberId: memberId,
+      paymentEventCodeId: payment.eventCodeId, paymentEventCodeChildId: payment.eventCodeChildId,
+      verificationStatus: payment.memberIdentity?.verificationStatus })) : null;
   if (official) {
     if (!memberId) pending = "PENDING_MEMBER";
     else if (options?.subscriptionId) {
       if (pinned && pinned.subscriptionId !== options.subscriptionId)
         throw new HttpError(409, "This payment is already allocated to another subscription");
       const chosen = await tx.memberEventSubscription.findUnique({ where: { id: options.subscriptionId },
-        select: { id: true, memberId: true, eventCodeId: true, activeFlag: true } });
+        select: { id: true, memberId: true, eventCodeId: true, eventCodeChildId: true, activeFlag: true } });
       if (!chosen || !chosen.activeFlag || !eligible(payment, chosen))
         throw new HttpError(400, "This finalized payment is not eligible for this subscription");
       destination = chosen.id;
@@ -388,9 +501,16 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
       destination = pinned.subscriptionId;
     } else {
       // Invalid or missing rules remain visible as an exception; do not fabricate a program.
-      // A valid first finalized payment establishes the normal Member + Event logical program.
+      // A valid first finalized payment establishes the normal Member + Event (+ Child) logical program.
       if (!hasResolvableCurrentTimeRule(payment)) pending = "PENDING_SUBSCRIPTION";
-      else {
+      else if (payment.eventCodeChildId) {
+        const resolved = await ensureActiveTimeBasedChildProgram(tx, {
+          memberId, eventCodeId: payment.eventCodeId!, eventCodeChildId: payment.eventCodeChildId, userId
+        });
+        if (resolved.state === "ALLOCATED") destination = resolved.subscriptionId;
+        else if (resolved.state === "CAPACITY_FULL" || resolved.state === "NOT_CONFIGURED") pending = "PENDING_CAPACITY";
+        else pending = "AMBIGUOUS";
+      } else {
         const ensured = await ensureActiveTimeBasedProgram(tx, { memberId, eventCodeId: payment.eventCodeId!, userId });
         if (ensured) destination = ensured;
         else pending = "AMBIGUOUS";
@@ -402,8 +522,10 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
     && !options?.recalculate && active.unitAmountSnapshot && active.durationMonthsSnapshot
     && cents(active.amountDelta) === cents(payment.originalAmount)
     && isCurrentTimeBasedAllocation({ subscriptionMemberId: active.subscription.memberId,
-      subscriptionEventCodeId: active.subscription.eventCodeId, paymentMemberId: memberId,
-      paymentEventCodeId: payment.eventCodeId, verificationStatus: payment.memberIdentity?.verificationStatus }))
+      subscriptionEventCodeId: active.subscription.eventCodeId,
+      subscriptionEventCodeChildId: active.subscription.eventCodeChildId, paymentMemberId: memberId,
+      paymentEventCodeId: payment.eventCodeId, paymentEventCodeChildId: payment.eventCodeChildId,
+      verificationStatus: payment.memberIdentity?.verificationStatus }))
     return { state: "ALLOCATED" as const, subscriptionId: destination };
   for (const oldId of oldIds.filter(id => id !== destination))
     await rebuildSubscription(tx, oldId, userId, "Official allocation or Member ownership changed");

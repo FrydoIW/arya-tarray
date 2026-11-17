@@ -146,6 +146,7 @@ model User {
   updatedEventTimeRules EventTimeRule[] @relation("EventTimeRuleUpdatedBy")
   createdEventCodeChildren EventCodeChild[] @relation("EventCodeChildCreatedBy")
   updatedEventCodeChildren EventCodeChild[] @relation("EventCodeChildUpdatedBy")
+  createdChildCapacityChanges EventCodeChildCapacityChange[] @relation("ChildCapacityChangeCreatedBy")
   createdMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionCreatedBy")
   updatedMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionUpdatedBy")
   createdMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageCreatedBy")
@@ -339,18 +340,24 @@ model EventTimeRule {
 /// Generic child dimension of an Event Code. A child is a classification detail
 /// on transactions (for example "Amitabha" under 017 Rupang). It is not a
 /// Campaign and not a subscription item. Unique per parent by child_code.
+/// TIME_BASED children may carry an optional subscription-item configuration
+/// (capacity, unit amount, duration). NULL configuration means the child is not
+/// yet eligible for enrollment; enrollment is blocked until configured.
 model EventCodeChild {
-  id           String   @id @default(uuid()) @map("event_code_child_id") @db.Char(36)
-  eventCodeId  String   @map("event_code_id") @db.Char(36)
-  childCode    String   @map("child_code") @db.VarChar(30)
-  childName    String   @map("child_name") @db.VarChar(150)
-  description  String?  @db.VarChar(500)
-  displayOrder Int      @default(0) @map("display_order")
-  activeFlag   Boolean  @default(true) @map("active_flag")
-  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
-  createdById  String?  @map("created_by") @db.Char(36)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
-  updatedById  String?  @map("updated_by") @db.Char(36)
+  id             String   @id @default(uuid()) @map("event_code_child_id") @db.Char(36)
+  eventCodeId    String   @map("event_code_id") @db.Char(36)
+  childCode      String   @map("child_code") @db.VarChar(30)
+  childName      String   @map("child_name") @db.VarChar(150)
+  description    String?  @db.VarChar(500)
+  displayOrder   Int      @default(0) @map("display_order")
+  activeFlag     Boolean  @default(true) @map("active_flag")
+  capacity       Int?     @db.UnsignedInt
+  unitAmount     Decimal? @map("unit_amount") @db.Decimal(20, 2)
+  durationMonths Int?     @map("duration_months") @db.UnsignedInt
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  createdById    String?  @map("created_by") @db.Char(36)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  updatedById    String?  @map("updated_by") @db.Char(36)
 
   eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_event_code")
   createdBy User? @relation("EventCodeChildCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_created_by")
@@ -358,6 +365,8 @@ model EventCodeChild {
   transactions BankTransaction[]
   correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCodeChild")
   correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCodeChild")
+  subscriptions MemberEventSubscription[]
+  capacityChanges EventCodeChildCapacityChange[]
 
   @@unique([eventCodeId, childCode], map: "uk_event_code_child_parent_code")
   @@index([eventCodeId, activeFlag], map: "idx_event_code_child_parent_active")
@@ -366,10 +375,30 @@ model EventCodeChild {
   @@map("arya_event_code_child")
 }
 
+/// Audit trail for TIME_BASED child capacity changes. Capacity is slot count,
+/// never a financial amount; every change records before/after and actor.
+model EventCodeChildCapacityChange {
+  id               String   @id @default(uuid()) @map("event_code_child_capacity_change_id") @db.Char(36)
+  eventCodeChildId String   @map("event_code_child_id") @db.Char(36)
+  beforeCapacity   Int?     @map("before_capacity") @db.UnsignedInt
+  afterCapacity    Int      @map("after_capacity") @db.UnsignedInt
+  reason           String?  @db.VarChar(500)
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  createdById      String?  @map("created_by") @db.Char(36)
+
+  eventCodeChild EventCodeChild @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_child_capacity_change_child")
+  createdBy User? @relation("ChildCapacityChangeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_child_capacity_change_created_by")
+
+  @@index([eventCodeChildId, createdAt], map: "idx_child_capacity_change_child_created")
+  @@index([createdById], map: "idx_child_capacity_change_created_by")
+  @@map("arya_event_code_child_capacity_change")
+}
+
 model MemberEventSubscription {
   id String @id @default(uuid()) @map("member_event_subscription_id") @db.Char(36)
   memberId String @map("member_id") @db.Char(36)
   eventCodeId String @map("event_code_id") @db.Char(36)
+  eventCodeChildId String? @map("event_code_child_id") @db.Char(36)
   referenceNo String? @map("reference_no") @db.VarChar(100)
   displayName String? @map("display_name") @db.VarChar(200)
   startDate DateTime? @map("start_date") @db.Date
@@ -383,6 +412,7 @@ model MemberEventSubscription {
 
   member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_member")
   eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code")
+  eventCodeChild EventCodeChild? @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code_child")
   createdBy User? @relation("MemberEventSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_created_by")
   updatedBy User? @relation("MemberEventSubscriptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_updated_by")
   coverages MemberEventCoverage[]
@@ -390,8 +420,10 @@ model MemberEventSubscription {
   carryTransfersOut MemberEventCarryTransfer[] @relation("MemberEventCarryTransferSourceSubscription")
   carryTransfersIn MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationSubscription")
 
+  @@unique([memberId, eventCodeChildId], map: "uk_member_event_sub_member_child")
   @@index([memberId, eventCodeId, activeFlag], map: "idx_member_event_sub_member_event")
   @@index([eventCodeId, activeFlag], map: "idx_member_event_sub_event")
+  @@index([eventCodeChildId], map: "idx_member_event_sub_event_code_child")
   @@index([referenceNo], map: "idx_member_event_sub_reference")
   @@index([validUntil], map: "idx_member_event_sub_valid_until")
   @@index([createdById], map: "idx_member_event_sub_created_by")

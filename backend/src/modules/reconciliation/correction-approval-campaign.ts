@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { HttpError } from "../../lib/http.js";
 import { assertCampaignClassification } from "./campaign-classification.js";
 import { assertChildClassification } from "./event-child-classification.js";
+import { childConfigurationComplete, subscriptionOccupiesSlot, businessDayUtcStart, tryResolveChildSlot } from "../member/time-based/time-based-child-domain.js";
 import { storedTransactionRequiresClassification } from "./reconciliation-classification.js";
 
 /**
@@ -36,6 +37,10 @@ export type CorrectionApprovalItem = {
     transactionDate: Date | null;
     transactionType: string | null;
     originalAmount: { toString(): string };
+    memberIdentity: {
+      memberId: string | null;
+      verificationStatus: string;
+    } | null;
   } | null;
 };
 
@@ -195,6 +200,47 @@ export async function assertCorrectionApprovalCampaignValid(tx: Prisma.Transacti
     const transactionDate = item.action === "ADDED" ? item.manualTransactionDate : item.bankTransaction?.transactionDate ?? null;
     assertCorrectionCampaignStillValid({ item, eventCodeById, campaignById, transactionDate, requiresClassification });
     assertCorrectionChildStillValid({ item, eventCodeById, childById, childrenByParentId, requiresClassification });
+  }
+}
+
+/**
+ * Approval-time slot capacity revalidation for corrections that move a payment
+ * to a TIME_BASED child. The destination program must be configured, and if
+ * the resolved member has no subscription already occupying a slot for that
+ * child, a slot must actually be available. Runs BEFORE any BankTransaction
+ * mutation so a full child aborts the decision with no partial writes.
+ */
+export async function assertCorrectionChildCapacityValid(tx: Prisma.TransactionClient, items: CorrectionApprovalItem[]) {
+  const relevant = items.filter((item) =>
+    (item.action === "MODIFIED" || item.action === "ADDED")
+    && Boolean(item.proposedEventCodeChildId)
+    && item.proposedEventCodeChildId !== item.beforeEventCodeChildId
+  );
+  if (relevant.length === 0) return;
+
+  const { eventCodeById } = await loadPersistedCorrectionClassification(tx, relevant);
+
+  for (const item of relevant) {
+    const parent = item.proposedEventCodeId ? eventCodeById.get(item.proposedEventCodeId) ?? null : null;
+    if (!parent || parent.eventType !== "TIME_BASED") continue;
+    const child = await tx.eventCodeChild.findUnique({
+      where: { id: item.proposedEventCodeChildId! },
+      select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true }
+    });
+    if (!child || !childConfigurationComplete(child)) {
+      throw new HttpError(409, `${STALE_CHILD_PROPOSAL_MESSAGE} Child ${child?.childCode ?? "target"} belum memiliki konfigurasi lengkap (capacity, unit amount, duration).`);
+    }
+    const memberId = item.bankTransaction?.memberIdentity?.memberId ?? null;
+    if (!memberId || item.bankTransaction?.memberIdentity?.verificationStatus !== "VERIFIED") continue;
+    const existing = await tx.memberEventSubscription.findFirst({
+      where: { memberId, eventCodeChildId: child.id },
+      select: { id: true, activeFlag: true, validUntil: true }
+    });
+    if (existing?.activeFlag && subscriptionOccupiesSlot(existing, businessDayUtcStart())) continue;
+    const slot = await tryResolveChildSlot(tx, { childId: child.id, memberId, excludeSubscriptionId: existing?.id });
+    if (slot.state !== "AVAILABLE") {
+      throw new HttpError(409, `${STALE_CHILD_PROPOSAL_MESSAGE} Child ${child.childCode} tidak memiliki slot tersedia (${slot.state === "CAPACITY_FULL" ? `penuh ${slot.occupied}/${child.capacity}` : "tidak tersedia untuk enrollment"}).`);
+    }
   }
 }
 

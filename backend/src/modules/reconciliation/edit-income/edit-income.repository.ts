@@ -92,7 +92,7 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
           include: {
             suggestedEventCode: { select: eventCodeSelect },
             eventCode: { select: eventCodeSelect },
-            eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true } },
+            eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true, displayOrder: true } },
             eventCampaign: { select: { id: true, campaignName: true } },
             ...timeBasedHistoryInclude
           },

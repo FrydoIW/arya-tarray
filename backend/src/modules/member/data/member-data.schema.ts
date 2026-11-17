@@ -69,7 +69,7 @@ export const identityHistoryQuerySchema = z.object({
 });
 
 export const subscriptionCreateSchema = z.object({
-  eventCodeId: z.string().uuid(), referenceNo: z.string().trim().max(100).nullable(), displayName: z.string().trim().max(200).nullable(),
+  eventCodeId: z.string().uuid(), eventCodeChildId: z.string().uuid().optional(), referenceNo: z.string().trim().max(100).nullable(), displayName: z.string().trim().max(200).nullable(),
   remark: z.string().trim().max(1000).nullable()
 }).strict();
 export const campaignParticipationCreateSchema = z.object({

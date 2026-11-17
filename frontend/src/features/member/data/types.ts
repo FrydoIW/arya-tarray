@@ -76,7 +76,8 @@ export type ContributionRow = {
   totalAmount: string; transactionCount: number;
 };
 export type SponsorshipSubscription = {
-  subscriptionId: string; event: { eventCodeId: string; code: string; eventName: string; eventType: string };
+  subscriptionId: string; event: { eventCodeId: string; code: string; eventName: string; eventType: string; eventCodeChildId: string | null };
+  eventCodeChild: { eventCodeChildId: string; childCode: string; childName: string; activeFlag: boolean; capacity: number | null; unitAmount: string | null; durationMonths: number | null } | null;
   referenceNo: string | null; displayName: string | null; startDate: string | null; validUntil: string | null;
   activeFlag: boolean; eventActiveFlag: boolean; remark: string | null; status: "ACTIVE" | "INACTIVE";
   timeRule: { unitAmount: string; durationMonths: number } | null;
@@ -86,8 +87,16 @@ export type SponsorshipSubscription = {
   balanceHistory: Array<{ ledgerId: string; transactionId: string | null; referenceNo: string | null; type: string; status: string; amountDelta: string; effectiveDate: string | null; unitAmount: string | null; durationMonths: number | null; voidReason: string | null }>;
   coverage: Array<{ coverageId: string; source: string; status: string; transactionId: string | null; transactionDate: string | null; referenceNo: string | null; amountApplied: string | null; unitAmount: string | null; durationMonths: number | null; grantedUnits: number | null; coverageFrom: string; coverageTo: string; remark: string | null; voidReason: string | null }>;
 };
+
+export type SubscriptionChildOption = {
+  eventCodeChildId: string; eventCodeId: string; childCode: string; childName: string; displayOrder: number;
+  activeFlag: boolean; capacity: number | null; occupiedSlots: number; availableSlots: number | null;
+  unitAmount: string | null; durationMonths: number | null; configurationComplete: boolean;
+};
+
 export type SponsorshipWorkspace = {
   eventOptions: Array<{ eventCodeId: string; code: string; eventName: string }>;
+  childOptions: SubscriptionChildOption[];
   subscriptions: SponsorshipSubscription[];
   contributions: ContributionRow[];
   campaigns: Array<{ campaignId: string; campaignName: string; eventCodeId: string; eventCode: string; eventName: string; status: string;
@@ -101,7 +110,7 @@ export type SponsorshipWorkspace = {
   availableCampaigns: Array<{ campaignId: string; campaignName: string; eventCodeId: string; code: string; eventName: string }>;
   campaignParticipationOptions: Array<{ campaignId: string; campaignName: string; eventCodeId: string; code: string; eventName: string; startDate: string | null; endDate: string | null }>;
   contributionTotals: Record<string, { amount: string; transactionCount: number }>;
-  pendingPayments: Array<{ transactionId: string; transactionDate: string | null; referenceNo: string | null; amount: string; principalAmount: string; event: { eventCodeId: string; code: string; eventName: string } | null; unitAmount: string | null; grantedUnits: number | null; durationMonths: number | null; reason: string }>;
+  pendingPayments: Array<{ transactionId: string; transactionDate: string | null; referenceNo: string | null; amount: string; principalAmount: string; eventCodeChildId: string | null; event: { eventCodeId: string; code: string; eventName: string } | null; unitAmount: string | null; grantedUnits: number | null; durationMonths: number | null; reason: string }>;
 };
 
 export type CarryTransferSubscription = {
@@ -148,7 +157,7 @@ export type CarryTransferReversalResult = {
 export type CarrySummarySource = SponsorshipWorkspace["carrySummary"]["sources"][number];
 export type CarryTransferInput = { destinationSubscriptionId?: string; destinationCampaignId?: string; amount: string; reason: string; idempotencyKey: string };
 export type CarryTransferReverseInput = { reason: string; idempotencyKey: string };
-export type SubscriptionInput = { eventCodeId: string; referenceNo: string | null; displayName: string | null; remark: string | null };
+export type SubscriptionInput = { eventCodeId: string; eventCodeChildId?: string; referenceNo: string | null; displayName: string | null; remark: string | null };
 export type SubscriptionMetadataInput = { referenceNo: string | null; displayName: string | null; remark: string | null };
 export type CampaignParticipationInput = { eventCampaignId: string; remark: string | null };
 export type OpeningCoverageInput = { coverageFrom: string; coverageTo: string; remark: string };

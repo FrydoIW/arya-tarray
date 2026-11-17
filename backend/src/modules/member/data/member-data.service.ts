@@ -4,6 +4,7 @@ import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
 import { lockActiveTimeBasedProgram, manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, resolveEffectiveStartDate, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../time-based/member-time-based.service.js";
+import { assertChildSlotAvailable } from "../time-based/time-based-child-domain.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { centsToDecimal, decimalStringToCents } from "../../../lib/money.js";
 import { campaignDisplayStatus } from "../../configuration/event-code/event-campaign.service.js";
@@ -93,21 +94,29 @@ export function initialTimeBasedSubscriptionState() {
 export function pendingTimeBasedPaymentPreview(payment: {
   id: string; transactionDate: Date | null; referenceNo: string | null;
   originalAmount: { toString(): string }; baseAmount: { toString(): string } | null;
+  eventCodeId?: string | null;
+  eventCodeChildId?: string | null;
   eventCode: { id: string; code: string; eventName: string; timeRule: { unitAmount: { toString(): string }; durationMonths: number; activeFlag: boolean } | null } | null;
-  memberEventCoverages: Array<{ coverageStatus: string; unitAmountSnapshot: { toString(): string } | null; durationMonthsSnapshot: number | null; grantedUnits: number | null; amountApplied: { toString(): string } | null; subscription: { eventCodeId: string } }>;
-  memberEventBalanceLedger?: Array<{ entryType: string; amountDelta: { toString(): string }; unitAmountSnapshot: { toString(): string } | null; durationMonthsSnapshot: number | null; subscription: { eventCodeId: string } }>;
-}, subscriptions: Array<{ event: { eventCodeId: string }; activeFlag: boolean }>) {
+  eventCodeChild?: { childCode: string; childName: string; unitAmount: { toString(): string } | null; durationMonths: number | null } | null;
+  memberEventCoverages: Array<{ coverageStatus: string; unitAmountSnapshot: { toString(): string } | null; durationMonthsSnapshot: number | null; grantedUnits: number | null; amountApplied: { toString(): string } | null; subscription: { eventCodeId: string; eventCodeChildId: string | null } }>;
+  memberEventBalanceLedger?: Array<{ entryType: string; amountDelta: { toString(): string }; unitAmountSnapshot: { toString(): string } | null; durationMonthsSnapshot: number | null; subscription: { eventCodeId: string; eventCodeChildId: string | null } }>;
+}, subscriptions: Array<{ event: { eventCodeId: string; eventCodeChildId: string | null }; activeFlag: boolean }>) {
   let estimate: ReturnType<typeof resolveTimeBasedUnits> = null;
-  const ledgerSnapshot = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCode?.id ?? null,
+  const ledgerSnapshot = selectHistoricalPaymentSnapshot({ eventCodeId: payment.eventCodeId ?? payment.eventCode?.id ?? null, eventCodeChildId: payment.eventCodeChildId ?? null,
     principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false, entries: payment.memberEventBalanceLedger ?? [] });
-  const coverageSnapshot = selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCode?.id ?? null,
+  const coverageSnapshot = selectHistoricalCoverageEntitlement({ eventCodeId: payment.eventCodeId ?? payment.eventCode?.id ?? null, eventCodeChildId: payment.eventCodeChildId ?? null,
     principalAmount: payment.originalAmount, alternativePrincipalAmount: payment.baseAmount, recalculate: false,
-    coverages: payment.memberEventCoverages.map(row => ({ coverageStatus: row.coverageStatus, subscriptionEventCodeId: row.subscription.eventCodeId, unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot, grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });
+    coverages: payment.memberEventCoverages.map(row => ({ coverageStatus: row.coverageStatus, subscriptionEventCodeId: row.subscription.eventCodeId, subscriptionEventCodeChildId: row.subscription.eventCodeChildId, unitAmount: row.unitAmountSnapshot, durationMonths: row.durationMonthsSnapshot, grantedUnits: row.grantedUnits, amountApplied: row.amountApplied })) });
   try {
     const historical = ledgerSnapshot ?? coverageSnapshot;
+    const childRate = payment.eventCodeChild?.unitAmount && payment.eventCodeChild.durationMonths
+      ? { unitAmount: { toString: () => payment.eventCodeChild!.unitAmount!.toString() }, durationMonths: payment.eventCodeChild.durationMonths, activeFlag: true }
+      : null;
     const resolved = historical
       ? resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: { unitAmount: { toString: () => historical.unitAmount }, durationMonths: historical.durationMonths, activeFlag: true }, transaction: payment, requiresClassification: true })
-      : resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true });
+      : childRate
+        ? resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: childRate, transaction: payment, requiresClassification: true })
+        : resolveTimeBasedUnits({ eventCode: { eventType: "TIME_BASED" }, rule: payment.eventCode?.timeRule ?? null, transaction: payment, requiresClassification: true });
     if (resolved) {
       const unit = decimalStringToCents(resolved.unitAmount);
       const amount = decimalStringToCents(payment.originalAmount.toString());
@@ -116,12 +125,13 @@ export function pendingTimeBasedPaymentPreview(payment: {
       estimate = { ...resolved, grantedUnits: Number(units), amountApplied: payment.originalAmount.toString() };
     }
   }
-  catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: payment.originalAmount.toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: null, grantedUnits: null, durationMonths: null, reason }; }
-  const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === payment.eventCode?.id && subscription.activeFlag);
+  catch (caught) { const reason = caught instanceof Error ? caught.message : "Time Rule cannot resolve this payment"; return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: payment.originalAmount.toString(), eventCodeChildId: payment.eventCodeChildId ?? null, event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: null, grantedUnits: null, durationMonths: null, reason }; }
+  const matching = subscriptions.filter(subscription => subscription.event.eventCodeId === (payment.eventCodeId ?? payment.eventCode?.id)
+    && (subscription.event.eventCodeChildId ?? null) === (payment.eventCodeChildId ?? null) && subscription.activeFlag);
   const reason = matching.length === 0 ? "No active subscription for this Event Code"
     : matching.length > 1 ? "Multiple active subscriptions — choose one"
       : "Allocation pending synchronization";
-  return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: payment.originalAmount.toString(), event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: estimate?.unitAmount ?? null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
+  return { transactionId: payment.id, transactionDate: dateOnly(payment.transactionDate), referenceNo: payment.referenceNo, amount: payment.originalAmount.toString(), principalAmount: payment.originalAmount.toString(), eventCodeChildId: payment.eventCodeChildId ?? null, event: payment.eventCode ? { eventCodeId: payment.eventCode.id, code: payment.eventCode.code, eventName: payment.eventCode.eventName } : null, unitAmount: estimate?.unitAmount ?? null, grantedUnits: estimate?.grantedUnits ?? null, durationMonths: estimate?.durationMonths ?? null, reason };
 }
 
 export type SubscriptionLedgerTotals = { principal: bigint; consumed: bigint; transferIn: bigint; transferOut: bigint; carry: bigint };
@@ -328,10 +338,15 @@ export async function getSponsorship(memberId: string) {
       paymentDates: paymentDatesBySubscription.get(item.id) ?? []
     }) ?? item.startDate;
     return {
-      subscriptionId: item.id, event: { eventCodeId: item.eventCode.id, code: item.eventCode.code, eventName: item.eventCode.eventName, eventType: item.eventCode.eventType }, referenceNo: item.referenceNo,
+      subscriptionId: item.id, event: { eventCodeId: item.eventCode.id, code: item.eventCode.code, eventName: item.eventCode.eventName, eventType: item.eventCode.eventType, eventCodeChildId: item.eventCodeChildId }, referenceNo: item.referenceNo,
       displayName: item.displayName, startDate: dateOnly(resolvedStartDate), validUntil: dateOnly(item.validUntil), activeFlag: item.activeFlag, remark: item.remark,
       status: sponsorshipStatus(item),
       eventActiveFlag: item.eventCode.activeFlag,
+      eventCodeChild: item.eventCodeChild ? {
+        eventCodeChildId: item.eventCodeChild.id, childCode: item.eventCodeChild.childCode, childName: item.eventCodeChild.childName,
+        activeFlag: item.eventCodeChild.activeFlag, capacity: item.eventCodeChild.capacity,
+        unitAmount: item.eventCodeChild.unitAmount?.toString() ?? null, durationMonths: item.eventCodeChild.durationMonths
+      } : null,
       timeRule: eligibleSubscriptionTimeRule(item.eventCode),
       carryBalance: centsToDecimal(totals.carry),
       principal: centsToDecimal(totals.principal),
@@ -382,8 +397,29 @@ export async function getSponsorship(memberId: string) {
     return [type, { amount: centsToDecimal(value.amount), transactionCount: value.transactionCount }];
   }));
   const carrySummary = summarizeCarrySummary({ subscriptions, campaigns });
+  const childOccupancyById = new Map(result.childSlotGroups.flatMap((row) =>
+    row.eventCodeChildId ? [[row.eventCodeChildId, row._count._all] as const] : []
+  ));
+  const childOptions = result.timeBasedChildren.map((child) => {
+    const occupied = childOccupancyById.get(child.id) ?? 0;
+    const configurationComplete = child.capacity !== null && child.capacity > 0 && child.durationMonths !== null && child.durationMonths > 0 && child.unitAmount !== null;
+    return {
+      eventCodeChildId: child.id,
+      eventCodeId: child.eventCodeId,
+      childCode: child.childCode,
+      childName: child.childName,
+      displayOrder: child.displayOrder,
+      activeFlag: child.activeFlag,
+      capacity: child.capacity,
+      occupiedSlots: occupied,
+      availableSlots: child.capacity !== null ? Math.max(0, child.capacity - occupied) : null,
+      unitAmount: child.unitAmount?.toString() ?? null,
+      durationMonths: child.durationMonths,
+      configurationComplete
+    };
+  });
   return { subscriptions, contributions, campaigns,
-    carrySummary,
+    carrySummary, childOptions,
     availableCampaigns: result.campaignOptions.filter(campaign => {
       const state = targetState.get(campaign.id);
       return !state?.target || state.applied < state.target;
@@ -401,6 +437,40 @@ export async function createSubscription(memberId: string, input: SubscriptionCr
     const [member, event] = await Promise.all([tx.member.findUnique({ where: { id: memberId }, select: { activeFlag: true } }), tx.eventCode.findUnique({ where: { id: input.eventCodeId }, select: { eventType: true, activeFlag: true, timeRule: { select: { activeFlag: true } } } })]);
     if (!member?.activeFlag) throw new HttpError(400, "Active Member is required for a sponsorship subscription");
     if (!event || event.eventType !== "TIME_BASED" || !event.activeFlag) throw new HttpError(400, "Choose an active TIME_BASED Event Code");
+
+    const children = await tx.eventCodeChild.findMany({
+      where: { eventCodeId: input.eventCodeId },
+      select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true }
+    });
+    if (children.length > 0) {
+      // Parents that have children require an explicit child target; legacy
+      // parent-only enrollment is preserved only for parents without children.
+      if (!input.eventCodeChildId) throw new HttpError(400, "Event Code ini memiliki Child. Pilih Child subscription item.");
+      const child = children.find((item) => item.id === input.eventCodeChildId);
+      if (!child) throw new HttpError(404, "Child tidak ditemukan untuk Event Code ini.");
+      await lockActiveTimeBasedProgram(tx, memberId, input.eventCodeId);
+      const existing = await tx.memberEventSubscription.findFirst({
+        where: { memberId, eventCodeId: input.eventCodeId, eventCodeChildId: child.id },
+        select: { id: true, activeFlag: true }
+      });
+      if (existing?.activeFlag) throw new HttpError(409, `Donatur sudah memiliki enrollment aktif untuk ${child.childCode}.`);
+      await assertChildSlotAvailable(tx, { childId: child.id, memberId });
+      if (existing) {
+        // Re-enroll a previously released enrollment: reuse the canonical row.
+        await tx.memberEventSubscription.update({
+          where: { id: existing.id },
+          data: { activeFlag: true, referenceNo: input.referenceNo, displayName: input.displayName, remark: input.remark, updatedById: userId }
+        });
+      } else {
+        await tx.memberEventSubscription.create({ data: {
+          memberId, eventCodeId: input.eventCodeId, eventCodeChildId: child.id, referenceNo: input.referenceNo,
+          displayName: input.displayName, ...initialTimeBasedSubscriptionState(), remark: input.remark, createdById: userId, updatedById: userId
+        } });
+      }
+      await synchronizePendingTimeBasedForMember(tx, memberId, userId, input.eventCodeId);
+      return;
+    }
+
     if (!event.timeRule?.activeFlag) throw new HttpError(400, "Configure an active Time Rule before adding a subscription");
     await lockActiveTimeBasedProgram(tx, memberId, input.eventCodeId);
     const active = await tx.memberEventSubscription.findMany({ where: { memberId, eventCodeId: input.eventCodeId, activeFlag: true }, select: { id: true } });
@@ -513,13 +583,13 @@ export async function voidOpeningCoverage(memberId: string, subscriptionId: stri
 
 export async function retryAllocationRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, transactionId: string, userId: string) {
   const payment = await tx.bankTransaction.findUnique({ where: { id: transactionId },
-      select: { status: true, originalAmount: true, baseAmount: true, transactionDate: true, reconciliationExcludedAt: true, eventCodeId: true, eventCode: { select: { eventType: true } },
+      select: { status: true, originalAmount: true, baseAmount: true, transactionDate: true, reconciliationExcludedAt: true, eventCodeId: true, eventCodeChildId: true, eventCode: { select: { eventType: true } },
       memberIdentity: { select: { memberId: true, verificationStatus: true } } } });
   if (!payment || payment.status !== "FINALIZED" || !payment.transactionDate || !payment.baseAmount || !payment.baseAmount.gt(0) || !payment.originalAmount.gt(0)
     || payment.reconciliationExcludedAt || payment.eventCode?.eventType !== "TIME_BASED"
     || payment.memberIdentity?.memberId !== memberId || payment.memberIdentity.verificationStatus !== "VERIFIED")
     throw new HttpError(400, "Only an official TIME_BASED payment resolved to this Member can be retried.");
-  const compatible = await tx.memberEventSubscription.findMany({ where: { memberId, eventCodeId: payment.eventCodeId!, activeFlag: true }, select: { id: true } });
+  const compatible = await tx.memberEventSubscription.findMany({ where: { memberId, eventCodeId: payment.eventCodeId!, eventCodeChildId: payment.eventCodeChildId ?? null, activeFlag: true }, select: { id: true } });
   if (compatible.length !== 1 || compatible[0].id !== subscriptionId)
     throw new HttpError(409, "Retry requires exactly one compatible active subscription. Reload the pending payments.");
   // The shared engine checks existing PAYMENT proof and makes repeated retries a no-op.

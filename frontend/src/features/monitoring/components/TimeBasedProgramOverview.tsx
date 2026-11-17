@@ -12,11 +12,21 @@ export function TimeBasedProgramOverview({ rows }: { rows: TimeBasedMonitoringWo
         <div className={styles.overviewHeader} role="row"><span role="columnheader">Program / Event</span><span role="columnheader">Current rule</span><span role="columnheader">Coverage</span><span role="columnheader">Carry</span></div>
         {rows.map(row => {
           const coveredRatio = row.activePrograms ? row.currentlyCovered / row.activePrograms * 100 : 0;
-          return <div className={styles.overviewRow} role="row" key={row.code}>
-            <div className={styles.eventIdentity} role="cell"><span className={styles.eventCode}>{row.code}</span><strong>{row.eventName}</strong></div>
-            <div className={styles.rule} role="cell">{row.rule ? `${formatMoney(row.rule.unitAmount)} / ${row.rule.durationMonths} ${row.rule.durationMonths === 1 ? "month" : "months"}` : "Time Rule inactive"}</div>
-            <div className={styles.coverageMetric} role="cell"><div className={styles.coverageTrack} role="meter" aria-label="Currently covered donor programs" aria-valuemin={0} aria-valuemax={row.activePrograms} aria-valuenow={row.currentlyCovered}><i style={{ width: `${coveredRatio}%` }} /></div><span>{row.currentlyCovered} / {row.activePrograms} covered</span>{row.activePrograms > 0 && row.currentlyCovered === row.activePrograms ? <em>Fully covered</em> : null}</div>
-            <strong className={styles.eventCarry} role="cell">{formatMoney(row.outstandingCarry)}</strong>
+          return <div className={styles.overviewBlock} role="row" key={row.code}>
+            <div className={styles.overviewRow}>
+              <div className={styles.eventIdentity} role="cell"><span className={styles.eventCode}>{row.code}</span><strong>{row.eventName}</strong></div>
+              <div className={styles.rule} role="cell">{row.rule ? `${formatMoney(row.rule.unitAmount)} / ${row.rule.durationMonths} ${row.rule.durationMonths === 1 ? "month" : "months"}` : "Time Rule inactive"}</div>
+              <div className={styles.coverageMetric} role="cell"><div className={styles.coverageTrack} role="meter" aria-label="Currently covered donor programs" aria-valuemin={0} aria-valuemax={row.activePrograms} aria-valuenow={row.currentlyCovered}><i style={{ width: `${coveredRatio}%` }} /></div><span>{row.currentlyCovered} / {row.activePrograms} covered</span>{row.activePrograms > 0 && row.currentlyCovered === row.activePrograms ? <em>Fully covered</em> : null}</div>
+              <strong className={styles.eventCarry} role="cell">{formatMoney(row.outstandingCarry)}</strong>
+            </div>
+            {row.children.length > 0 ? <div className={styles.childStockRows}>
+              {row.children.map(child => <div className={styles.childStockRow} key={child.eventCodeChildId}>
+                <div className={styles.childIdentity}><span className={styles.childCode}>{child.childCode}</span><strong>{child.childName}</strong>{child.activeFlag ? null : <em>Inactive</em>}{child.configurationComplete ? null : <em className={styles.childWarn}>Belum dikonfigurasi</em>}</div>
+                <div className={styles.childRule}>{child.unitAmount ? `${formatMoney(child.unitAmount)} / ${child.durationMonths} ${child.durationMonths === 1 ? "month" : "months"}` : "—"}</div>
+                <div className={styles.childStock}><strong>{child.availableSlots ?? "—"} / {child.capacity ?? "—"} tersedia</strong><small>{child.occupiedSlots} terpakai · {child.pendingEnrollment} pending · {child.activeSubscriptions} aktif · {child.expiredSubscriptions} expired</small></div>
+                <span className={styles.childCarry}>{formatMoney(child.outstandingCarry)}</span>
+              </div>)}
+            </div> : null}
           </div>;
         })}
       </div>

@@ -30,7 +30,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, busy, onEdi
     <header className={styles.programHead}>
       <div>
         <span className={styles.programKicker}><CalendarDays size={14} aria-hidden="true" /> TIME BASED PROGRAM</span>
-        <strong>{sub.event.code} · {sub.event.eventName}</strong>
+        <strong>{sub.event.code} · {sub.event.eventName}{sub.eventCodeChild ? <em className={styles.childKicker}> · {sub.eventCodeChild.childCode} — {sub.eventCodeChild.childName}</em> : null}</strong>
         <small>{sub.referenceNo || sub.displayName || "Tanpa referensi"}{sub.displayName && sub.referenceNo ? ` · ${sub.displayName}` : ""}</small>
       </div>
       <span className={styles.statusPill} data-status={sub.status}>{sub.status}</span>
@@ -48,6 +48,7 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, busy, onEdi
         <span className={styles.subsectionTitle}>Informasi program</span>
         <div className={styles.factList}>
           <div><span>Current rule</span><strong>{sub.timeRule ? `${formatMoney(sub.timeRule.unitAmount)} / ${sub.timeRule.durationMonths} bln` : "Tidak ada rule aktif"}</strong></div>
+          {sub.eventCodeChild ? <div><span>Subscription item</span><strong>{sub.eventCodeChild.childCode} · {sub.eventCodeChild.unitAmount ? `${formatMoney(sub.eventCodeChild.unitAmount)} / ${sub.eventCodeChild.durationMonths} bln` : "Belum dikonfigurasi"}</strong></div> : null}
           <div><span>Mulai</span><strong>{sub.startDate ? formatDate(sub.startDate) : "—"}</strong></div>
           <div><span>Berlaku sampai</span><strong>{sub.validUntil ? formatDate(sub.validUntil) : "—"}</strong></div>
         </div>
