@@ -22,6 +22,9 @@ export type EventCodeChildOption = {
   childName: string;
   displayOrder: number;
   activeFlag: boolean;
+  itemSaleUnitPrice?: string | null;
+  itemSaleStockOnHand?: number | null;
+  itemSaleVersion?: number | null;
 };
 
 export type BankAccountOption = {
@@ -86,6 +89,8 @@ export type DraftTransaction = {
   baseAmount?: string | null;
   remark?: string | null;
   requiresClassification: boolean;
+  itemSaleQuantity?: number | null;
+  itemSale?: { id: string; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string; status: string; resolutionReason: string | null } | null;
 };
 
 export type StatementUploadSummary = {
@@ -149,6 +154,7 @@ export type UpdateFinalEventInput = {
   eventCodeChildId: string | null;
   eventCampaignId: string | null;
   remark?: string | null;
+  itemSaleQuantity?: number | null;
 };
 
 export type UpdateFinalEventResponse = {

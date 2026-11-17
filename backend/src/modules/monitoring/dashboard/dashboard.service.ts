@@ -6,6 +6,7 @@ import { storedTransactionRequiresClassification } from "../../reconciliation/re
 import { storedChildNeedsAttention } from "../../reconciliation/event-child-classification.js";
 import {
   loadDashboardMemberRecords,
+  loadDashboardItemSales,
   loadDashboardPeriodSummary,
   loadDashboardRecentActivityCandidates,
   loadDashboardTrendMonth,
@@ -196,7 +197,7 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     : monthRange(previousMonth);
   const trendMonths = Array.from({ length: TREND_MONTHS }, (_, index) => shiftMonth(period.month, index - (TREND_MONTHS - 1)));
 
-  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords] = await Promise.all([
+  const [viewer, current, previous, trendRecords, topEventsRecords, recentCandidates, memberRecords, itemSaleRecords] = await Promise.all([
     loadDashboardViewer(userId),
     loadDashboardPeriodSummary(currentRange),
     loadDashboardPeriodSummary(previousRange),
@@ -206,7 +207,8 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     }))),
     loadTopFinalEvents(currentRange),
     loadDashboardRecentActivityCandidates(),
-    loadDashboardMemberRecords(currentRange)
+    loadDashboardMemberRecords(currentRange),
+    loadDashboardItemSales(currentRange)
   ]);
 
   if (!viewer) throw new HttpError(401, "Current user is no longer available");
@@ -324,6 +326,18 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
         value: current.completeTransactions,
         changePercent: numberChange(current.completeTransactions, previous.completeTransactions)
       }
+    },
+    itemSales: {
+      confirmedPurchases: itemSaleRecords.confirmed._count._all,
+      confirmedQuantity: itemSaleRecords.confirmed._sum.quantity ?? 0,
+      confirmedAmount: itemSaleRecords.confirmed._sum.totalAmount?.toString() ?? "0.00",
+      pendingPurchases: itemSaleRecords.statusGroups.filter(group => ["DRAFT", "REVIEW_REQUIRED", "PENDING_BUYER", "PENDING_STOCK"].includes(group.status)).reduce((sum, group) => sum + group._count._all, 0),
+      reversedPurchases: itemSaleRecords.statusGroups.find(group => group.status === "REVERSED")?._count._all ?? 0,
+      items: itemSaleRecords.items.map(group => {
+        const child = itemSaleRecords.children.find(item => item.id === group.eventCodeChildId);
+        return { eventCodeChildId: group.eventCodeChildId, childCode: child?.childCode ?? "?", childName: child?.childName ?? "Unknown item",
+          purchaseCount: group._count._all, quantity: group._sum.quantity ?? 0, amount: group._sum.totalAmount?.toString() ?? "0.00", stockOnHand: child?.itemSaleConfig?.stockOnHand ?? null };
+      })
     },
     trend: trendRecords.map(({ month: trendMonth, record }) => ({
       month: trendMonth,

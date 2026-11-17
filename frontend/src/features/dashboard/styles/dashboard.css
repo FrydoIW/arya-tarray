@@ -713,3 +713,7 @@
 @media (max-width: 640px) {
   .dashboard-sponsorship-metrics { grid-template-columns: 1fr; }
 }
+ .dashboard-item-sales { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; padding: 14px; }
+ .dashboard-item-sales > div { display: grid; gap: 4px; padding: 12px; border: 1px solid #e4e9f0; border-radius: 10px; background: #f8fafc; }
+ .dashboard-item-sales span { color: #667085; font-size: 12px; }
+ .dashboard-item-sales strong { color: #1d2939; font-size: 14px; }

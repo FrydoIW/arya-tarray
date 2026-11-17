@@ -127,6 +127,17 @@ function mapTransaction(item: Awaited<ReturnType<typeof loadTransactionInquiryWo
         }
       : null,
     eventCampaign: item.eventCampaign,
+    itemSale: item.itemSalePurchase ? {
+      purchaseId: item.itemSalePurchase.id,
+      quantity: item.itemSalePurchase.quantity,
+      unitPrice: decimalToString(item.itemSalePurchase.unitPriceSnapshot),
+      totalAmount: decimalToString(item.itemSalePurchase.totalAmount),
+      paymentAmount: item.itemSalePurchase.paymentAmountSnapshot ? decimalToString(item.itemSalePurchase.paymentAmountSnapshot) : null,
+      status: item.itemSalePurchase.status,
+      resolutionReason: item.itemSalePurchase.resolutionReason,
+      confirmedAt: item.itemSalePurchase.confirmedAt,
+      reversedAt: item.itemSalePurchase.reversedAt
+    } : null,
     memberIdentity: item.memberIdentity ? {
       id: item.memberIdentity.id,
       accountName: item.memberIdentity.accountName,
@@ -297,6 +308,29 @@ export async function getTransactionInquiryDetail(transactionId: string) {
         activeFlag: member.activeFlag
       } : null,
       sponsorship
+      ,itemSale: transaction.itemSalePurchase ? {
+        purchaseId: transaction.itemSalePurchase.id,
+        quantity: transaction.itemSalePurchase.quantity,
+        unitPrice: decimalToString(transaction.itemSalePurchase.unitPriceSnapshot),
+        totalAmount: decimalToString(transaction.itemSalePurchase.totalAmount),
+        paymentAmount: transaction.itemSalePurchase.paymentAmountSnapshot ? decimalToString(transaction.itemSalePurchase.paymentAmountSnapshot) : null,
+        status: transaction.itemSalePurchase.status,
+        resolutionReason: transaction.itemSalePurchase.resolutionReason,
+        confirmedAt: transaction.itemSalePurchase.confirmedAt,
+        confirmedBy: transaction.itemSalePurchase.confirmedBy,
+        reversedAt: transaction.itemSalePurchase.reversedAt,
+        reversedBy: transaction.itemSalePurchase.reversedBy,
+        movements: transaction.itemSalePurchase.inventoryMovements.map((movement) => ({
+          id: movement.id,
+          movementType: movement.movementType,
+          quantityDelta: movement.quantityDelta,
+          stockBefore: movement.stockBefore,
+          stockAfter: movement.stockAfter,
+          reason: movement.reason,
+          createdAt: movement.createdAt,
+          createdBy: movement.createdBy
+        }))
+      } : null
     },
     history: transaction.history.map((item) => ({
       id: item.id,
@@ -409,7 +443,7 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
         : null;
       return {
         date: formatDate(transaction.transactionDate),
-        description: `${transaction.sourceType === "MANUAL" ? "[MANUAL] " : ""}${transaction.description ?? transaction.senderName ?? "-"}`,
+        description: `${transaction.sourceType === "MANUAL" ? "[MANUAL] " : ""}${transaction.description ?? transaction.senderName ?? "-"}${transaction.itemSalePurchase ? ` [ITEM_SALE ${transaction.itemSalePurchase.quantity} x ${formatIdr(transaction.itemSalePurchase.unitPriceSnapshot.toString())}; ${transaction.itemSalePurchase.status}]` : ""}`,
         referenceNo: transaction.referenceNo ?? "-",
         type: decimalToCents(transaction.originalAmount) >= 0n ? "Incoming" : "Outgoing",
         amount: formatIdr(absDecimal(transaction.originalAmount)),

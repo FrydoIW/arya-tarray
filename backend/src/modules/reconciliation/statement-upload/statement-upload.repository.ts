@@ -18,6 +18,7 @@ import {
   type ChildOption,
   type ChildParent
 } from "../event-child-classification.js";
+import { assertStatementItemSalesReady, stageRawItemSalePurchase, synchronizeItemSaleTransaction } from "../../item-sale/item-sale.service.js";
 
 const bankAccountSelect = {
   id: true,
@@ -44,7 +45,8 @@ const eventCodeChildSelect = {
   childCode: true,
   childName: true,
   activeFlag: true,
-  displayOrder: true
+  displayOrder: true,
+  itemSaleConfig: { select: { unitPrice: true, stockOnHand: true, version: true } }
 } as const;
 
 const statementInclude = {
@@ -65,6 +67,7 @@ const statementInclude = {
       eventCode: { select: eventCodeSelect },
       eventCodeChild: { select: eventCodeChildSelect },
       eventCampaign: { select: { id: true, campaignName: true } }
+      ,itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, status: true, resolutionReason: true } }
     },
     orderBy: [{ rowNo: "asc" as const }, { createdAt: "asc" as const }]
   }
@@ -93,6 +96,7 @@ export function loadRawStatementsForSummary() {
           eventCampaignId: true,
           eventCode: { select: { eventType: true } },
           eventCodeChild: { select: { id: true, activeFlag: true, eventCodeId: true } }
+          ,itemSalePurchase: { select: { quantity: true, status: true } }
         }
       }
     },
@@ -447,6 +451,7 @@ export async function updateTransactionFinalEventAtomic(input: {
   eventCodeId: string | null;
   eventCodeChildId?: string | null;
   eventCampaignId?: string | null;
+  itemSaleQuantity?: number | null;
   remark?: string;
   userId: string;
 }) {
@@ -459,6 +464,7 @@ export async function updateTransactionFinalEventAtomic(input: {
         eventCode: { select: eventCodeSelect },
         eventCodeChild: { select: eventCodeChildSelect },
         eventCampaign: { select: { id: true, campaignName: true } }
+        ,itemSalePurchase: true
       }
     });
 
@@ -517,10 +523,14 @@ export async function updateTransactionFinalEventAtomic(input: {
     }
 
     const remarkUpdate = resolveRemarkUpdate(current.remark, input.remark);
-    if (current.eventCodeId === input.eventCodeId
+    const sameClassification = current.eventCodeId === input.eventCodeId
       && current.eventCodeChildId === effectiveChildId
       && current.eventCampaignId === (input.eventCampaignId ?? null)
-      && !remarkUpdate.changed) return current;
+      && !remarkUpdate.changed;
+    const effectiveItemSaleQuantity = input.itemSaleQuantity === undefined
+      ? current.itemSalePurchase?.quantity ?? null
+      : input.itemSaleQuantity;
+    if (sameClassification && (current.itemSalePurchase?.quantity ?? null) === effectiveItemSaleQuantity) return current;
 
     const updated = await tx.bankTransaction.update({
       where: { id: current.id },
@@ -536,6 +546,7 @@ export async function updateTransactionFinalEventAtomic(input: {
         eventCode: { select: eventCodeSelect },
         eventCodeChild: { select: eventCodeChildSelect },
         eventCampaign: { select: { id: true, campaignName: true } }
+        ,itemSalePurchase: true
       }
     });
 
@@ -580,7 +591,13 @@ export async function updateTransactionFinalEventAtomic(input: {
       }
     });
 
-    return updated;
+    await stageRawItemSalePurchase(tx, { transactionId: updated.id, quantity: effectiveItemSaleQuantity, userId: input.userId,
+      reason: input.remark?.trim() || "Statement Upload ITEM_SALE classification" });
+    return tx.bankTransaction.findUniqueOrThrow({ where: { id: updated.id }, include: {
+      statementUpload: { select: { id: true, status: true } }, suggestedEventCode: { select: eventCodeSelect }, eventCode: { select: eventCodeSelect },
+      eventCodeChild: { select: eventCodeChildSelect }, eventCampaign: { select: { id: true, campaignName: true } },
+      itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, status: true, resolutionReason: true } }
+    } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -608,6 +625,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
             eventCodeChild: { select: { id: true, eventCodeId: true, activeFlag: true } },
             eventCampaign: { select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } },
             transactionDate: true
+            ,itemSalePurchase: { select: { id: true, quantity: true } }
           }
         },
         approval: {
@@ -677,6 +695,8 @@ export async function executeStatementAtomic(input: { statementId: string; userI
         `${childBlocked.length} transaction${childBlocked.length === 1 ? "" : "s"} require a valid Child selection before Execute. First issue: ${firstReason ?? "invalid Child state"}. Reopen the draft review.`
       );
     }
+
+    await assertStatementItemSalesReady(tx, statement.transactions.map(transaction => transaction.id));
 
     for (const transaction of statement.transactions) {
       if (!storedTransactionRequiresClassification(transaction) || !transaction.eventCodeId) continue;
@@ -809,6 +829,8 @@ export async function withdrawStatementAtomic(input: { statementId: string; reas
         if (withdrawal.count !== 1) {
           throw new HttpError(409, "Only a RAW draft can be withdrawn. Reload the Statement Upload workspace.");
         }
+        const itemSaleRows = await tx.bankTransaction.findMany({ where: { statementUploadId: statement.id, itemSalePurchase: { isNot: null } }, select: { id: true } });
+        for (const row of itemSaleRows) await synchronizeItemSaleTransaction(tx, row.id, input.userId, { reason: `Statement withdrawn: ${input.reason}` });
 
         const remainingStatementCount = await tx.bankStatementUpload.count({
           where: { bankAccountId: statement.bankAccountId, status: { not: "WITHDRAWN" } }

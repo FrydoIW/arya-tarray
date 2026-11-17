@@ -61,6 +61,12 @@ export function TransactionPreview({ items, totalTransactions }: TransactionPrev
       render: (row) => row.campaign?.campaignName ?? "—"
     },
     {
+      key: "itemSale",
+      header: "Item sale",
+      minWidth: "190px",
+      render: (row) => row.itemSale ? <div className={styles.eventCell}><strong>{row.itemSale.quantity} × {formatMoney(row.itemSale.unitPrice)}</strong><small>{formatMoney(row.itemSale.totalAmount)} · {row.itemSale.status}{row.itemSale.resolutionReason ? ` · ${row.itemSale.resolutionReason}` : ""}</small></div> : "—"
+    },
+    {
       key: "sponsorship",
       header: "Rupang",
       minWidth: "175px",

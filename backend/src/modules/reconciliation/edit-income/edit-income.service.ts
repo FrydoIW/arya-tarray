@@ -113,6 +113,9 @@ export async function getEditIncomeDetail(statementId: string) {
     eventCodeChildren: records.eventCodeChildren.map((item) => ({
       id: item.id, eventCodeId: item.eventCodeId, childCode: item.childCode, childName: item.childName,
       displayOrder: item.displayOrder, activeFlag: item.activeFlag
+      ,itemSaleUnitPrice: item.itemSaleConfig?.unitPrice.toString() ?? null
+      ,itemSaleStockOnHand: item.itemSaleConfig?.stockOnHand ?? null
+      ,itemSaleVersion: item.itemSaleConfig?.version ?? null
     })),
     transactions: statement.transactions.map((transaction) => ({
       id: transaction.id,
@@ -130,6 +133,15 @@ export async function getEditIncomeDetail(statementId: string) {
       eventCampaignId: transaction.eventCampaignId,
       baseAmount: transaction.baseAmount ? decimalToString(transaction.baseAmount) : null,
       sponsorship: timeBasedPaymentPreview(transaction),
+      itemSale: transaction.itemSalePurchase ? {
+        id: transaction.itemSalePurchase.id,
+        quantity: transaction.itemSalePurchase.quantity,
+        unitPrice: transaction.itemSalePurchase.unitPriceSnapshot.toString(),
+        totalAmount: transaction.itemSalePurchase.totalAmount.toString(),
+        paymentAmount: transaction.itemSalePurchase.paymentAmountSnapshot?.toString() ?? null,
+        status: transaction.itemSalePurchase.status,
+        resolutionReason: transaction.itemSalePurchase.resolutionReason
+      } : null,
       remark: transaction.remark,
       sourceType: transaction.sourceType,
       correctionReason: transaction.correctionReason,

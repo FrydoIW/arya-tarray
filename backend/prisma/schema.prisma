@@ -8,35 +8,37 @@ datasource db {
 }
 
 model Member {
-  id String @id @default(uuid()) @map("member_id") @db.Char(36)
-  memberCode String @unique(map: "uk_member_code") @map("member_code") @db.VarChar(30)
-  memberName String @map("member_name") @db.VarChar(150)
-  initialName String? @map("initial_name") @db.VarChar(100)
-  birthDate DateTime? @map("birth_date") @db.Date
-  phone String? @db.VarChar(50)
-  email String? @db.VarChar(150)
-  address String? @db.VarChar(500)
-  city String? @db.VarChar(100)
-  registrationSource String @default("MANUAL") @map("registration_source") @db.VarChar(20)
-  activeFlag Boolean @default(true) @map("active_flag")
-  remark String? @db.VarChar(500)
-  registeredAt DateTime @default(now()) @map("registered_at") @db.DateTime(3)
-  registeredById String? @map("registered_by") @db.Char(36)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String? @map("created_by") @db.Char(36)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  updatedById String? @map("updated_by") @db.Char(36)
-  registeredBy User? @relation("MemberRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_registered_by")
-  createdBy User? @relation("MemberCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_created_by")
-  updatedBy User? @relation("MemberUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_updated_by")
-  identities MemberIdentity[]
-  identityHistoryFrom MemberIdentityHistory[] @relation("MemberIdentityHistoryFromMember")
-  identityHistoryTo   MemberIdentityHistory[] @relation("MemberIdentityHistoryToMember")
-  eventSubscriptions MemberEventSubscription[]
-  carryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferMember")
-  campaignAllocations MemberEventCampaignAllocation[]
-  campaignWalletEntries MemberEventCampaignWalletLedger[]
+  id                     String                             @id @default(uuid()) @map("member_id") @db.Char(36)
+  memberCode             String                             @unique(map: "uk_member_code") @map("member_code") @db.VarChar(30)
+  memberName             String                             @map("member_name") @db.VarChar(150)
+  initialName            String?                            @map("initial_name") @db.VarChar(100)
+  birthDate              DateTime?                          @map("birth_date") @db.Date
+  phone                  String?                            @db.VarChar(50)
+  email                  String?                            @db.VarChar(150)
+  address                String?                            @db.VarChar(500)
+  city                   String?                            @db.VarChar(100)
+  registrationSource     String                             @default("MANUAL") @map("registration_source") @db.VarChar(20)
+  activeFlag             Boolean                            @default(true) @map("active_flag")
+  remark                 String?                            @db.VarChar(500)
+  registeredAt           DateTime                           @default(now()) @map("registered_at") @db.DateTime(3)
+  registeredById         String?                            @map("registered_by") @db.Char(36)
+  createdAt              DateTime                           @default(now()) @map("created_at") @db.DateTime(3)
+  createdById            String?                            @map("created_by") @db.Char(36)
+  updatedAt              DateTime                           @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById            String?                            @map("updated_by") @db.Char(36)
+  registeredBy           User?                              @relation("MemberRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_registered_by")
+  createdBy              User?                              @relation("MemberCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_created_by")
+  updatedBy              User?                              @relation("MemberUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_updated_by")
+  identities             MemberIdentity[]
+  identityHistoryFrom    MemberIdentityHistory[]            @relation("MemberIdentityHistoryFromMember")
+  identityHistoryTo      MemberIdentityHistory[]            @relation("MemberIdentityHistoryToMember")
+  eventSubscriptions     MemberEventSubscription[]
+  carryTransfers         MemberEventCarryTransfer[]         @relation("MemberEventCarryTransferMember")
+  campaignAllocations    MemberEventCampaignAllocation[]
+  campaignWalletEntries  MemberEventCampaignWalletLedger[]
   campaignParticipations MemberEventCampaignParticipation[]
+  itemSalePurchases      ItemSalePurchase[]                 @relation("ItemSalePurchaseBuyer")
+
   @@index([memberName], map: "idx_member_name")
   @@index([initialName], map: "idx_member_initial_name")
   @@index([city], map: "idx_member_city")
@@ -48,34 +50,36 @@ model Member {
 }
 
 model MemberIdentity {
-  id String @id @default(uuid()) @map("member_identity_id") @db.Char(36)
-  memberId String? @map("member_id") @db.Char(36)
-  sourceType String @default("STATEMENT") @map("source_type") @db.VarChar(20)
-  bankName String? @map("bank_name") @db.VarChar(100)
-  accountNumber String? @map("account_number") @db.VarChar(100)
-  accountType String? @map("account_type") @db.VarChar(100)
-  accountName String @map("account_name") @db.VarChar(200)
-  initialName String? @map("initial_name") @db.VarChar(100)
-  normalizedName String @map("normalized_name") @db.VarChar(200)
-  identityKey String @unique(map: "uk_member_identity_key") @map("identity_key") @db.VarChar(191)
-  verificationStatus String @default("UNVERIFIED") @map("verification_status") @db.VarChar(20)
-  firstSeenStatementUploadId String? @map("first_seen_statement_upload_id") @db.Char(36)
-  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.DateTime(3)
-  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.DateTime(3)
-  verifiedAt DateTime? @map("verified_at") @db.DateTime(3)
-  verifiedById String? @map("verified_by") @db.Char(36)
-  remark String? @db.VarChar(500)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String? @map("created_by") @db.Char(36)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  updatedById String? @map("updated_by") @db.Char(36)
-  member Member? @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_member")
-  firstSeenStatement BankStatementUpload? @relation(fields: [firstSeenStatementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_first_statement")
-  verifiedBy User? @relation("MemberIdentityVerifiedBy", fields: [verifiedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_verified_by")
-  createdBy User? @relation("MemberIdentityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_created_by")
-  updatedBy User? @relation("MemberIdentityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_updated_by")
-  transactions BankTransaction[]
-  ownershipHistory MemberIdentityHistory[]
+  id                         String                  @id @default(uuid()) @map("member_identity_id") @db.Char(36)
+  memberId                   String?                 @map("member_id") @db.Char(36)
+  sourceType                 String                  @default("STATEMENT") @map("source_type") @db.VarChar(20)
+  bankName                   String?                 @map("bank_name") @db.VarChar(100)
+  accountNumber              String?                 @map("account_number") @db.VarChar(100)
+  accountType                String?                 @map("account_type") @db.VarChar(100)
+  accountName                String                  @map("account_name") @db.VarChar(200)
+  initialName                String?                 @map("initial_name") @db.VarChar(100)
+  normalizedName             String                  @map("normalized_name") @db.VarChar(200)
+  identityKey                String                  @unique(map: "uk_member_identity_key") @map("identity_key") @db.VarChar(191)
+  verificationStatus         String                  @default("UNVERIFIED") @map("verification_status") @db.VarChar(20)
+  firstSeenStatementUploadId String?                 @map("first_seen_statement_upload_id") @db.Char(36)
+  firstSeenAt                DateTime                @default(now()) @map("first_seen_at") @db.DateTime(3)
+  lastSeenAt                 DateTime                @default(now()) @map("last_seen_at") @db.DateTime(3)
+  verifiedAt                 DateTime?               @map("verified_at") @db.DateTime(3)
+  verifiedById               String?                 @map("verified_by") @db.Char(36)
+  remark                     String?                 @db.VarChar(500)
+  createdAt                  DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  createdById                String?                 @map("created_by") @db.Char(36)
+  updatedAt                  DateTime                @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById                String?                 @map("updated_by") @db.Char(36)
+  member                     Member?                 @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_member")
+  firstSeenStatement         BankStatementUpload?    @relation(fields: [firstSeenStatementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_first_statement")
+  verifiedBy                 User?                   @relation("MemberIdentityVerifiedBy", fields: [verifiedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_verified_by")
+  createdBy                  User?                   @relation("MemberIdentityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_created_by")
+  updatedBy                  User?                   @relation("MemberIdentityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_identity_updated_by")
+  transactions               BankTransaction[]
+  ownershipHistory           MemberIdentityHistory[]
+  itemSalePurchases          ItemSalePurchase[]
+
   @@index([memberId], map: "idx_member_identity_member")
   @@index([verificationStatus], map: "idx_member_identity_status")
   @@index([normalizedName], map: "idx_member_identity_normalized_name")
@@ -133,76 +137,84 @@ model Role {
 }
 
 model User {
-  registeredMembers Member[] @relation("MemberRegisteredBy")
-  createdMembers Member[] @relation("MemberCreatedBy")
-  updatedMembers Member[] @relation("MemberUpdatedBy")
-  verifiedMemberIdentities MemberIdentity[] @relation("MemberIdentityVerifiedBy")
-  createdMemberIdentities MemberIdentity[] @relation("MemberIdentityCreatedBy")
-  updatedMemberIdentities MemberIdentity[] @relation("MemberIdentityUpdatedBy")
-  memberIdentityHistoryActions MemberIdentityHistory[] @relation("MemberIdentityHistoryActionBy")
-  createdEventCampaigns EventCampaign[] @relation("EventCampaignCreatedBy")
-  updatedEventCampaigns EventCampaign[] @relation("EventCampaignUpdatedBy")
-  createdEventTimeRules EventTimeRule[] @relation("EventTimeRuleCreatedBy")
-  updatedEventTimeRules EventTimeRule[] @relation("EventTimeRuleUpdatedBy")
-  createdEventCodeChildren EventCodeChild[] @relation("EventCodeChildCreatedBy")
-  updatedEventCodeChildren EventCodeChild[] @relation("EventCodeChildUpdatedBy")
-  createdChildCapacityChanges EventCodeChildCapacityChange[] @relation("ChildCapacityChangeCreatedBy")
-  createdMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionCreatedBy")
-  updatedMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionUpdatedBy")
-  createdMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageCreatedBy")
-  voidedMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageVoidedBy")
-  createdMemberEventBalanceEntries MemberEventBalanceLedger[] @relation("MemberEventBalanceCreatedBy")
-  voidedMemberEventBalanceEntries MemberEventBalanceLedger[] @relation("MemberEventBalanceVoidedBy")
-  createdMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferCreatedBy")
-  reversedMemberEventCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferReversedBy")
-  createdMemberEventCampaignAllocations MemberEventCampaignAllocation[] @relation("MemberEventCampaignAllocationCreatedBy")
-  voidedMemberEventCampaignAllocations MemberEventCampaignAllocation[] @relation("MemberEventCampaignAllocationVoidedBy")
-  createdMemberEventCampaignWalletEntries MemberEventCampaignWalletLedger[] @relation("MemberEventCampaignWalletLedgerCreatedBy")
-  voidedMemberEventCampaignWalletEntries MemberEventCampaignWalletLedger[] @relation("MemberEventCampaignWalletLedgerVoidedBy")
+  registeredMembers                        Member[]                           @relation("MemberRegisteredBy")
+  createdMembers                           Member[]                           @relation("MemberCreatedBy")
+  updatedMembers                           Member[]                           @relation("MemberUpdatedBy")
+  verifiedMemberIdentities                 MemberIdentity[]                   @relation("MemberIdentityVerifiedBy")
+  createdMemberIdentities                  MemberIdentity[]                   @relation("MemberIdentityCreatedBy")
+  updatedMemberIdentities                  MemberIdentity[]                   @relation("MemberIdentityUpdatedBy")
+  memberIdentityHistoryActions             MemberIdentityHistory[]            @relation("MemberIdentityHistoryActionBy")
+  createdEventCampaigns                    EventCampaign[]                    @relation("EventCampaignCreatedBy")
+  updatedEventCampaigns                    EventCampaign[]                    @relation("EventCampaignUpdatedBy")
+  createdEventTimeRules                    EventTimeRule[]                    @relation("EventTimeRuleCreatedBy")
+  updatedEventTimeRules                    EventTimeRule[]                    @relation("EventTimeRuleUpdatedBy")
+  createdEventCodeChildren                 EventCodeChild[]                   @relation("EventCodeChildCreatedBy")
+  updatedEventCodeChildren                 EventCodeChild[]                   @relation("EventCodeChildUpdatedBy")
+  createdChildCapacityChanges              EventCodeChildCapacityChange[]     @relation("ChildCapacityChangeCreatedBy")
+  createdMemberEventSubscriptions          MemberEventSubscription[]          @relation("MemberEventSubscriptionCreatedBy")
+  updatedMemberEventSubscriptions          MemberEventSubscription[]          @relation("MemberEventSubscriptionUpdatedBy")
+  createdMemberEventCoverages              MemberEventCoverage[]              @relation("MemberEventCoverageCreatedBy")
+  voidedMemberEventCoverages               MemberEventCoverage[]              @relation("MemberEventCoverageVoidedBy")
+  createdMemberEventBalanceEntries         MemberEventBalanceLedger[]         @relation("MemberEventBalanceCreatedBy")
+  voidedMemberEventBalanceEntries          MemberEventBalanceLedger[]         @relation("MemberEventBalanceVoidedBy")
+  createdMemberEventCarryTransfers         MemberEventCarryTransfer[]         @relation("MemberEventCarryTransferCreatedBy")
+  reversedMemberEventCarryTransfers        MemberEventCarryTransfer[]         @relation("MemberEventCarryTransferReversedBy")
+  createdMemberEventCampaignAllocations    MemberEventCampaignAllocation[]    @relation("MemberEventCampaignAllocationCreatedBy")
+  voidedMemberEventCampaignAllocations     MemberEventCampaignAllocation[]    @relation("MemberEventCampaignAllocationVoidedBy")
+  createdMemberEventCampaignWalletEntries  MemberEventCampaignWalletLedger[]  @relation("MemberEventCampaignWalletLedgerCreatedBy")
+  voidedMemberEventCampaignWalletEntries   MemberEventCampaignWalletLedger[]  @relation("MemberEventCampaignWalletLedgerVoidedBy")
   createdMemberEventCampaignParticipations MemberEventCampaignParticipation[] @relation("MemberEventCampaignParticipationCreatedBy")
-  id           String   @id @default(uuid()) @map("user_id") @db.Char(36)
-  fullName     String   @map("full_name") @db.VarChar(150)
-  email        String   @db.VarChar(150)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  status       String   @default("ACTIVE") @db.VarChar(20)
-  createdById  String?  @map("created_by") @db.Char(36)
-  updatedById  String?  @map("updated_by") @db.Char(36)
-  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  createdItemSaleConfigs                   ItemSaleConfig[]                   @relation("ItemSaleConfigCreatedBy")
+  updatedItemSaleConfigs                   ItemSaleConfig[]                   @relation("ItemSaleConfigUpdatedBy")
+  createdItemSalePurchases                 ItemSalePurchase[]                 @relation("ItemSalePurchaseCreatedBy")
+  updatedItemSalePurchases                 ItemSalePurchase[]                 @relation("ItemSalePurchaseUpdatedBy")
+  confirmedItemSalePurchases               ItemSalePurchase[]                 @relation("ItemSalePurchaseConfirmedBy")
+  reversedItemSalePurchases                ItemSalePurchase[]                 @relation("ItemSalePurchaseReversedBy")
+  createdItemInventoryMovements            ItemSaleInventoryMovement[]        @relation("ItemSaleInventoryMovementCreatedBy")
+  itemSaleAuditActions                     ItemSaleAudit[]                    @relation("ItemSaleAuditActionBy")
+  id                                       String                             @id @default(uuid()) @map("user_id") @db.Char(36)
+  fullName                                 String                             @map("full_name") @db.VarChar(150)
+  email                                    String                             @db.VarChar(150)
+  passwordHash                             String                             @map("password_hash") @db.VarChar(255)
+  status                                   String                             @default("ACTIVE") @db.VarChar(20)
+  createdById                              String?                            @map("created_by") @db.Char(36)
+  updatedById                              String?                            @map("updated_by") @db.Char(36)
+  createdAt                                DateTime                           @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt                                DateTime                           @updatedAt @map("updated_at") @db.DateTime(0)
 
-  createdBy              User?                          @relation("UserCreatedBy", fields: [createdById], references: [id])
-  updatedBy              User?                          @relation("UserUpdatedBy", fields: [updatedById], references: [id])
-  createdUsers           User[]                         @relation("UserCreatedBy")
-  updatedUsers           User[]                         @relation("UserUpdatedBy")
-  userRoles              UserRole[]
-  createdRoles           Role[]                         @relation("RoleCreatedBy")
-  updatedRoles           Role[]                         @relation("RoleUpdatedBy")
-  createdEventCodes      EventCode[]                    @relation("EventCodeCreatedBy")
-  updatedEventCodes      EventCode[]                    @relation("EventCodeUpdatedBy")
-  createdBankAccounts    BankAccount[]                  @relation("BankAccountCreatedBy")
-  updatedBankAccounts    BankAccount[]                  @relation("BankAccountUpdatedBy")
-  uploadedStatements     BankStatementUpload[]          @relation("StatementUploadedBy")
-  executedStatements     BankStatementUpload[]          @relation("StatementExecutedBy")
-  finalizedStatements    BankStatementUpload[]          @relation("StatementFinalizedBy")
-  withdrawnStatements    BankStatementUpload[]          @relation("StatementWithdrawnBy")
-  statementUploadAttempts BankStatementUploadAttempt[]  @relation("StatementUploadAttemptUploadedBy")
-  transactionHistory     BankTransactionHistory[]       @relation("TransactionHistoryChangedBy")
-  submittedApprovals     ReconciliationApproval[]       @relation("ApprovalSubmittedBy")
-  decidedApprovals       ReconciliationApproval[]       @relation("ApprovalDecidedBy")
-  reconciliationApprovalAssignments ReconciliationApprovalApprover[] @relation("ReconciliationApprovalApproverUser")
-  proposedReconciliationCorrections ReconciliationCorrectionProposal[] @relation("ReconciliationCorrectionProposedBy")
-  decidedReconciliationCorrections ReconciliationCorrectionProposal[] @relation("ReconciliationCorrectionDecidedBy")
+  createdBy                           User?                              @relation("UserCreatedBy", fields: [createdById], references: [id])
+  updatedBy                           User?                              @relation("UserUpdatedBy", fields: [updatedById], references: [id])
+  createdUsers                        User[]                             @relation("UserCreatedBy")
+  updatedUsers                        User[]                             @relation("UserUpdatedBy")
+  userRoles                           UserRole[]
+  createdRoles                        Role[]                             @relation("RoleCreatedBy")
+  updatedRoles                        Role[]                             @relation("RoleUpdatedBy")
+  createdEventCodes                   EventCode[]                        @relation("EventCodeCreatedBy")
+  updatedEventCodes                   EventCode[]                        @relation("EventCodeUpdatedBy")
+  createdBankAccounts                 BankAccount[]                      @relation("BankAccountCreatedBy")
+  updatedBankAccounts                 BankAccount[]                      @relation("BankAccountUpdatedBy")
+  uploadedStatements                  BankStatementUpload[]              @relation("StatementUploadedBy")
+  executedStatements                  BankStatementUpload[]              @relation("StatementExecutedBy")
+  finalizedStatements                 BankStatementUpload[]              @relation("StatementFinalizedBy")
+  withdrawnStatements                 BankStatementUpload[]              @relation("StatementWithdrawnBy")
+  statementUploadAttempts             BankStatementUploadAttempt[]       @relation("StatementUploadAttemptUploadedBy")
+  transactionHistory                  BankTransactionHistory[]           @relation("TransactionHistoryChangedBy")
+  submittedApprovals                  ReconciliationApproval[]           @relation("ApprovalSubmittedBy")
+  decidedApprovals                    ReconciliationApproval[]           @relation("ApprovalDecidedBy")
+  reconciliationApprovalAssignments   ReconciliationApprovalApprover[]   @relation("ReconciliationApprovalApproverUser")
+  proposedReconciliationCorrections   ReconciliationCorrectionProposal[] @relation("ReconciliationCorrectionProposedBy")
+  decidedReconciliationCorrections    ReconciliationCorrectionProposal[] @relation("ReconciliationCorrectionDecidedBy")
   reconciliationCorrectionAssignments ReconciliationCorrectionApprover[] @relation("ReconciliationCorrectionApproverUser")
-  manualBankTransactions BankTransaction[] @relation("BankTransactionManualAddedBy")
-  excludedBankTransactions BankTransaction[] @relation("BankTransactionExcludedBy")
-  approvalHistoryActions          ReconciliationApprovalHistory[] @relation("ApprovalHistoryActionBy")
-  createdApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigCreatedBy")
-  updatedApprovalConfigs          ApprovalConfig[]                @relation("ApprovalConfigUpdatedBy")
-  approvalConfigAssignments       ApprovalConfigApprover[]        @relation("ApprovalConfigApproverUser")
-  createdApprovalConfigAssignments ApprovalConfigApprover[]       @relation("ApprovalConfigApproverCreatedBy")
-  createdMenus                    Menu[]                           @relation("MenuCreatedBy")
-  updatedMenus           Menu[]                         @relation("MenuUpdatedBy")
-  createdRoleMenus       RoleMenu[]                     @relation("RoleMenuCreatedBy")
+  manualBankTransactions              BankTransaction[]                  @relation("BankTransactionManualAddedBy")
+  excludedBankTransactions            BankTransaction[]                  @relation("BankTransactionExcludedBy")
+  approvalHistoryActions              ReconciliationApprovalHistory[]    @relation("ApprovalHistoryActionBy")
+  createdApprovalConfigs              ApprovalConfig[]                   @relation("ApprovalConfigCreatedBy")
+  updatedApprovalConfigs              ApprovalConfig[]                   @relation("ApprovalConfigUpdatedBy")
+  approvalConfigAssignments           ApprovalConfigApprover[]           @relation("ApprovalConfigApproverUser")
+  createdApprovalConfigAssignments    ApprovalConfigApprover[]           @relation("ApprovalConfigApproverCreatedBy")
+  createdMenus                        Menu[]                             @relation("MenuCreatedBy")
+  updatedMenus                        Menu[]                             @relation("MenuUpdatedBy")
+  createdRoleMenus                    RoleMenu[]                         @relation("RoleMenuCreatedBy")
 
   @@map("arya_user")
 }
@@ -219,22 +231,22 @@ model UserRole {
 }
 
 model Menu {
-  id            String   @id @default(uuid()) @map("menu_id") @db.Char(36)
-  parentMenuId  String?  @map("parent_menu_id") @db.Char(36)
-  menuCode      String   @map("menu_code") @db.VarChar(100)
-  menuName      String   @map("menu_name") @db.VarChar(150)
-  route         String?  @db.VarChar(255)
-  menuType      String   @map("menu_type") @db.VarChar(20)
-  displayOrder  Int      @default(0) @map("display_order")
-  activeFlag    Boolean  @default(true) @map("active_flag")
-  createdById   String?  @map("created_by") @db.Char(36)
-  updatedById   String?  @map("updated_by") @db.Char(36)
-  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(0)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  id           String   @id @default(uuid()) @map("menu_id") @db.Char(36)
+  parentMenuId String?  @map("parent_menu_id") @db.Char(36)
+  menuCode     String   @map("menu_code") @db.VarChar(100)
+  menuName     String   @map("menu_name") @db.VarChar(150)
+  route        String?  @db.VarChar(255)
+  menuType     String   @map("menu_type") @db.VarChar(20)
+  displayOrder Int      @default(0) @map("display_order")
+  activeFlag   Boolean  @default(true) @map("active_flag")
+  createdById  String?  @map("created_by") @db.Char(36)
+  updatedById  String?  @map("updated_by") @db.Char(36)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
 
-  parent     Menu?      @relation("MenuHierarchy", fields: [parentMenuId], references: [id])
-  children   Menu[]     @relation("MenuHierarchy")
-  createdBy  User?      @relation("MenuCreatedBy", fields: [createdById], references: [id])
+  parent         Menu?           @relation("MenuHierarchy", fields: [parentMenuId], references: [id])
+  children       Menu[]          @relation("MenuHierarchy")
+  createdBy      User?           @relation("MenuCreatedBy", fields: [createdById], references: [id])
   updatedBy      User?           @relation("MenuUpdatedBy", fields: [updatedById], references: [id])
   roleMenus      RoleMenu[]
   approvalConfig ApprovalConfig?
@@ -269,46 +281,47 @@ model EventCode {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
   updatedById String?  @map("updated_by") @db.Char(36)
 
-  createdBy             User?             @relation("EventCodeCreatedBy", fields: [createdById], references: [id])
-  updatedBy             User?             @relation("EventCodeUpdatedBy", fields: [updatedById], references: [id])
-  suggestedTransactions BankTransaction[] @relation("SuggestedEventCode")
-  transactions          BankTransaction[] @relation("FinalEventCode")
-  correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCode")
+  createdBy               User?                          @relation("EventCodeCreatedBy", fields: [createdById], references: [id])
+  updatedBy               User?                          @relation("EventCodeUpdatedBy", fields: [updatedById], references: [id])
+  suggestedTransactions   BankTransaction[]              @relation("SuggestedEventCode")
+  transactions            BankTransaction[]              @relation("FinalEventCode")
+  correctionItemsBefore   ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCode")
   correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCode")
-  campaigns EventCampaign[]
-  children  EventCodeChild[]
-  timeRule EventTimeRule?
-  memberSubscriptions MemberEventSubscription[]
+  campaigns               EventCampaign[]
+  children                EventCodeChild[]
+  timeRule                EventTimeRule?
+  memberSubscriptions     MemberEventSubscription[]
+  itemSalePurchases       ItemSalePurchase[]
 
   @@index([eventType], map: "idx_event_code_type")
   @@map("arya_event_code")
 }
 
 model EventCampaign {
-  id String @id @default(uuid()) @map("event_campaign_id") @db.Char(36)
-  eventCodeId String @map("event_code_id") @db.Char(36)
-  campaignName String @map("campaign_name") @db.VarChar(200)
-  startDate DateTime? @map("start_date") @db.Date
-  endDate DateTime? @map("end_date") @db.Date
-  targetAmount Decimal? @map("target_amount") @db.Decimal(20, 2)
-  activeFlag Boolean @default(true) @map("active_flag")
-  remark String? @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
-  createdById String? @map("created_by") @db.Char(36)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
-  updatedById String? @map("updated_by") @db.Char(36)
+  id           String    @id @default(uuid()) @map("event_campaign_id") @db.Char(36)
+  eventCodeId  String    @map("event_code_id") @db.Char(36)
+  campaignName String    @map("campaign_name") @db.VarChar(200)
+  startDate    DateTime? @map("start_date") @db.Date
+  endDate      DateTime? @map("end_date") @db.Date
+  targetAmount Decimal?  @map("target_amount") @db.Decimal(20, 2)
+  activeFlag   Boolean   @default(true) @map("active_flag")
+  remark       String?   @db.VarChar(1000)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  createdById  String?   @map("created_by") @db.Char(36)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  updatedById  String?   @map("updated_by") @db.Char(36)
 
-  eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_event_code")
-  createdBy User? @relation("EventCampaignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_created_by")
-  updatedBy User? @relation("EventCampaignUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_updated_by")
-  transactions BankTransaction[]
-  correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCampaign")
-  correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCampaign")
-  memberCampaignAllocations MemberEventCampaignAllocation[]
+  eventCode                   EventCode                          @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_event_code")
+  createdBy                   User?                              @relation("EventCampaignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_created_by")
+  updatedBy                   User?                              @relation("EventCampaignUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_campaign_updated_by")
+  transactions                BankTransaction[]
+  correctionItemsBefore       ReconciliationCorrectionItem[]     @relation("CorrectionBeforeEventCampaign")
+  correctionItemsProposed     ReconciliationCorrectionItem[]     @relation("CorrectionProposedEventCampaign")
+  memberCampaignAllocations   MemberEventCampaignAllocation[]
   memberCampaignWalletEntries MemberEventCampaignWalletLedger[]
-  memberParticipations MemberEventCampaignParticipation[]
-  destinationCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationCampaign")
-  sourceCarryTransfers MemberEventCarryTransfer[] @relation("MemberEventCarryTransferSourceCampaign")
+  memberParticipations        MemberEventCampaignParticipation[]
+  destinationCarryTransfers   MemberEventCarryTransfer[]         @relation("MemberEventCarryTransferDestinationCampaign")
+  sourceCarryTransfers        MemberEventCarryTransfer[]         @relation("MemberEventCarryTransferSourceCampaign")
 
   @@index([eventCodeId, activeFlag], map: "idx_event_campaign_event_active")
   @@index([startDate, endDate], map: "idx_event_campaign_period")
@@ -318,19 +331,19 @@ model EventCampaign {
 }
 
 model EventTimeRule {
-  eventCodeId String @id @map("event_code_id") @db.Char(36)
-  unitAmount Decimal @map("unit_amount") @db.Decimal(20, 2)
-  durationMonths Int @default(1) @map("duration_months") @db.UnsignedInt
-  activeFlag Boolean @default(true) @map("active_flag")
-  remark String? @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
-  createdById String? @map("created_by") @db.Char(36)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
-  updatedById String? @map("updated_by") @db.Char(36)
+  eventCodeId    String   @id @map("event_code_id") @db.Char(36)
+  unitAmount     Decimal  @map("unit_amount") @db.Decimal(20, 2)
+  durationMonths Int      @default(1) @map("duration_months") @db.UnsignedInt
+  activeFlag     Boolean  @default(true) @map("active_flag")
+  remark         String?  @db.VarChar(1000)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  createdById    String?  @map("created_by") @db.Char(36)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  updatedById    String?  @map("updated_by") @db.Char(36)
 
   eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_event_code")
-  createdBy User? @relation("EventTimeRuleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_created_by")
-  updatedBy User? @relation("EventTimeRuleUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_updated_by")
+  createdBy User?     @relation("EventTimeRuleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_created_by")
+  updatedBy User?     @relation("EventTimeRuleUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_time_rule_updated_by")
 
   @@index([createdById], map: "idx_event_time_rule_created_by")
   @@index([updatedById], map: "idx_event_time_rule_updated_by")
@@ -359,14 +372,17 @@ model EventCodeChild {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(0)
   updatedById    String?  @map("updated_by") @db.Char(36)
 
-  eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_event_code")
-  createdBy User? @relation("EventCodeChildCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_created_by")
-  updatedBy User? @relation("EventCodeChildUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_updated_by")
-  transactions BankTransaction[]
-  correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCodeChild")
-  correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCodeChild")
-  subscriptions MemberEventSubscription[]
-  capacityChanges EventCodeChildCapacityChange[]
+  eventCode                  EventCode                      @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_event_code")
+  createdBy                  User?                          @relation("EventCodeChildCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_created_by")
+  updatedBy                  User?                          @relation("EventCodeChildUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_updated_by")
+  transactions               BankTransaction[]
+  correctionItemsBefore      ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCodeChild")
+  correctionItemsProposed    ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCodeChild")
+  subscriptions              MemberEventSubscription[]
+  capacityChanges            EventCodeChildCapacityChange[]
+  itemSaleConfig             ItemSaleConfig?
+  itemSalePurchases          ItemSalePurchase[]
+  itemSaleInventoryMovements ItemSaleInventoryMovement[]
 
   @@unique([eventCodeId, childCode], map: "uk_event_code_child_parent_code")
   @@index([eventCodeId, activeFlag], map: "idx_event_code_child_parent_active")
@@ -387,38 +403,150 @@ model EventCodeChildCapacityChange {
   createdById      String?  @map("created_by") @db.Char(36)
 
   eventCodeChild EventCodeChild @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_child_capacity_change_child")
-  createdBy User? @relation("ChildCapacityChangeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_child_capacity_change_created_by")
+  createdBy      User?          @relation("ChildCapacityChangeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_child_capacity_change_created_by")
 
   @@index([eventCodeChildId, createdAt], map: "idx_child_capacity_change_child_created")
   @@index([createdById], map: "idx_child_capacity_change_created_by")
   @@map("arya_event_code_child_capacity_change")
 }
 
-model MemberEventSubscription {
-  id String @id @default(uuid()) @map("member_event_subscription_id") @db.Char(36)
-  memberId String @map("member_id") @db.Char(36)
-  eventCodeId String @map("event_code_id") @db.Char(36)
-  eventCodeChildId String? @map("event_code_child_id") @db.Char(36)
-  referenceNo String? @map("reference_no") @db.VarChar(100)
-  displayName String? @map("display_name") @db.VarChar(200)
-  startDate DateTime? @map("start_date") @db.Date
-  validUntil DateTime? @map("valid_until") @db.Date
-  activeFlag Boolean @default(true) @map("active_flag")
-  remark String? @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String? @map("created_by") @db.Char(36)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  updatedById String? @map("updated_by") @db.Char(36)
+/// Physical-item configuration for an ITEM_SALE Child. Stock is independent
+/// from TIME_BASED capacity and is maintained atomically with the append-only
+/// inventory movement ledger.
+model ItemSaleConfig {
+  eventCodeChildId String   @id @map("event_code_child_id") @db.Char(36)
+  unitPrice        Decimal  @map("unit_price") @db.Decimal(20, 2)
+  stockOnHand      Int      @default(0) @map("stock_on_hand") @db.UnsignedInt
+  version          Int      @default(1) @db.UnsignedInt
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById      String   @map("created_by") @db.Char(36)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById      String   @map("updated_by") @db.Char(36)
 
-  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_member")
-  eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code")
-  eventCodeChild EventCodeChild? @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code_child")
-  createdBy User? @relation("MemberEventSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_created_by")
-  updatedBy User? @relation("MemberEventSubscriptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_updated_by")
-  coverages MemberEventCoverage[]
-  balanceLedger MemberEventBalanceLedger[]
+  eventCodeChild EventCodeChild @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_config_child")
+  createdBy      User           @relation("ItemSaleConfigCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_config_created_by")
+  updatedBy      User           @relation("ItemSaleConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_config_updated_by")
+
+  @@index([updatedById], map: "idx_item_sale_config_updated_by")
+  @@map("arya_item_sale_config")
+}
+
+/// One purchase domain record per bank transaction. Financial evidence remains
+/// on BankTransaction; this record owns quantity, price and inventory lifecycle.
+model ItemSalePurchase {
+  id                    String    @id @default(uuid()) @map("item_sale_purchase_id") @db.Char(36)
+  bankTransactionId     String    @unique(map: "uk_item_sale_purchase_transaction") @map("bank_transaction_id") @db.Char(36)
+  eventCodeId           String    @map("event_code_id") @db.Char(36)
+  eventCodeChildId      String    @map("event_code_child_id") @db.Char(36)
+  memberIdentityId      String?   @map("member_identity_id") @db.Char(36)
+  buyerMemberId         String?   @map("buyer_member_id") @db.Char(36)
+  quantity              Int       @db.UnsignedInt
+  unitPriceSnapshot     Decimal   @map("unit_price_snapshot") @db.Decimal(20, 2)
+  totalAmount           Decimal   @map("total_amount") @db.Decimal(20, 2)
+  paymentAmountSnapshot Decimal?  @map("payment_amount_snapshot") @db.Decimal(20, 2)
+  status                String    @default("DRAFT") @db.VarChar(30)
+  resolutionReason      String?   @map("resolution_reason") @db.VarChar(1000)
+  version               Int       @default(1) @db.UnsignedInt
+  confirmedAt           DateTime? @map("confirmed_at") @db.DateTime(3)
+  confirmedById         String?   @map("confirmed_by") @db.Char(36)
+  reversedAt            DateTime? @map("reversed_at") @db.DateTime(3)
+  reversedById          String?   @map("reversed_by") @db.Char(36)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById           String    @map("created_by") @db.Char(36)
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById           String    @map("updated_by") @db.Char(36)
+
+  bankTransaction    BankTransaction             @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_transaction")
+  eventCode          EventCode                   @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_event")
+  eventCodeChild     EventCodeChild              @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_child")
+  memberIdentity     MemberIdentity?             @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_identity")
+  buyerMember        Member?                     @relation("ItemSalePurchaseBuyer", fields: [buyerMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_buyer")
+  confirmedBy        User?                       @relation("ItemSalePurchaseConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_confirmed_by")
+  reversedBy         User?                       @relation("ItemSalePurchaseReversedBy", fields: [reversedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_reversed_by")
+  createdBy          User                        @relation("ItemSalePurchaseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_created_by")
+  updatedBy          User                        @relation("ItemSalePurchaseUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_updated_by")
+  inventoryMovements ItemSaleInventoryMovement[]
+
+  @@index([status, updatedAt], map: "idx_item_sale_purchase_status_updated")
+  @@index([eventCodeChildId, status], map: "idx_item_sale_purchase_child_status")
+  @@index([buyerMemberId, status], map: "idx_item_sale_purchase_buyer_status")
+  @@index([memberIdentityId], map: "idx_item_sale_purchase_identity")
+  @@map("arya_item_sale_purchase")
+}
+
+/// Append-only physical inventory evidence. The unique idempotency key prevents
+/// duplicate stock effects, while reversalOfMovementId permits one reversal only.
+model ItemSaleInventoryMovement {
+  id                   String   @id @default(uuid()) @map("item_sale_inventory_movement_id") @db.Char(36)
+  eventCodeChildId     String   @map("event_code_child_id") @db.Char(36)
+  purchaseId           String?  @map("item_sale_purchase_id") @db.Char(36)
+  movementType         String   @map("movement_type") @db.VarChar(30)
+  quantityDelta        Int      @map("quantity_delta")
+  stockBefore          Int      @map("stock_before") @db.UnsignedInt
+  stockAfter           Int      @map("stock_after") @db.UnsignedInt
+  sourceReference      String   @map("source_reference") @db.VarChar(191)
+  idempotencyKey       String   @unique(map: "uk_item_sale_inventory_idempotency") @map("idempotency_key") @db.VarChar(191)
+  reversalOfMovementId String?  @unique(map: "uk_item_sale_inventory_reversal") @map("reversal_of_movement_id") @db.Char(36)
+  reason               String   @db.VarChar(1000)
+  createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById          String   @map("created_by") @db.Char(36)
+
+  eventCodeChild   EventCodeChild             @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_inventory_child")
+  purchase         ItemSalePurchase?          @relation(fields: [purchaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_inventory_purchase")
+  reversalOf       ItemSaleInventoryMovement? @relation("ItemSaleInventoryReversal", fields: [reversalOfMovementId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_inventory_reversal")
+  reversalMovement ItemSaleInventoryMovement? @relation("ItemSaleInventoryReversal")
+  createdBy        User                       @relation("ItemSaleInventoryMovementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_inventory_created_by")
+
+  @@index([eventCodeChildId, createdAt], map: "idx_item_sale_inventory_child_created")
+  @@index([purchaseId, createdAt], map: "idx_item_sale_inventory_purchase_created")
+  @@index([createdById], map: "idx_item_sale_inventory_created_by")
+  @@map("arya_item_sale_inventory_movement")
+}
+
+/// Generic immutable audit evidence for item configuration and purchase actions.
+model ItemSaleAudit {
+  id         String   @id @default(uuid()) @map("item_sale_audit_id") @db.Char(36)
+  entityType String   @map("entity_type") @db.VarChar(30)
+  entityId   String   @map("entity_id") @db.Char(36)
+  action     String   @db.VarChar(50)
+  beforeData Json?    @map("before_data")
+  afterData  Json?    @map("after_data")
+  reason     String   @db.VarChar(1000)
+  actionAt   DateTime @default(now()) @map("action_at") @db.DateTime(3)
+  actionById String   @map("action_by") @db.Char(36)
+
+  actionBy User @relation("ItemSaleAuditActionBy", fields: [actionById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_audit_action_by")
+
+  @@index([entityType, entityId, actionAt], map: "idx_item_sale_audit_entity_action")
+  @@index([actionById], map: "idx_item_sale_audit_action_by")
+  @@map("arya_item_sale_audit")
+}
+
+model MemberEventSubscription {
+  id               String    @id @default(uuid()) @map("member_event_subscription_id") @db.Char(36)
+  memberId         String    @map("member_id") @db.Char(36)
+  eventCodeId      String    @map("event_code_id") @db.Char(36)
+  eventCodeChildId String?   @map("event_code_child_id") @db.Char(36)
+  referenceNo      String?   @map("reference_no") @db.VarChar(100)
+  displayName      String?   @map("display_name") @db.VarChar(200)
+  startDate        DateTime? @map("start_date") @db.Date
+  validUntil       DateTime? @map("valid_until") @db.Date
+  activeFlag       Boolean   @default(true) @map("active_flag")
+  remark           String?   @db.VarChar(1000)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById      String?   @map("created_by") @db.Char(36)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById      String?   @map("updated_by") @db.Char(36)
+
+  member            Member                     @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_member")
+  eventCode         EventCode                  @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code")
+  eventCodeChild    EventCodeChild?            @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code_child")
+  createdBy         User?                      @relation("MemberEventSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_created_by")
+  updatedBy         User?                      @relation("MemberEventSubscriptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_updated_by")
+  coverages         MemberEventCoverage[]
+  balanceLedger     MemberEventBalanceLedger[]
   carryTransfersOut MemberEventCarryTransfer[] @relation("MemberEventCarryTransferSourceSubscription")
-  carryTransfersIn MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationSubscription")
+  carryTransfersIn  MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationSubscription")
 
   @@unique([memberId, eventCodeChildId], map: "uk_member_event_sub_member_child")
   @@index([memberId, eventCodeId, activeFlag], map: "idx_member_event_sub_member_event")
@@ -432,29 +560,29 @@ model MemberEventSubscription {
 }
 
 model MemberEventCoverage {
-  id String @id @default(uuid()) @map("member_event_coverage_id") @db.Char(36)
-  subscriptionId String @map("member_event_subscription_id") @db.Char(36)
-  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
-  coverageSource String @default("TRANSACTION") @map("coverage_source") @db.VarChar(20)
-  coverageStatus String @default("ACTIVE") @map("coverage_status") @db.VarChar(20)
-  unitAmountSnapshot Decimal? @map("unit_amount_snapshot") @db.Decimal(20, 2)
-  durationMonthsSnapshot Int? @map("duration_months_snapshot") @db.UnsignedInt
-  grantedUnits Int? @map("granted_units") @db.UnsignedInt
-  amountApplied Decimal? @map("amount_applied") @db.Decimal(20, 2)
-  coverageFrom DateTime @map("coverage_from") @db.Date
-  coverageTo DateTime @map("coverage_to") @db.Date
-  remark String? @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String? @map("created_by") @db.Char(36)
-  voidedAt DateTime? @map("voided_at") @db.DateTime(3)
-  voidedById String? @map("voided_by") @db.Char(36)
-  voidReason String? @map("void_reason") @db.VarChar(1000)
+  id                     String    @id @default(uuid()) @map("member_event_coverage_id") @db.Char(36)
+  subscriptionId         String    @map("member_event_subscription_id") @db.Char(36)
+  bankTransactionId      String?   @map("bank_transaction_id") @db.Char(36)
+  coverageSource         String    @default("TRANSACTION") @map("coverage_source") @db.VarChar(20)
+  coverageStatus         String    @default("ACTIVE") @map("coverage_status") @db.VarChar(20)
+  unitAmountSnapshot     Decimal?  @map("unit_amount_snapshot") @db.Decimal(20, 2)
+  durationMonthsSnapshot Int?      @map("duration_months_snapshot") @db.UnsignedInt
+  grantedUnits           Int?      @map("granted_units") @db.UnsignedInt
+  amountApplied          Decimal?  @map("amount_applied") @db.Decimal(20, 2)
+  coverageFrom           DateTime  @map("coverage_from") @db.Date
+  coverageTo             DateTime  @map("coverage_to") @db.Date
+  remark                 String?   @db.VarChar(1000)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById            String?   @map("created_by") @db.Char(36)
+  voidedAt               DateTime? @map("voided_at") @db.DateTime(3)
+  voidedById             String?   @map("voided_by") @db.Char(36)
+  voidReason             String?   @map("void_reason") @db.VarChar(1000)
 
-  subscription MemberEventSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_subscription")
-  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_transaction")
-  createdBy User? @relation("MemberEventCoverageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_created_by")
-  voidedBy User? @relation("MemberEventCoverageVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_voided_by")
-  balanceLedger MemberEventBalanceLedger[]
+  subscription    MemberEventSubscription    @relation(fields: [subscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_subscription")
+  bankTransaction BankTransaction?           @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_transaction")
+  createdBy       User?                      @relation("MemberEventCoverageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_created_by")
+  voidedBy        User?                      @relation("MemberEventCoverageVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_cov_voided_by")
+  balanceLedger   MemberEventBalanceLedger[]
 
   @@index([subscriptionId, coverageStatus, coverageTo], map: "idx_member_event_cov_subscription")
   @@index([bankTransactionId], map: "idx_member_event_cov_transaction")
@@ -465,31 +593,31 @@ model MemberEventCoverage {
 }
 
 model MemberEventBalanceLedger {
-  id String @id @default(uuid()) @map("member_event_balance_ledger_id") @db.Char(36)
-  subscriptionId String @map("member_event_subscription_id") @db.Char(36)
-  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
-  coverageId String? @map("member_event_coverage_id") @db.Char(36)
-  carryTransferId String? @map("member_event_carry_transfer_id") @db.Char(36)
-  entryType String @map("entry_type") @db.VarChar(20)
-  entryStatus String @default("ACTIVE") @map("entry_status") @db.VarChar(20)
-  amountDelta Decimal @map("amount_delta") @db.Decimal(20, 2)
-  effectiveDate DateTime @map("effective_date") @db.Date
-  postingSequence BigInt @map("posting_sequence") @db.UnsignedBigInt
-  unitAmountSnapshot Decimal? @map("unit_amount_snapshot") @db.Decimal(20, 2)
-  durationMonthsSnapshot Int? @map("duration_months_snapshot") @db.UnsignedInt
-  remark String? @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String? @map("created_by") @db.Char(36)
-  voidedAt DateTime? @map("voided_at") @db.DateTime(3)
-  voidedById String? @map("voided_by") @db.Char(36)
-  voidReason String? @map("void_reason") @db.VarChar(1000)
+  id                     String    @id @default(uuid()) @map("member_event_balance_ledger_id") @db.Char(36)
+  subscriptionId         String    @map("member_event_subscription_id") @db.Char(36)
+  bankTransactionId      String?   @map("bank_transaction_id") @db.Char(36)
+  coverageId             String?   @map("member_event_coverage_id") @db.Char(36)
+  carryTransferId        String?   @map("member_event_carry_transfer_id") @db.Char(36)
+  entryType              String    @map("entry_type") @db.VarChar(20)
+  entryStatus            String    @default("ACTIVE") @map("entry_status") @db.VarChar(20)
+  amountDelta            Decimal   @map("amount_delta") @db.Decimal(20, 2)
+  effectiveDate          DateTime  @map("effective_date") @db.Date
+  postingSequence        BigInt    @map("posting_sequence") @db.UnsignedBigInt
+  unitAmountSnapshot     Decimal?  @map("unit_amount_snapshot") @db.Decimal(20, 2)
+  durationMonthsSnapshot Int?      @map("duration_months_snapshot") @db.UnsignedInt
+  remark                 String?   @db.VarChar(1000)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById            String?   @map("created_by") @db.Char(36)
+  voidedAt               DateTime? @map("voided_at") @db.DateTime(3)
+  voidedById             String?   @map("voided_by") @db.Char(36)
+  voidReason             String?   @map("void_reason") @db.VarChar(1000)
 
-  subscription MemberEventSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_subscription")
-  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_transaction")
-  coverage MemberEventCoverage? @relation(fields: [coverageId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_coverage")
-  carryTransfer MemberEventCarryTransfer? @relation(fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_carry_transfer")
-  createdBy User? @relation("MemberEventBalanceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_created_by")
-  voidedBy User? @relation("MemberEventBalanceVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_voided_by")
+  subscription    MemberEventSubscription   @relation(fields: [subscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_subscription")
+  bankTransaction BankTransaction?          @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_transaction")
+  coverage        MemberEventCoverage?      @relation(fields: [coverageId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_coverage")
+  carryTransfer   MemberEventCarryTransfer? @relation(fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_carry_transfer")
+  createdBy       User?                     @relation("MemberEventBalanceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_created_by")
+  voidedBy        User?                     @relation("MemberEventBalanceVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_balance_voided_by")
 
   @@unique([subscriptionId, postingSequence], map: "uq_member_event_balance_subscription_sequence")
   @@index([subscriptionId, entryStatus, effectiveDate], map: "idx_member_event_balance_subscription")
@@ -504,38 +632,38 @@ model MemberEventBalanceLedger {
 }
 
 model MemberEventCarryTransfer {
-  id String @id @default(uuid()) @map("member_event_carry_transfer_id") @db.Char(36)
-  memberId String @map("member_id") @db.Char(36)
-  sourceSubscriptionId String? @map("source_subscription_id") @db.Char(36)
-  sourceCampaignId String? @map("source_campaign_id") @db.Char(36)
-  destinationSubscriptionId String? @map("destination_subscription_id") @db.Char(36)
-  destinationCampaignId String? @map("destination_campaign_id") @db.Char(36)
-  amount Decimal @db.Decimal(20, 2)
-  effectiveDate DateTime @map("effective_date") @db.Date
-  reason String @db.VarChar(1000)
-  status String @default("ACTIVE") @db.VarChar(20)
-  idempotencyKey String @unique(map: "uq_member_event_carry_transfer_idempotency") @map("idempotency_key") @db.VarChar(100)
-  requestHash String @map("request_hash") @db.Char(64)
-  reversalOfTransferId String? @unique(map: "uq_member_event_carry_transfer_reversal") @map("reversal_of_transfer_id") @db.Char(36)
-  destinationUnitAmountSnapshot Decimal @map("destination_unit_amount_snapshot") @db.Decimal(20, 2)
-  destinationDurationMonthsSnapshot Int @map("destination_duration_months_snapshot") @db.UnsignedInt
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String @map("created_by") @db.Char(36)
-  reversedAt DateTime? @map("reversed_at") @db.DateTime(3)
-  reversedById String? @map("reversed_by") @db.Char(36)
+  id                                String    @id @default(uuid()) @map("member_event_carry_transfer_id") @db.Char(36)
+  memberId                          String    @map("member_id") @db.Char(36)
+  sourceSubscriptionId              String?   @map("source_subscription_id") @db.Char(36)
+  sourceCampaignId                  String?   @map("source_campaign_id") @db.Char(36)
+  destinationSubscriptionId         String?   @map("destination_subscription_id") @db.Char(36)
+  destinationCampaignId             String?   @map("destination_campaign_id") @db.Char(36)
+  amount                            Decimal   @db.Decimal(20, 2)
+  effectiveDate                     DateTime  @map("effective_date") @db.Date
+  reason                            String    @db.VarChar(1000)
+  status                            String    @default("ACTIVE") @db.VarChar(20)
+  idempotencyKey                    String    @unique(map: "uq_member_event_carry_transfer_idempotency") @map("idempotency_key") @db.VarChar(100)
+  requestHash                       String    @map("request_hash") @db.Char(64)
+  reversalOfTransferId              String?   @unique(map: "uq_member_event_carry_transfer_reversal") @map("reversal_of_transfer_id") @db.Char(36)
+  destinationUnitAmountSnapshot     Decimal   @map("destination_unit_amount_snapshot") @db.Decimal(20, 2)
+  destinationDurationMonthsSnapshot Int       @map("destination_duration_months_snapshot") @db.UnsignedInt
+  createdAt                         DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById                       String    @map("created_by") @db.Char(36)
+  reversedAt                        DateTime? @map("reversed_at") @db.DateTime(3)
+  reversedById                      String?   @map("reversed_by") @db.Char(36)
 
-  member Member @relation("MemberEventCarryTransferMember", fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_member")
-  sourceSubscription MemberEventSubscription? @relation("MemberEventCarryTransferSourceSubscription", fields: [sourceSubscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_source_subscription")
-  sourceCampaign EventCampaign? @relation("MemberEventCarryTransferSourceCampaign", fields: [sourceCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_source_campaign")
-  destinationSubscription MemberEventSubscription? @relation("MemberEventCarryTransferDestinationSubscription", fields: [destinationSubscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_destination_subscription")
-  destinationCampaign EventCampaign? @relation("MemberEventCarryTransferDestinationCampaign", fields: [destinationCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_destination_campaign")
-  createdBy User @relation("MemberEventCarryTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_created_by")
-  reversedBy User? @relation("MemberEventCarryTransferReversedBy", fields: [reversedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_reversed_by")
-  reversalOf MemberEventCarryTransfer? @relation("MemberEventCarryTransferReversal", fields: [reversalOfTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_reversal_of")
-  reversal MemberEventCarryTransfer? @relation("MemberEventCarryTransferReversal")
-  balanceLedger MemberEventBalanceLedger[]
-  campaignAllocation MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationTransfer")
-  campaignWalletEntries MemberEventCampaignWalletLedger[]
+  member                  Member                            @relation("MemberEventCarryTransferMember", fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_member")
+  sourceSubscription      MemberEventSubscription?          @relation("MemberEventCarryTransferSourceSubscription", fields: [sourceSubscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_source_subscription")
+  sourceCampaign          EventCampaign?                    @relation("MemberEventCarryTransferSourceCampaign", fields: [sourceCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_source_campaign")
+  destinationSubscription MemberEventSubscription?          @relation("MemberEventCarryTransferDestinationSubscription", fields: [destinationSubscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_destination_subscription")
+  destinationCampaign     EventCampaign?                    @relation("MemberEventCarryTransferDestinationCampaign", fields: [destinationCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_destination_campaign")
+  createdBy               User                              @relation("MemberEventCarryTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_created_by")
+  reversedBy              User?                             @relation("MemberEventCarryTransferReversedBy", fields: [reversedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_reversed_by")
+  reversalOf              MemberEventCarryTransfer?         @relation("MemberEventCarryTransferReversal", fields: [reversalOfTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_carry_transfer_reversal_of")
+  reversal                MemberEventCarryTransfer?         @relation("MemberEventCarryTransferReversal")
+  balanceLedger           MemberEventBalanceLedger[]
+  campaignAllocation      MemberEventCampaignAllocation?    @relation("MemberEventCampaignAllocationTransfer")
+  campaignWalletEntries   MemberEventCampaignWalletLedger[]
 
   @@index([memberId, effectiveDate], map: "idx_member_event_carry_transfer_member_date")
   @@index([sourceSubscriptionId, status, effectiveDate], map: "idx_member_event_carry_transfer_source")
@@ -548,31 +676,31 @@ model MemberEventCarryTransfer {
 }
 
 model MemberEventCampaignAllocation {
-  id String @id @default(uuid()) @map("member_event_campaign_allocation_id") @db.Char(36)
-  memberId String @map("member_id") @db.Char(36)
-  eventCampaignId String @map("event_campaign_id") @db.Char(36)
-  carryTransferId String? @unique(map: "uq_member_event_campaign_allocation_transfer") @map("member_event_carry_transfer_id") @db.Char(36)
-  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
-  amountDelta Decimal @map("amount_delta") @db.Decimal(20, 2)
-  allocationType String @map("allocation_type") @db.VarChar(30)
-  allocationStatus String @default("ACTIVE") @map("allocation_status") @db.VarChar(20)
-  effectiveDate DateTime @map("effective_date") @db.Date
-  reason String @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String @map("created_by") @db.Char(36)
-  reversalOfAllocationId String? @unique(map: "uq_member_event_campaign_allocation_reversal") @map("reversal_of_allocation_id") @db.Char(36)
-  voidedAt DateTime? @map("voided_at") @db.DateTime(3)
-  voidedById String? @map("voided_by") @db.Char(36)
-  voidReason String? @map("void_reason") @db.VarChar(1000)
+  id                     String    @id @default(uuid()) @map("member_event_campaign_allocation_id") @db.Char(36)
+  memberId               String    @map("member_id") @db.Char(36)
+  eventCampaignId        String    @map("event_campaign_id") @db.Char(36)
+  carryTransferId        String?   @unique(map: "uq_member_event_campaign_allocation_transfer") @map("member_event_carry_transfer_id") @db.Char(36)
+  bankTransactionId      String?   @map("bank_transaction_id") @db.Char(36)
+  amountDelta            Decimal   @map("amount_delta") @db.Decimal(20, 2)
+  allocationType         String    @map("allocation_type") @db.VarChar(30)
+  allocationStatus       String    @default("ACTIVE") @map("allocation_status") @db.VarChar(20)
+  effectiveDate          DateTime  @map("effective_date") @db.Date
+  reason                 String    @db.VarChar(1000)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById            String    @map("created_by") @db.Char(36)
+  reversalOfAllocationId String?   @unique(map: "uq_member_event_campaign_allocation_reversal") @map("reversal_of_allocation_id") @db.Char(36)
+  voidedAt               DateTime? @map("voided_at") @db.DateTime(3)
+  voidedById             String?   @map("voided_by") @db.Char(36)
+  voidReason             String?   @map("void_reason") @db.VarChar(1000)
 
-  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_member")
-  eventCampaign EventCampaign @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_campaign")
-  carryTransfer MemberEventCarryTransfer? @relation("MemberEventCampaignAllocationTransfer", fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_transfer")
-  bankTransaction BankTransaction? @relation("MemberEventCampaignAllocationTransaction", fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_transaction")
-  createdBy User @relation("MemberEventCampaignAllocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_created_by")
-  voidedBy User? @relation("MemberEventCampaignAllocationVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_voided_by")
-  reversalOf MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal", fields: [reversalOfAllocationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_reversal_of")
-  reversal MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal")
+  member          Member                         @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_member")
+  eventCampaign   EventCampaign                  @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_campaign")
+  carryTransfer   MemberEventCarryTransfer?      @relation("MemberEventCampaignAllocationTransfer", fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_transfer")
+  bankTransaction BankTransaction?               @relation("MemberEventCampaignAllocationTransaction", fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_transaction")
+  createdBy       User                           @relation("MemberEventCampaignAllocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_created_by")
+  voidedBy        User?                          @relation("MemberEventCampaignAllocationVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_voided_by")
+  reversalOf      MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal", fields: [reversalOfAllocationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_allocation_reversal_of")
+  reversal        MemberEventCampaignAllocation? @relation("MemberEventCampaignAllocationReversal")
 
   @@index([memberId, eventCampaignId, allocationStatus, effectiveDate], map: "idx_member_event_campaign_allocation_member_campaign")
   @@index([eventCampaignId, allocationStatus, effectiveDate], map: "idx_member_event_campaign_allocation_campaign")
@@ -585,29 +713,29 @@ model MemberEventCampaignAllocation {
 /// Donor-owned, Campaign-scoped wallet evidence. This holds only money that remains
 /// unallocated after a target-cap decision or that is subsequently transferred.
 model MemberEventCampaignWalletLedger {
-  id String @id @default(uuid()) @map("member_event_campaign_wallet_ledger_id") @db.Char(36)
-  memberId String @map("member_id") @db.Char(36)
-  eventCampaignId String @map("event_campaign_id") @db.Char(36)
-  bankTransactionId String? @map("bank_transaction_id") @db.Char(36)
-  carryTransferId String? @map("member_event_carry_transfer_id") @db.Char(36)
-  entryType String @map("entry_type") @db.VarChar(30)
-  entryStatus String @default("ACTIVE") @map("entry_status") @db.VarChar(20)
-  amountDelta Decimal @map("amount_delta") @db.Decimal(20, 2)
-  effectiveDate DateTime @map("effective_date") @db.Date
-  postingSequence BigInt @map("posting_sequence") @db.UnsignedBigInt
-  remark String? @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String @map("created_by") @db.Char(36)
-  voidedAt DateTime? @map("voided_at") @db.DateTime(3)
-  voidedById String? @map("voided_by") @db.Char(36)
-  voidReason String? @map("void_reason") @db.VarChar(1000)
+  id                String    @id @default(uuid()) @map("member_event_campaign_wallet_ledger_id") @db.Char(36)
+  memberId          String    @map("member_id") @db.Char(36)
+  eventCampaignId   String    @map("event_campaign_id") @db.Char(36)
+  bankTransactionId String?   @map("bank_transaction_id") @db.Char(36)
+  carryTransferId   String?   @map("member_event_carry_transfer_id") @db.Char(36)
+  entryType         String    @map("entry_type") @db.VarChar(30)
+  entryStatus       String    @default("ACTIVE") @map("entry_status") @db.VarChar(20)
+  amountDelta       Decimal   @map("amount_delta") @db.Decimal(20, 2)
+  effectiveDate     DateTime  @map("effective_date") @db.Date
+  postingSequence   BigInt    @map("posting_sequence") @db.UnsignedBigInt
+  remark            String?   @db.VarChar(1000)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById       String    @map("created_by") @db.Char(36)
+  voidedAt          DateTime? @map("voided_at") @db.DateTime(3)
+  voidedById        String?   @map("voided_by") @db.Char(36)
+  voidReason        String?   @map("void_reason") @db.VarChar(1000)
 
-  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_member")
-  eventCampaign EventCampaign @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_campaign")
-  bankTransaction BankTransaction? @relation("MemberEventCampaignWalletTransaction", fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_transaction")
-  carryTransfer MemberEventCarryTransfer? @relation(fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_transfer")
-  createdBy User @relation("MemberEventCampaignWalletLedgerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_created_by")
-  voidedBy User? @relation("MemberEventCampaignWalletLedgerVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_voided_by")
+  member          Member                    @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_member")
+  eventCampaign   EventCampaign             @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_campaign")
+  bankTransaction BankTransaction?          @relation("MemberEventCampaignWalletTransaction", fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_transaction")
+  carryTransfer   MemberEventCarryTransfer? @relation(fields: [carryTransferId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_transfer")
+  createdBy       User                      @relation("MemberEventCampaignWalletLedgerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_created_by")
+  voidedBy        User?                     @relation("MemberEventCampaignWalletLedgerVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_wallet_voided_by")
 
   @@unique([memberId, eventCampaignId, postingSequence], map: "uq_member_event_campaign_wallet_sequence")
   @@index([memberId, eventCampaignId, entryStatus, effectiveDate], map: "idx_member_event_campaign_wallet_member_campaign")
@@ -621,17 +749,17 @@ model MemberEventCampaignWalletLedger {
 }
 
 model MemberEventCampaignParticipation {
-  id String @id @default(uuid()) @map("member_event_campaign_participation_id") @db.Char(36)
-  memberId String @map("member_id") @db.Char(36)
-  eventCampaignId String @map("event_campaign_id") @db.Char(36)
-  activeFlag Boolean @default(true) @map("active_flag")
-  remark String? @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  createdById String @map("created_by") @db.Char(36)
+  id              String   @id @default(uuid()) @map("member_event_campaign_participation_id") @db.Char(36)
+  memberId        String   @map("member_id") @db.Char(36)
+  eventCampaignId String   @map("event_campaign_id") @db.Char(36)
+  activeFlag      Boolean  @default(true) @map("active_flag")
+  remark          String?  @db.VarChar(1000)
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById     String   @map("created_by") @db.Char(36)
 
-  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_member")
+  member        Member        @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_member")
   eventCampaign EventCampaign @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_campaign")
-  createdBy User @relation("MemberEventCampaignParticipationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_created_by")
+  createdBy     User          @relation("MemberEventCampaignParticipationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_campaign_participation_created_by")
 
   @@unique([memberId, eventCampaignId], map: "uq_member_event_campaign_participation_member_campaign")
   @@index([memberId, activeFlag], map: "idx_member_event_campaign_participation_member_active")
@@ -641,24 +769,24 @@ model MemberEventCampaignParticipation {
 }
 
 model BankAccount {
-  id           String   @id @default(uuid()) @map("bank_account_id") @db.Char(36)
-  bankCode     String   @map("bank_code") @db.VarChar(30)
-  bankName     String   @map("bank_name") @db.VarChar(100)
-  accountNo    String   @map("account_no") @db.VarChar(100)
-  accountName  String   @map("account_name") @db.VarChar(200)
-  currencyCode String   @default("IDR") @map("currency_code") @db.Char(3)
+  id                     String    @id @default(uuid()) @map("bank_account_id") @db.Char(36)
+  bankCode               String    @map("bank_code") @db.VarChar(30)
+  bankName               String    @map("bank_name") @db.VarChar(100)
+  accountNo              String    @map("account_no") @db.VarChar(100)
+  accountName            String    @map("account_name") @db.VarChar(200)
+  currencyCode           String    @default("IDR") @map("currency_code") @db.Char(3)
   openingBalance         Decimal?  @map("opening_balance") @db.Decimal(19, 2)
   openingBalanceDate     DateTime? @map("opening_balance_date") @db.Date
   openingBalanceLockedAt DateTime? @map("opening_balance_locked_at") @db.DateTime(3)
-  activeFlag   Boolean  @default(true) @map("active_flag")
-  createdById  String?  @map("created_by") @db.Char(36)
-  updatedById  String?  @map("updated_by") @db.Char(36)
-  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  activeFlag             Boolean   @default(true) @map("active_flag")
+  createdById            String?   @map("created_by") @db.Char(36)
+  updatedById            String?   @map("updated_by") @db.Char(36)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
 
-  createdBy  User?                 @relation("BankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  updatedBy  User?                 @relation("BankAccountUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  statements BankStatementUpload[]
+  createdBy               User?                        @relation("BankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  updatedBy               User?                        @relation("BankAccountUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  statements              BankStatementUpload[]
   statementUploadAttempts BankStatementUploadAttempt[]
 
   @@unique([bankCode, accountNo], map: "uk_bank_account_bank_account_no")
@@ -667,37 +795,37 @@ model BankAccount {
 
 model BankStatementUpload {
   firstSeenMemberIdentities MemberIdentity[]
-  id               String    @id @default(uuid()) @map("statement_upload_id") @db.Char(36)
-  bankAccountId    String    @map("bank_account_id") @db.Char(36)
-  fileName         String    @map("file_name") @db.VarChar(255)
-  periodFrom       DateTime? @map("period_from") @db.Date
-  periodTo         DateTime? @map("period_to") @db.Date
-  totalTransaction Int       @default(0) @map("total_transaction")
-  totalCredit      Decimal   @default(0) @map("total_credit") @db.Decimal(20, 2)
-  totalDebit       Decimal   @default(0) @map("total_debit") @db.Decimal(20, 2)
-  status           String    @default("RAW") @db.VarChar(20)
-  uploadedAt       DateTime  @default(now()) @map("uploaded_at") @db.DateTime(0)
-  uploadedById     String    @map("uploaded_by") @db.Char(36)
-  executedAt       DateTime? @map("executed_at") @db.DateTime(0)
-  executedById     String?   @map("executed_by") @db.Char(36)
-  finalizedAt      DateTime? @map("finalized_at") @db.DateTime(0)
-  finalizedById    String?   @map("finalized_by") @db.Char(36)
-  remark           String?   @db.VarChar(1000)
-  withdrawnAt      DateTime? @map("withdrawn_at") @db.DateTime(3)
-  withdrawnById    String?   @map("withdrawn_by") @db.Char(36)
-  withdrawalReason String?   @map("withdrawal_reason") @db.VarChar(1000)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(0)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
+  id                        String           @id @default(uuid()) @map("statement_upload_id") @db.Char(36)
+  bankAccountId             String           @map("bank_account_id") @db.Char(36)
+  fileName                  String           @map("file_name") @db.VarChar(255)
+  periodFrom                DateTime?        @map("period_from") @db.Date
+  periodTo                  DateTime?        @map("period_to") @db.Date
+  totalTransaction          Int              @default(0) @map("total_transaction")
+  totalCredit               Decimal          @default(0) @map("total_credit") @db.Decimal(20, 2)
+  totalDebit                Decimal          @default(0) @map("total_debit") @db.Decimal(20, 2)
+  status                    String           @default("RAW") @db.VarChar(20)
+  uploadedAt                DateTime         @default(now()) @map("uploaded_at") @db.DateTime(0)
+  uploadedById              String           @map("uploaded_by") @db.Char(36)
+  executedAt                DateTime?        @map("executed_at") @db.DateTime(0)
+  executedById              String?          @map("executed_by") @db.Char(36)
+  finalizedAt               DateTime?        @map("finalized_at") @db.DateTime(0)
+  finalizedById             String?          @map("finalized_by") @db.Char(36)
+  remark                    String?          @db.VarChar(1000)
+  withdrawnAt               DateTime?        @map("withdrawn_at") @db.DateTime(3)
+  withdrawnById             String?          @map("withdrawn_by") @db.Char(36)
+  withdrawalReason          String?          @map("withdrawal_reason") @db.VarChar(1000)
+  createdAt                 DateTime         @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt                 DateTime         @updatedAt @map("updated_at") @db.DateTime(0)
 
-  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id])
-  uploadedBy  User        @relation("StatementUploadedBy", fields: [uploadedById], references: [id])
-  executedBy  User?       @relation("StatementExecutedBy", fields: [executedById], references: [id])
-  finalizedBy User?       @relation("StatementFinalizedBy", fields: [finalizedById], references: [id])
-  withdrawnBy User?       @relation("StatementWithdrawnBy", fields: [withdrawnById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_withdrawn_by")
-  transactions BankTransaction[]
-  approval     ReconciliationApproval?
-  correctionProposals ReconciliationCorrectionProposal[]
-  uploadAttempt BankStatementUploadAttempt?
+  bankAccount                BankAccount                        @relation(fields: [bankAccountId], references: [id])
+  uploadedBy                 User                               @relation("StatementUploadedBy", fields: [uploadedById], references: [id])
+  executedBy                 User?                              @relation("StatementExecutedBy", fields: [executedById], references: [id])
+  finalizedBy                User?                              @relation("StatementFinalizedBy", fields: [finalizedById], references: [id])
+  withdrawnBy                User?                              @relation("StatementWithdrawnBy", fields: [withdrawnById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_withdrawn_by")
+  transactions               BankTransaction[]
+  approval                   ReconciliationApproval?
+  correctionProposals        ReconciliationCorrectionProposal[]
+  uploadAttempt              BankStatementUploadAttempt?
   matchedStatementDuplicates BankStatementUploadDuplicate[]
 
   @@index([bankAccountId, status], map: "idx_bank_statement_account_status")
@@ -706,21 +834,21 @@ model BankStatementUpload {
 }
 
 model BankStatementUploadAttempt {
-  id                       String    @id @default(uuid()) @map("upload_attempt_id") @db.Char(36)
-  bankAccountId            String    @map("bank_account_id") @db.Char(36)
-  fileName                 String    @map("file_name") @db.VarChar(255)
-  sourceTotalTransaction   Int       @map("source_total_transaction")
-  sourceTotalCredit        Decimal   @map("source_total_credit") @db.Decimal(20, 2)
-  sourceTotalDebit         Decimal   @map("source_total_debit") @db.Decimal(20, 2)
-  importedTransactionCount Int       @map("imported_transaction_count")
+  id                        String   @id @default(uuid()) @map("upload_attempt_id") @db.Char(36)
+  bankAccountId             String   @map("bank_account_id") @db.Char(36)
+  fileName                  String   @map("file_name") @db.VarChar(255)
+  sourceTotalTransaction    Int      @map("source_total_transaction")
+  sourceTotalCredit         Decimal  @map("source_total_credit") @db.Decimal(20, 2)
+  sourceTotalDebit          Decimal  @map("source_total_debit") @db.Decimal(20, 2)
+  importedTransactionCount  Int      @map("imported_transaction_count")
   duplicateTransactionCount Int      @map("duplicate_transaction_count")
-  uploadedAt               DateTime  @default(now()) @map("uploaded_at") @db.DateTime(3)
-  uploadedById             String    @map("uploaded_by") @db.Char(36)
-  statementUploadId        String?   @unique(map: "uk_bank_statement_attempt_statement") @map("statement_upload_id") @db.Char(36)
+  uploadedAt                DateTime @default(now()) @map("uploaded_at") @db.DateTime(3)
+  uploadedById              String   @map("uploaded_by") @db.Char(36)
+  statementUploadId         String?  @unique(map: "uk_bank_statement_attempt_statement") @map("statement_upload_id") @db.Char(36)
 
-  bankAccount     BankAccount                     @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_bank_account")
-  uploadedBy      User                            @relation("StatementUploadAttemptUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_uploaded_by")
-  statementUpload BankStatementUpload?            @relation(fields: [statementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_statement")
+  bankAccount     BankAccount                    @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_bank_account")
+  uploadedBy      User                           @relation("StatementUploadAttemptUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_uploaded_by")
+  statementUpload BankStatementUpload?           @relation(fields: [statementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_attempt_statement")
   duplicates      BankStatementUploadDuplicate[]
 
   @@index([bankAccountId, uploadedAt], map: "idx_bank_statement_attempt_account_uploaded")
@@ -757,51 +885,52 @@ model BankStatementUploadDuplicate {
 }
 
 model BankTransaction {
-  memberIdentityId String? @map("member_identity_id") @db.Char(36)
-  memberIdentity MemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_member_identity")
-  @@index([memberIdentityId], map: "idx_bank_transaction_member_identity")
-  id                   String    @id @default(uuid()) @map("bank_transaction_id") @db.Char(36)
-  statementUploadId    String    @map("statement_upload_id") @db.Char(36)
-  rowNo                Int?      @map("row_no")
-  transactionDate      DateTime? @map("transaction_date") @db.Date
-  transactionType      String?   @map("transaction_type") @db.VarChar(20)
-  referenceNo          String?   @map("reference_no") @db.VarChar(150)
-  senderName           String?   @map("sender_name") @db.VarChar(255)
-  description          String?   @db.Text
-  originalAmount       Decimal   @map("original_amount") @db.Decimal(20, 2)
-  suffixCode           String?   @map("suffix_code") @db.Char(3)
-  suggestedEventCodeId String?   @map("suggested_event_code_id") @db.Char(36)
-  eventCodeId          String?   @map("event_code_id") @db.Char(36)
-  eventCodeChildId     String?   @map("event_code_child_id") @db.Char(36)
-  eventCampaignId      String?   @map("event_campaign_id") @db.Char(36)
-  baseAmount           Decimal?  @map("base_amount") @db.Decimal(20, 2)
-  status               String    @default("RAW") @db.VarChar(20)
-  remark               String?   @db.VarChar(1000)
-  sourceType           String    @default("BANK") @map("source_type") @db.VarChar(20)
-  correctionReason     String?   @map("correction_reason") @db.VarChar(1000)
-  manualAddedAt        DateTime? @map("manual_added_at") @db.DateTime(0)
-  manualAddedById      String?   @map("manual_added_by") @db.Char(36)
-  reconciliationExcludedAt DateTime? @map("reconciliation_excluded_at") @db.DateTime(0)
-  reconciliationExcludedById String? @map("reconciliation_excluded_by") @db.Char(36)
-  reconciliationExclusionReason String? @map("reconciliation_exclusion_reason") @db.VarChar(1000)
-  createdAt            DateTime  @default(now()) @map("created_at") @db.DateTime(0)
-  updatedAt            DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
+  memberIdentityId              String?         @map("member_identity_id") @db.Char(36)
+  memberIdentity                MemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_member_identity")
+  id                            String          @id @default(uuid()) @map("bank_transaction_id") @db.Char(36)
+  statementUploadId             String          @map("statement_upload_id") @db.Char(36)
+  rowNo                         Int?            @map("row_no")
+  transactionDate               DateTime?       @map("transaction_date") @db.Date
+  transactionType               String?         @map("transaction_type") @db.VarChar(20)
+  referenceNo                   String?         @map("reference_no") @db.VarChar(150)
+  senderName                    String?         @map("sender_name") @db.VarChar(255)
+  description                   String?         @db.Text
+  originalAmount                Decimal         @map("original_amount") @db.Decimal(20, 2)
+  suffixCode                    String?         @map("suffix_code") @db.Char(3)
+  suggestedEventCodeId          String?         @map("suggested_event_code_id") @db.Char(36)
+  eventCodeId                   String?         @map("event_code_id") @db.Char(36)
+  eventCodeChildId              String?         @map("event_code_child_id") @db.Char(36)
+  eventCampaignId               String?         @map("event_campaign_id") @db.Char(36)
+  baseAmount                    Decimal?        @map("base_amount") @db.Decimal(20, 2)
+  status                        String          @default("RAW") @db.VarChar(20)
+  remark                        String?         @db.VarChar(1000)
+  sourceType                    String          @default("BANK") @map("source_type") @db.VarChar(20)
+  correctionReason              String?         @map("correction_reason") @db.VarChar(1000)
+  manualAddedAt                 DateTime?       @map("manual_added_at") @db.DateTime(0)
+  manualAddedById               String?         @map("manual_added_by") @db.Char(36)
+  reconciliationExcludedAt      DateTime?       @map("reconciliation_excluded_at") @db.DateTime(0)
+  reconciliationExcludedById    String?         @map("reconciliation_excluded_by") @db.Char(36)
+  reconciliationExclusionReason String?         @map("reconciliation_exclusion_reason") @db.VarChar(1000)
+  createdAt                     DateTime        @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt                     DateTime        @updatedAt @map("updated_at") @db.DateTime(0)
 
-  statementUpload    BankStatementUpload       @relation(fields: [statementUploadId], references: [id])
-  suggestedEventCode EventCode?                @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
-  eventCode          EventCode?                @relation("FinalEventCode", fields: [eventCodeId], references: [id])
-  eventCodeChild     EventCodeChild?           @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_code_child")
-  eventCampaign      EventCampaign?            @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_campaign")
-  manualAddedBy      User?                     @relation("BankTransactionManualAddedBy", fields: [manualAddedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_manual_added_by")
-  reconciliationExcludedBy User?               @relation("BankTransactionExcludedBy", fields: [reconciliationExcludedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_excluded_by")
-  history            BankTransactionHistory[]
-  correctionItems    ReconciliationCorrectionItem[]
-  memberEventCoverages MemberEventCoverage[]
-  memberEventBalanceLedger MemberEventBalanceLedger[]
-  memberEventCampaignAllocations MemberEventCampaignAllocation[] @relation("MemberEventCampaignAllocationTransaction")
+  statementUpload                  BankStatementUpload               @relation(fields: [statementUploadId], references: [id])
+  suggestedEventCode               EventCode?                        @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
+  eventCode                        EventCode?                        @relation("FinalEventCode", fields: [eventCodeId], references: [id])
+  eventCodeChild                   EventCodeChild?                   @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_code_child")
+  eventCampaign                    EventCampaign?                    @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_campaign")
+  manualAddedBy                    User?                             @relation("BankTransactionManualAddedBy", fields: [manualAddedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_manual_added_by")
+  reconciliationExcludedBy         User?                             @relation("BankTransactionExcludedBy", fields: [reconciliationExcludedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_excluded_by")
+  history                          BankTransactionHistory[]
+  correctionItems                  ReconciliationCorrectionItem[]
+  memberEventCoverages             MemberEventCoverage[]
+  memberEventBalanceLedger         MemberEventBalanceLedger[]
+  memberEventCampaignAllocations   MemberEventCampaignAllocation[]   @relation("MemberEventCampaignAllocationTransaction")
   memberEventCampaignWalletEntries MemberEventCampaignWalletLedger[] @relation("MemberEventCampaignWalletTransaction")
   matchedStatementUploadDuplicates BankStatementUploadDuplicate[]
+  itemSalePurchase                 ItemSalePurchase?
 
+  @@index([memberIdentityId], map: "idx_bank_transaction_member_identity")
   @@index([eventCampaignId], map: "idx_bank_transaction_event_campaign")
   @@index([eventCodeChildId], map: "idx_bank_transaction_event_code_child")
   @@index([manualAddedById], map: "idx_bank_transaction_manual_added_by")
@@ -811,14 +940,14 @@ model BankTransaction {
 }
 
 model BankTransactionHistory {
-  id                    String   @id @default(uuid()) @map("transaction_history_id") @db.Char(36)
-  bankTransactionId     String   @map("bank_transaction_id") @db.Char(36)
-  fieldName             String?  @map("field_name") @db.VarChar(100)
-  oldValue              String?  @map("old_value") @db.Text
-  newValue              String?  @map("new_value") @db.Text
-  remark                String?  @db.VarChar(1000)
-  changedAt             DateTime @default(now()) @map("changed_at") @db.DateTime(0)
-  changedById           String   @map("changed_by") @db.Char(36)
+  id                String   @id @default(uuid()) @map("transaction_history_id") @db.Char(36)
+  bankTransactionId String   @map("bank_transaction_id") @db.Char(36)
+  fieldName         String?  @map("field_name") @db.VarChar(100)
+  oldValue          String?  @map("old_value") @db.Text
+  newValue          String?  @map("new_value") @db.Text
+  remark            String?  @db.VarChar(1000)
+  changedAt         DateTime @default(now()) @map("changed_at") @db.DateTime(0)
+  changedById       String   @map("changed_by") @db.Char(36)
 
   transaction BankTransaction @relation(fields: [bankTransactionId], references: [id])
   changedBy   User            @relation("TransactionHistoryChangedBy", fields: [changedById], references: [id])
@@ -838,11 +967,11 @@ model ReconciliationApproval {
   createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
 
-  statementUpload BankStatementUpload              @relation(fields: [statementUploadId], references: [id])
-  submittedBy     User                             @relation("ApprovalSubmittedBy", fields: [submittedById], references: [id])
-  decidedBy       User?                            @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
-  history         ReconciliationApprovalHistory[]
-  approvers       ReconciliationApprovalApprover[]
+  statementUpload     BankStatementUpload                @relation(fields: [statementUploadId], references: [id])
+  submittedBy         User                               @relation("ApprovalSubmittedBy", fields: [submittedById], references: [id])
+  decidedBy           User?                              @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  history             ReconciliationApprovalHistory[]
+  approvers           ReconciliationApprovalApprover[]
   correctionProposals ReconciliationCorrectionProposal[]
 
   @@index([status, submittedAt])
@@ -875,12 +1004,12 @@ model ReconciliationCorrectionProposal {
   createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.DateTime(0)
 
-  approval       ReconciliationApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_approval")
-  statementUpload BankStatementUpload @relation(fields: [statementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_statement")
-  proposedBy     User @relation("ReconciliationCorrectionProposedBy", fields: [proposedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_proposed_by")
-  decidedBy      User? @relation("ReconciliationCorrectionDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_decided_by")
-  items          ReconciliationCorrectionItem[]
-  approvers      ReconciliationCorrectionApprover[]
+  approval        ReconciliationApproval             @relation(fields: [approvalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_approval")
+  statementUpload BankStatementUpload                @relation(fields: [statementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_statement")
+  proposedBy      User                               @relation("ReconciliationCorrectionProposedBy", fields: [proposedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_proposed_by")
+  decidedBy       User?                              @relation("ReconciliationCorrectionDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_proposal_decided_by")
+  items           ReconciliationCorrectionItem[]
+  approvers       ReconciliationCorrectionApprover[]
 
   @@index([approvalId, status], map: "idx_correction_proposal_approval_status")
   @@index([statementUploadId, status], map: "idx_correction_proposal_statement_status")
@@ -890,33 +1019,35 @@ model ReconciliationCorrectionProposal {
 }
 
 model ReconciliationCorrectionItem {
-  id                    String    @id @default(uuid()) @map("correction_item_id") @db.Char(36)
-  proposalId            String    @map("correction_proposal_id") @db.Char(36)
-  action                String    @db.VarChar(20)
-  bankTransactionId     String?   @map("bank_transaction_id") @db.Char(36)
-  beforeEventCodeId     String?   @map("before_event_code_id") @db.Char(36)
-  beforeEventCodeChildId String?  @map("before_event_code_child_id") @db.Char(36)
-  beforeEventCampaignId String?   @map("before_event_campaign_id") @db.Char(36)
-  proposedEventCodeId   String?   @map("proposed_event_code_id") @db.Char(36)
-  proposedEventCodeChildId String? @map("proposed_event_code_child_id") @db.Char(36)
-  proposedEventCampaignId String? @map("proposed_event_campaign_id") @db.Char(36)
-  beforeRemark          String?   @map("before_remark") @db.VarChar(1000)
-  proposedRemark        String?   @map("proposed_remark") @db.VarChar(1000)
-  correctionReason      String?   @map("correction_reason") @db.VarChar(1000)
-  manualTransactionDate DateTime? @map("manual_transaction_date") @db.Date
-  manualTransactionType String?   @map("manual_transaction_type") @db.VarChar(20)
-  manualDescription     String?   @map("manual_description") @db.Text
-  manualOriginalAmount  Decimal?  @map("manual_original_amount") @db.Decimal(20, 2)
-  createdAt             DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  id                       String    @id @default(uuid()) @map("correction_item_id") @db.Char(36)
+  proposalId               String    @map("correction_proposal_id") @db.Char(36)
+  action                   String    @db.VarChar(20)
+  bankTransactionId        String?   @map("bank_transaction_id") @db.Char(36)
+  beforeEventCodeId        String?   @map("before_event_code_id") @db.Char(36)
+  beforeEventCodeChildId   String?   @map("before_event_code_child_id") @db.Char(36)
+  beforeEventCampaignId    String?   @map("before_event_campaign_id") @db.Char(36)
+  proposedEventCodeId      String?   @map("proposed_event_code_id") @db.Char(36)
+  proposedEventCodeChildId String?   @map("proposed_event_code_child_id") @db.Char(36)
+  proposedEventCampaignId  String?   @map("proposed_event_campaign_id") @db.Char(36)
+  beforeItemSaleQuantity   Int?      @map("before_item_sale_quantity") @db.UnsignedInt
+  proposedItemSaleQuantity Int?      @map("proposed_item_sale_quantity") @db.UnsignedInt
+  beforeRemark             String?   @map("before_remark") @db.VarChar(1000)
+  proposedRemark           String?   @map("proposed_remark") @db.VarChar(1000)
+  correctionReason         String?   @map("correction_reason") @db.VarChar(1000)
+  manualTransactionDate    DateTime? @map("manual_transaction_date") @db.Date
+  manualTransactionType    String?   @map("manual_transaction_type") @db.VarChar(20)
+  manualDescription        String?   @map("manual_description") @db.Text
+  manualOriginalAmount     Decimal?  @map("manual_original_amount") @db.Decimal(20, 2)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.DateTime(0)
 
-  proposal          ReconciliationCorrectionProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposal")
-  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_transaction")
-  beforeEventCode   EventCode? @relation("CorrectionBeforeEventCode", fields: [beforeEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event")
-  proposedEventCode EventCode? @relation("CorrectionProposedEventCode", fields: [proposedEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event")
-  beforeEventCodeChild EventCodeChild? @relation("CorrectionBeforeEventCodeChild", fields: [beforeEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event_child")
-  proposedEventCodeChild EventCodeChild? @relation("CorrectionProposedEventCodeChild", fields: [proposedEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event_child")
-  beforeEventCampaign EventCampaign? @relation("CorrectionBeforeEventCampaign", fields: [beforeEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_campaign")
-  proposedEventCampaign EventCampaign? @relation("CorrectionProposedEventCampaign", fields: [proposedEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_campaign")
+  proposal               ReconciliationCorrectionProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposal")
+  bankTransaction        BankTransaction?                 @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_transaction")
+  beforeEventCode        EventCode?                       @relation("CorrectionBeforeEventCode", fields: [beforeEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event")
+  proposedEventCode      EventCode?                       @relation("CorrectionProposedEventCode", fields: [proposedEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event")
+  beforeEventCodeChild   EventCodeChild?                  @relation("CorrectionBeforeEventCodeChild", fields: [beforeEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event_child")
+  proposedEventCodeChild EventCodeChild?                  @relation("CorrectionProposedEventCodeChild", fields: [proposedEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event_child")
+  beforeEventCampaign    EventCampaign?                   @relation("CorrectionBeforeEventCampaign", fields: [beforeEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_campaign")
+  proposedEventCampaign  EventCampaign?                   @relation("CorrectionProposedEventCampaign", fields: [proposedEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_campaign")
 
   @@index([proposalId, action], map: "idx_correction_item_proposal_action")
   @@index([bankTransactionId], map: "idx_correction_item_transaction")
@@ -936,7 +1067,7 @@ model ReconciliationCorrectionApprover {
   createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(0)
 
   proposal ReconciliationCorrectionProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_approver_proposal")
-  user     User @relation("ReconciliationCorrectionApproverUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_approver_user")
+  user     User                             @relation("ReconciliationCorrectionApproverUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_approver_user")
 
   @@unique([proposalId, userId], map: "uk_correction_approver")
   @@index([userId], map: "idx_correction_approver_user")
@@ -944,12 +1075,12 @@ model ReconciliationCorrectionApprover {
 }
 
 model ReconciliationApprovalHistory {
-  id           String   @id @default(uuid()) @map("approval_history_id") @db.Char(36)
-  approvalId   String   @map("approval_id") @db.Char(36)
-  action       String   @db.VarChar(50)
-  remark       String?  @db.VarChar(1000)
-  actionAt     DateTime @default(now()) @map("action_at") @db.DateTime(0)
-  actionById   String   @map("action_by") @db.Char(36)
+  id         String   @id @default(uuid()) @map("approval_history_id") @db.Char(36)
+  approvalId String   @map("approval_id") @db.Char(36)
+  action     String   @db.VarChar(50)
+  remark     String?  @db.VarChar(1000)
+  actionAt   DateTime @default(now()) @map("action_at") @db.DateTime(0)
+  actionById String   @map("action_by") @db.Char(36)
 
   approval ReconciliationApproval @relation(fields: [approvalId], references: [id])
   actionBy User                   @relation("ApprovalHistoryActionBy", fields: [actionById], references: [id])

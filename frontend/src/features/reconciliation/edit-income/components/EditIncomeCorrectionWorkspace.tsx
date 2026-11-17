@@ -40,7 +40,7 @@ type Props = {
   onBack: () => void;
   onEditMode: () => void;
   onInquiryMode: () => void;
-  onTransactionChange: (transactionId: string, field: "eventCodeId" | "eventCodeChildId" | "eventCampaignId" | "remark", value: string | null) => void;
+  onTransactionChange: (transactionId: string, field: "eventCodeId" | "eventCodeChildId" | "eventCampaignId" | "itemSaleQuantity" | "remark", value: string | number | null) => void;
   onAddAdjustment: (input: ManualAdjustmentInput) => void;
   onExclude: (transactionId: string, reason: string) => void;
   onRestore: (transactionId: string) => void;
@@ -163,6 +163,22 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       }
     },
     {
+      key: "itemSaleQuantity", header: "Item Sale", minWidth: "210px",
+      editable: (row) => props.canEdit && detail.eventCodes.find(event => event.id === row.eventCodeId)?.eventType === "ITEM_SALE" && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
+      getValue: (row) => row.itemSaleQuantity ?? row.itemSale?.quantity ?? "",
+      renderEditor: ({ row, value, onChange }) => {
+        const child = detail.eventCodeChildren.find(item => item.id === row.eventCodeChildId);
+        return <div className={styles.amountCell}><input className="ui-table-input" type="number" min={1} step={1} value={String(value ?? "")} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)} /><small>{child?.itemSaleUnitPrice ? `${formatMoney(child.itemSaleUnitPrice)} each · stock ${child.itemSaleStockOnHand ?? 0}` : "Item configuration required"}</small></div>;
+      },
+      render: (row) => {
+        const event = detail.eventCodes.find(item => item.id === row.eventCodeId);
+        if (event?.eventType !== "ITEM_SALE") return <span>—</span>;
+        const child = detail.eventCodeChildren.find(item => item.id === row.eventCodeChildId);
+        const quantity = row.itemSaleQuantity ?? row.itemSale?.quantity ?? null;
+        return <span>{quantity ?? "Quantity required"}{child?.itemSaleUnitPrice ? ` × ${formatMoney(child.itemSaleUnitPrice)}` : " · item not configured"}</span>;
+      }
+    },
+    {
       key: "remark", header: "Remark", minWidth: "190px", editable: (row) => props.canEdit && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
       getValue: (row) => row.remark ?? "",
       renderEditor: ({ row, value, onChange }) => <input className={`${styles.remarkInput} ui-table-input`} value={String(value ?? "")} maxLength={1000} disabled={!props.canEdit || props.busy} placeholder="Correction remark..." onChange={(event) => onChange(event.target.value)} aria-label={`Remark row ${row.rowNo || "manual"}`} />,
@@ -189,7 +205,7 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
 
       <div className={styles.correctionFilters}><SearchInput value={props.search} disabled={props.loading} placeholder="Search description or reference" onChange={(event) => props.onSearchChange(event.target.value)} /><Select value={props.statusFilter} disabled={props.loading} onChange={(event) => props.onStatusFilterChange(event.target.value as CorrectionRowStatusFilter)} aria-label="Correction status"><option value="ALL">All Status</option><option value="CURRENT">Current</option><option value="MODIFIED">Modified</option><option value="ADDED">Added</option><option value="EXCLUDED">Excluded</option></Select><Select value={props.eventCodeFilter} disabled={props.loading} onChange={(event) => props.onEventCodeFilterChange(event.target.value)} aria-label="Final Event filter"><option value="ALL">All Event Codes</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</Select><Select value={props.directionFilter} disabled={props.loading} onChange={(event) => props.onDirectionFilterChange(event.target.value as CorrectionDirectionFilter)} aria-label="Direction filter"><option value="ALL">All Direction</option><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></Select><Button type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button></div>
 
-      <DataTable rows={props.rows} columns={columns} rowKey={(row) => row.id} loading={props.loading} disabled={!props.canEdit || props.busy} minWidth="1700px" onCellChange={(row, columnKey, value) => { if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null); if (columnKey === "eventCodeChildId") props.onTransactionChange(row.id, "eventCodeChildId", value ? String(value) : null); if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? "")); }} emptyState={{ title: "No transactions", description: "Try another transaction search or filter." }} pagination={{ page: props.page, pageSize: props.pageSize, total: props.rows.length, pageSizeOptions: [10, 25, 50], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }} />
+      <DataTable rows={props.rows} columns={columns} rowKey={(row) => row.id} loading={props.loading} disabled={!props.canEdit || props.busy} minWidth="1900px" onCellChange={(row, columnKey, value) => { if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null); if (columnKey === "eventCodeChildId") props.onTransactionChange(row.id, "eventCodeChildId", value ? String(value) : null); if (columnKey === "itemSaleQuantity") props.onTransactionChange(row.id, "itemSaleQuantity", typeof value === "number" ? value : null); if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? "")); }} emptyState={{ title: "No transactions", description: "Try another transaction search or filter." }} pagination={{ page: props.page, pageSize: props.pageSize, total: props.rows.length, pageSizeOptions: [10, 25, 50], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }} />
 
       <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes.filter((eventCode) => eventCode.activeFlag && eventCode.eventType !== "TIME_BASED")} eventCodeChildren={detail.eventCodeChildren} campaigns={detail.campaigns} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
       <ExcludeTransactionModal transaction={excludeTarget} disabled={props.busy} onClose={() => setExcludeTarget(null)} onSubmit={props.onExclude} />

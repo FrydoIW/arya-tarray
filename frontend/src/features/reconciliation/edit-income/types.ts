@@ -66,6 +66,8 @@ export type EditIncomeEventCodeChild = {
   childName: string;
   displayOrder: number;
   activeFlag: boolean;
+  itemSaleUnitPrice?: string | null;
+  itemSaleStockOnHand?: number | null;
 };
 
 export type EditIncomeTransaction = {
@@ -84,6 +86,8 @@ export type EditIncomeTransaction = {
   eventCampaignId: string | null;
   baseAmount: string | null;
   sponsorship?: TimeBasedPaymentPreview | null;
+  itemSaleQuantity?: number | null;
+  itemSale?: { id: string; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string | null; status: string; resolutionReason: string | null } | null;
   remark: string | null;
   requiresClassification: boolean;
   sourceType: "BANK" | "MANUAL" | string;
@@ -111,7 +115,7 @@ export type EditIncomeDetail = {
 };
 
 export type EditIncomeCorrectionRequest =
-  | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCodeChildId: string | null; eventCampaignId: string | null; remark: string | null }
+  | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCodeChildId: string | null; eventCampaignId: string | null; itemSaleQuantity: number | null; remark: string | null }
   | { action: "EXCLUDED"; transactionId: string; reason: string }
   | {
       action: "ADDED";
@@ -123,6 +127,7 @@ export type EditIncomeCorrectionRequest =
       eventCodeId: string | null;
       eventCodeChildId: string | null;
       eventCampaignId: string | null;
+      itemSaleQuantity: number | null;
       remark: string | null;
       reason: string;
     };
@@ -135,6 +140,7 @@ export type ManualAdjustmentInput = {
   eventCodeId: string | null;
   eventCodeChildId: string | null;
   eventCampaignId: string | null;
+  itemSaleQuantity: number | null;
   remark: string | null;
   reason: string;
 };

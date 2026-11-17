@@ -6,6 +6,7 @@ import { requireApprovalSnapshotMembership } from "./approval-snapshot.domain.js
 import { assertCorrectionApprovalCampaignValid, assertCorrectionChildCapacityValid } from "../../reconciliation/correction-approval-campaign.js";
 import { synchronizeTimeBasedTransaction } from "../../member/time-based/member-time-based.service.js";
 import { synchronizeCampaignContribution } from "../../member/campaign/member-campaign-wallet.service.js";
+import { assertCorrectionItemSaleValid, synchronizeItemSaleTransaction } from "../../item-sale/item-sale.service.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 
 const DECIDED_STATUSES = ["APPROVED", "REJECTED"] as const;
@@ -196,6 +197,7 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
               },
               eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true } },
               eventCampaign: { select: { id: true, campaignName: true } },
+              itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, status: true, resolutionReason: true } },
               ...timeBasedHistoryInclude
             },
             orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }],
@@ -251,11 +253,12 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                   referenceNo: true,
                   description: true,
                   originalAmount: true,
-                  sourceType: true
+                  sourceType: true,
+                  itemSalePurchase: { select: { quantity: true, unitPriceSnapshot: true, totalAmount: true, status: true } }
                 }
               },
-              beforeEventCode: { select: { id: true, code: true, eventName: true } },
-              proposedEventCode: { select: { id: true, code: true, eventName: true } },
+              beforeEventCode: { select: { id: true, code: true, eventName: true, eventType: true } },
+              proposedEventCode: { select: { id: true, code: true, eventName: true, eventType: true } },
               beforeEventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
               proposedEventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
               beforeEventCampaign: { select: { id: true, campaignName: true } },
@@ -366,6 +369,8 @@ export async function decideSignApprovalAtomic(input: {
                 proposedEventCodeId: true,
                 proposedEventCodeChildId: true,
                 proposedEventCampaignId: true,
+                beforeItemSaleQuantity: true,
+                proposedItemSaleQuantity: true,
                 beforeRemark: true,
                 proposedRemark: true,
                 correctionReason: true,
@@ -384,6 +389,8 @@ export async function decideSignApprovalAtomic(input: {
                     transactionDate: true,
                     transactionType: true,
                     originalAmount: true,
+                    baseAmount: true,
+                    itemSalePurchase: { select: { id: true, status: true, eventCodeChildId: true, quantity: true, unitPriceSnapshot: true } },
                     memberIdentity: { select: { memberId: true, verificationStatus: true } }
                   }
                 }
@@ -421,6 +428,7 @@ export async function decideSignApprovalAtomic(input: {
 
     if (updateResult.count !== 1) throw new HttpError(409, ALREADY_DECIDED_MESSAGE);
 
+    const itemSaleQuantities = new Map<string, number | null>();
     if (correctionProposal) {
       if (input.decision === "APPROVED") {
         // A proposal only stages intent: the Event Code, its Child, or its Campaign may have
@@ -430,6 +438,7 @@ export async function decideSignApprovalAtomic(input: {
         // proposal aborts the whole decision transaction with no partial writes.
         await assertCorrectionApprovalCampaignValid(tx, correctionProposal.items);
         await assertCorrectionChildCapacityValid(tx, correctionProposal.items);
+        await assertCorrectionItemSaleValid(tx, correctionProposal.items);
 
         for (const item of correctionProposal.items) {
           if (item.action === "MODIFIED") {
@@ -448,6 +457,7 @@ export async function decideSignApprovalAtomic(input: {
                 remark: item.proposedRemark
               }
             });
+            itemSaleQuantities.set(item.bankTransaction.id, item.proposedItemSaleQuantity);
             if (item.beforeEventCodeId !== item.proposedEventCodeId) {
               await tx.bankTransactionHistory.create({ data: {
                 bankTransactionId: item.bankTransaction.id,
@@ -504,6 +514,7 @@ export async function decideSignApprovalAtomic(input: {
                 reconciliationExclusionReason: item.correctionReason
               }
             });
+            itemSaleQuantities.set(item.bankTransaction.id, null);
             await tx.bankTransactionHistory.create({ data: {
               bankTransactionId: item.bankTransaction.id,
               fieldName: "reconciliation_excluded_at",
@@ -541,6 +552,7 @@ export async function decideSignApprovalAtomic(input: {
               where: { id: item.id },
               data: { bankTransactionId: transaction.id }
             });
+            itemSaleQuantities.set(transaction.id, item.proposedItemSaleQuantity);
             await tx.bankTransactionHistory.create({ data: {
               bankTransactionId: transaction.id,
               fieldName: "source_type",
@@ -620,6 +632,21 @@ export async function decideSignApprovalAtomic(input: {
         select: { id: true }
       });
       for (const transaction of campaignTransactions) await synchronizeCampaignContribution(tx, transaction.id, input.userId);
+
+      const itemSaleTransactions = await tx.bankTransaction.findMany({
+        where: { statementUploadId: current.statementUploadId, OR: [
+          { eventCode: { is: { eventType: "ITEM_SALE" } } },
+          { itemSalePurchase: { isNot: null } }
+        ] },
+        select: { id: true, itemSalePurchase: { select: { status: true } } }
+      });
+      for (const transaction of itemSaleTransactions) {
+        await synchronizeItemSaleTransaction(tx, transaction.id, input.userId, {
+          quantity: correctionProposal ? itemSaleQuantities.get(transaction.id) : undefined,
+          reason: correctionProposal ? "Approved Edit Income ITEM_SALE correction" : "Approved Statement ITEM_SALE confirmation",
+          strict: correctionProposal ? transaction.itemSalePurchase?.status === "CONFIRMED" : false
+        });
+      }
     }
 
     await tx.reconciliationApprovalHistory.create({

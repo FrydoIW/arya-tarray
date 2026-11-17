@@ -157,7 +157,7 @@ export function useStatementUploadWorkspace() {
 
   async function saveTransaction(
     transactionId: string,
-    payload: { eventCodeId: string | null; eventCodeChildId: string | null; eventCampaignId: string | null; remark?: string | null },
+    payload: { eventCodeId: string | null; eventCodeChildId: string | null; eventCampaignId: string | null; remark?: string | null; itemSaleQuantity?: number | null },
     successMessage: string
   ) {
     if (!canEditDraft || savingTransactionId) return;
@@ -218,6 +218,17 @@ export function useStatementUploadWorkspace() {
       eventCampaignId: transaction.eventCampaignId ?? null,
       remark
     }, "Remark saved.");
+  }
+
+  async function updateItemSaleQuantity(transactionId: string, itemSaleQuantity: number | null) {
+    const transaction = workspace.transactions.find((item) => item.id === transactionId);
+    if (!transaction) return;
+    await saveTransaction(transactionId, {
+      eventCodeId: transaction.eventCodeId ?? null,
+      eventCodeChildId: transaction.eventCodeChildId ?? null,
+      eventCampaignId: transaction.eventCampaignId ?? null,
+      itemSaleQuantity
+    }, "Item quantity saved.");
   }
 
   async function upload(file: File, bankAccountId: string) {
@@ -357,6 +368,7 @@ export function useStatementUploadWorkspace() {
     selectDraft,
     updateFinalEvent,
     updateRemark,
+    updateItemSaleQuantity,
     upload,
     execute,
     withdraw

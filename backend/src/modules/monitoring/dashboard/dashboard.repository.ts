@@ -178,6 +178,20 @@ export async function loadTopFinalEvents(range: DashboardPeriodRange) {
   return { groups, childGroups, eventCodes, children };
 }
 
+export async function loadDashboardItemSales(range: DashboardPeriodRange) {
+  const where: Prisma.ItemSalePurchaseWhereInput = {
+    bankTransaction: { is: transactionPeriodWhere(range) }
+  };
+  const [statusGroups, confirmed, items] = await Promise.all([
+    prisma.itemSalePurchase.groupBy({ by: ["status"], where, _count: { _all: true }, _sum: { quantity: true, totalAmount: true } }),
+    prisma.itemSalePurchase.aggregate({ where: { AND: [where, { status: "CONFIRMED" }] }, _count: { _all: true }, _sum: { quantity: true, totalAmount: true } }),
+    prisma.itemSalePurchase.groupBy({ by: ["eventCodeChildId"], where: { AND: [where, { status: "CONFIRMED" }] }, _count: { _all: true }, _sum: { quantity: true, totalAmount: true }, orderBy: { _sum: { totalAmount: "desc" } }, take: 10 })
+  ]);
+  const childIds = items.map(item => item.eventCodeChildId);
+  const children = childIds.length ? await prisma.eventCodeChild.findMany({ where: { id: { in: childIds } }, select: { id: true, childCode: true, childName: true, itemSaleConfig: { select: { stockOnHand: true } } } }) : [];
+  return { statusGroups, confirmed, items, children };
+}
+
 export async function loadDashboardRecentActivityCandidates() {
   const [statementUploads, approvalHistory, transactionHistory] = await Promise.all([
     prisma.bankStatementUpload.findMany({

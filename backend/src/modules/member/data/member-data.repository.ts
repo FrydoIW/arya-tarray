@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 import { HttpError } from "../../../lib/http.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
+import { synchronizeItemSaleTransaction, synchronizePendingItemSalesForMember } from "../../item-sale/item-sale.service.js";
 import { recordMemberIdentityHistory } from "../member-identity/member-identity-history.js";
 import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInput } from "./member-data.schema.js";
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
@@ -152,6 +153,21 @@ export function findMemberDetail(memberId: string) {
       _count: { select: { transactions: true } }
     } }
   } });
+}
+
+export function loadMemberItemSalePurchases(memberId: string) {
+  return prisma.itemSalePurchase.findMany({
+    where: { buyerMemberId: memberId },
+    orderBy: [{ bankTransaction: { transactionDate: "desc" } }, { createdAt: "desc" }],
+    select: {
+      id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true,
+      status: true, resolutionReason: true, confirmedAt: true, reversedAt: true,
+      eventCode: { select: { id: true, code: true, eventName: true } },
+      eventCodeChild: { select: { id: true, childCode: true, childName: true } },
+      bankTransaction: { select: { id: true, transactionDate: true, referenceNo: true, description: true } },
+      inventoryMovements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, movementType: true, quantityDelta: true, stockBefore: true, stockAfter: true, reason: true, createdAt: true } }
+    }
+  });
 }
 
 export function pendingTimeBasedPaymentsWhere(memberId: string): Prisma.BankTransactionWhereInput {
@@ -356,6 +372,7 @@ export function attachIdentity(memberId: string, identityId: string, userId: str
     });
     await synchronizePendingTimeBasedForMember(tx, memberId, userId);
     await synchronizePendingCampaignContributionsForMember(tx, memberId, userId);
+    await synchronizePendingItemSalesForMember(tx, memberId, userId);
   });
 }
 
@@ -382,6 +399,9 @@ export function moveIdentity(sourceMemberId: string, identityId: string, destina
     await synchronizePendingTimeBasedForMember(tx, sourceMemberId, userId);
     await synchronizePendingTimeBasedForMember(tx, destinationMemberId, userId);
     await synchronizePendingCampaignContributionsForMember(tx, destinationMemberId, userId);
+    const itemSaleTransactions = await tx.bankTransaction.findMany({ where: { memberIdentityId: identityId, itemSalePurchase: { isNot: null } }, select: { id: true } });
+    for (const transaction of itemSaleTransactions) await synchronizeItemSaleTransaction(tx, transaction.id, userId, { reason: `Buyer identity moved: ${reason}` });
+    await synchronizePendingItemSalesForMember(tx, destinationMemberId, userId);
   });
 }
 
@@ -403,6 +423,8 @@ export function detachIdentity(memberId: string, identityId: string, reason: str
     // Detached identities no longer authoritatively own Campaign economics.
     await reconcileCampaignContributionsForIdentity(tx, identityId, userId);
     await synchronizePendingTimeBasedForMember(tx, memberId, userId);
+    const itemSaleTransactions = await tx.bankTransaction.findMany({ where: { memberIdentityId: identityId, itemSalePurchase: { isNot: null } }, select: { id: true } });
+    for (const transaction of itemSaleTransactions) await synchronizeItemSaleTransaction(tx, transaction.id, userId, { reason: `Buyer identity detached: ${reason}` });
   });
 }
 

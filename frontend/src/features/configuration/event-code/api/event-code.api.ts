@@ -1,5 +1,5 @@
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import type { CampaignInput, ChildInput, EventCampaign, EventCode, EventCodeBulkPreview, EventCodeChild, EventCodeExecutePayload, EventCodeUser, EventTimeRule, EventType, TimeRuleInput } from "../types";
+import type { CampaignInput, ChildInput, EventCampaign, EventCode, EventCodeBulkPreview, EventCodeChild, EventCodeExecutePayload, EventCodeUser, EventTimeRule, EventType, ItemSaleConfigDetail, TimeRuleInput } from "../types";
 
 type EventCodeApiUser = {
   id: string;
@@ -74,6 +74,19 @@ export function executeChildChanges(payload: {
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export function getItemSaleConfig(childId: string) {
+  return apiFetch<ItemSaleConfigDetail>(`/configuration/event-codes/children/${childId}/item-sale`);
+}
+export function configureItemSale(childId: string, payload: { unitPrice: string; openingStock: number; reason: string; idempotencyKey: string }) {
+  return apiFetch(`/configuration/event-codes/children/${childId}/item-sale/configure`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateItemSalePrice(childId: string, payload: { unitPrice: string; expectedVersion: number; reason: string }) {
+  return apiFetch(`/configuration/event-codes/children/${childId}/item-sale/price`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function adjustItemSaleStock(childId: string, payload: { movementType: "STOCK_IN" | "MANUAL_ADJUSTMENT"; quantityDelta: number; expectedVersion: number; reason: string; idempotencyKey: string }) {
+  return apiFetch(`/configuration/event-codes/children/${childId}/item-sale/stock-adjustments`, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export async function getEventCodes() {

@@ -94,6 +94,7 @@ export function StatementUploadScreen() {
         onReload={() => void workspace.refresh()}
         onFinalEventChange={(transactionId, eventCodeId, eventCodeChildId, eventCampaignId) => void workspace.updateFinalEvent(transactionId, eventCodeId, eventCodeChildId ?? null, eventCampaignId ?? null)}
         onRemarkChange={(transactionId, remark) => void workspace.updateRemark(transactionId, remark)}
+        onItemSaleQuantityChange={(transactionId, quantity) => void workspace.updateItemSaleQuantity(transactionId, quantity)}
       />
       <DraftReviewSummary
         resolved={workspace.resolvedTransactions}

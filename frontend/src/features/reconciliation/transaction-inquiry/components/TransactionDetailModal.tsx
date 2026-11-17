@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { TransactionInquiryDetail } from "../types";
 import { eventLabel } from "../utils/transaction-inquiry.utils";
@@ -12,7 +13,7 @@ function DetailItem({ label, value, wide = false }: { label: string; value: Reac
   return <div className={wide ? styles.detailWide : ""}><span>{label}</span><strong>{value || "-"}</strong></div>;
 }
 
-export function TransactionDetailModal({ detail, open, canViewMemberData, onClose }: { detail: TransactionInquiryDetail | null; open: boolean; canViewMemberData: boolean; onClose: () => void }) {
+export function TransactionDetailModal({ detail, open, canViewMemberData, canRetryItemSale, retrying, onRetry, onClose }: { detail: TransactionInquiryDetail | null; open: boolean; canViewMemberData: boolean; canRetryItemSale: boolean; retrying: boolean; onRetry: (transactionId: string) => void; onClose: () => void }) {
   if (!detail) return null;
   const transaction = detail.transaction;
   const outgoing = transaction.originalAmount.trim().startsWith("-");
@@ -81,6 +82,16 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
           <DetailItem label="Coverage period" value={transaction.sponsorship.allocation?.coverageFrom && transaction.sponsorship.allocation.coverageTo ? `${formatDate(transaction.sponsorship.allocation.coverageFrom)} – ${formatDate(transaction.sponsorship.allocation.coverageTo)}` : "No coverage generated"} />
           <DetailItem label="Subscription carry balance after processing" value={transaction.sponsorship.carryBalanceAfterPayment !== null ? formatMoney(transaction.sponsorship.carryBalanceAfterPayment) : "—"} />
         </div></section> : null}
+        {transaction.itemSale ? <section className={styles.detailSection}><h3>Physical item sale</h3><div className={styles.detailGrid}>
+          <DetailItem label="Quantity" value={String(transaction.itemSale.quantity)} />
+          <DetailItem label="Unit price snapshot" value={formatMoney(transaction.itemSale.unitPrice)} />
+          <DetailItem label="Sale total" value={formatMoney(transaction.itemSale.totalAmount)} />
+          <DetailItem label="Bank payment" value={transaction.itemSale.paymentAmount ? formatMoney(transaction.itemSale.paymentAmount) : "—"} />
+          <DetailItem label="Purchase status" value={transaction.itemSale.status} />
+          <DetailItem label="Resolution" value={transaction.itemSale.resolutionReason ?? "—"} wide />
+          <DetailItem label="Confirmed" value={transaction.itemSale.confirmedAt ? `${formatDateTime(transaction.itemSale.confirmedAt)} · ${transaction.itemSale.confirmedBy?.fullName ?? "—"}` : "Pending"} />
+          <DetailItem label="Reversed" value={transaction.itemSale.reversedAt ? `${formatDateTime(transaction.itemSale.reversedAt)} · ${transaction.itemSale.reversedBy?.fullName ?? "—"}` : "No"} />
+        </div>{canRetryItemSale && ["DRAFT", "REVIEW_REQUIRED", "PENDING_BUYER", "PENDING_STOCK"].includes(transaction.itemSale.status) ? <Button disabled={retrying} onClick={() => onRetry(transaction.id)}>{retrying ? "Retrying…" : "Retry purchase confirmation"}</Button> : null}{transaction.itemSale.movements.length ? <div className={styles.historyList}>{transaction.itemSale.movements.map(movement => <div key={movement.id} className={styles.historyItem}><strong>{movement.movementType}: {movement.quantityDelta > 0 ? "+" : ""}{movement.quantityDelta}</strong><span>{movement.stockBefore} → {movement.stockAfter} · {movement.reason}</span><small>{formatDateTime(movement.createdAt)} · {movement.createdBy.fullName}</small></div>)}</div> : null}</section> : null}
         <section className={styles.detailSection}>
           <h3>Transaction History</h3>
           {detail.history.length === 0 ? <div className={styles.emptyHistory}>No manual changes have been recorded for this transaction.</div> : (

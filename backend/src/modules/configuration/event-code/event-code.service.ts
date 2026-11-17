@@ -112,7 +112,8 @@ export async function executeEventCodeChanges(input: EventCodeExecuteInput, user
 
   if (input.deletes.length > 0) {
     const usageRows = await findEventCodeUsage(input.deletes);
-    const used = usageRows.find((item) => item._count.suggestedTransactions > 0 || item._count.transactions > 0 || item._count.campaigns > 0 || item._count.memberSubscriptions > 0 || item.timeRule);
+    const used = usageRows.find((item) => item._count.suggestedTransactions > 0 || item._count.transactions > 0 || item._count.campaigns > 0
+      || item._count.memberSubscriptions > 0 || item._count.itemSalePurchases > 0 || item.timeRule || item.children.some(child => child.itemSaleConfig));
     if (used) {
       throw new HttpError(
         409,
@@ -137,6 +138,24 @@ export async function executeEventCodeChanges(input: EventCodeExecuteInput, user
     const usage = await findEventCodeUsage(changedAwayFromTimeBased.map((item) => item.id));
     if (usage.some((item) => item._count.memberSubscriptions > 0 || item.timeRule)) {
       throw new HttpError(409, "Event Code with a Time Rule or Time-Based subscription history must remain TIME_BASED. Deactivate it instead.");
+    }
+  }
+  const changedAwayFromItemSale = input.updates.filter((update) =>
+    existingById.get(update.id)?.eventType === "ITEM_SALE" && update.input.eventType !== "ITEM_SALE"
+  );
+  if (changedAwayFromItemSale.length > 0) {
+    const usage = await findEventCodeUsage(changedAwayFromItemSale.map((item) => item.id));
+    if (usage.some((item) => item._count.transactions > 0 || item._count.itemSalePurchases > 0 || item.children.some(child => child.itemSaleConfig))) {
+      throw new HttpError(409, "Event Code with ITEM_SALE configuration, purchase or transaction history must remain ITEM_SALE. Deactivate it instead.");
+    }
+  }
+  const changedToItemSale = input.updates.filter((update) =>
+    existingById.get(update.id)?.eventType !== "ITEM_SALE" && update.input.eventType === "ITEM_SALE"
+  );
+  if (changedToItemSale.length > 0) {
+    const usage = await findEventCodeUsage(changedToItemSale.map((item) => item.id));
+    if (usage.some((item) => item._count.transactions > 0)) {
+      throw new HttpError(409, "Event Code with transaction history cannot become ITEM_SALE. Create a new Event Code instead.");
     }
   }
   const typeChanges = input.updates.filter(update => existingById.get(update.id)?.eventType !== update.input.eventType);

@@ -290,6 +290,38 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 18.4 | Cross-role UI | Open restricted pages as a viewer | Page hidden or access-denied screen shown | | | |
 | 18.5 | Stale session | Wait for JWT expiry, then act | Forced re-login, no partial writes | | | |
 
+## 19. ITEM_SALE physical sales and inventory (Enhancement 3)
+
+These cases are intentionally unmarked. Record real observations only; static validation is not a substitute for operator regression.
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 19.1 | Event type and item configuration | Create ITEM_SALE parent + child; set price and opening stock | Separate item config created; OPENING_STOCK ledger row; no subscription capacity fields used | | | |
+| 19.2 | Invalid/non-item configuration | Call item config endpoint for STANDARD/TIME_BASED child | Rejected; no config or movement created | | | |
+| 19.3 | Stock receive idempotency | Submit same STOCK_IN request key twice | Stock changes once; duplicate request is a no-op/conflict without a second movement | | | |
+| 19.4 | Negative stock protection | Submit a negative adjustment greater than on-hand | Rejected atomically; stock and ledger unchanged | | | |
+| 19.5 | Price change with pending sale | Stage unresolved purchase, then change price | Price change rejected until pending purchase is resolved | | | |
+| 19.6 | Statement sale draft | Classify incoming row as ITEM_SALE, select item and quantity | UI shows price, stock, total and payment variance; draft stores purchase snapshot | | | |
+| 19.7 | Missing quantity/config | Execute ITEM_SALE row without quantity or configured item | Execute blocked; no inventory deducted | | | |
+| 19.8 | Payment mismatch | Quantity × price differs from bank base amount | Row remains review-required / Execute rejected; no inventory deducted | | | |
+| 19.9 | Verified buyer approval | Approve valid sale with verified member, quantity 2 | Purchase CONFIRMED; exactly one SALE movement of -2; stock decreases by 2 | | | |
+| 19.10 | Unverified/missing buyer | Approve otherwise valid sale without verified buyer | Statement can complete per policy; purchase PENDING_BUYER; stock unchanged | | | |
+| 19.11 | Retry after member link | Link/verify buyer then retry pending purchase | Purchase confirms once; one SALE movement; repeated retry has no duplicate effect | | | |
+| 19.12 | Insufficient stock | Approve sale quantity exceeding on-hand | Purchase PENDING_STOCK or approval conflict per path; stock never negative | | | |
+| 19.13 | Concurrent last-stock sale | Approve two sales competing for the final units | Conditional update permits only available quantity; no oversell or duplicate movement | | | |
+| 19.14 | Correction before confirmation | Change pending item/quantity through Edit Income approval | Pending snapshot updated; only final approved classification can later deduct stock | | | |
+| 19.15 | Quantity correction after confirmation | Correct confirmed quantity 2 → 3 and approve | Original effect reversed and new effect applied atomically; append-only evidence; net stock -1 | | | |
+| 19.16 | ITEM_SALE → non-sale | Correct confirmed sale to STANDARD and approve | SALE_REVERSAL restores stock once; purchase preserved as REVERSED; no deletion | | | |
+| 19.17 | Non-sale → ITEM_SALE | Correct finalized incoming row to configured item + quantity | New purchase confirms only after all checks; one stock deduction | | | |
+| 19.18 | Historical price preservation | Change item price, then inspect/correct older confirmed sale without changing item | Old purchase keeps unit price snapshot; historical total is not rewritten | | | |
+| 19.19 | Identity move/detach | Move or detach buyer identity after confirmed purchase | Buyer attribution updates as allowed; confirmed stock is not restored/deducted again | | | |
+| 19.20 | Member separation | Open member donation and purchase tabs | Sale appears in purchase history only; donation totals, sponsorship, wallet and carry exclude it | | | |
+| 19.21 | Inquiry and report | Open sale detail and generate report | Quantity, price snapshot, total, status, movements/reversal shown; report labels ITEM_SALE | | | |
+| 19.22 | Dashboard isolation | Open dashboard for sale period | Separate item-sales metrics shown; donation/member analytics exclude sale | | | |
+| 19.23 | RBAC | Attempt price/stock/retry with viewer-only user | Existing menu authorization denies mutation; no audit/stock change | | | |
+| 19.24 | Withdrawal | Withdraw RAW statement containing staged sale | Draft purchase voided; no inventory movement exists | | | |
+| 19.25 | Audit evidence | Perform config, price, adjustment, confirm, correct/reverse | Actor/time/reason and before/after evidence preserved; original rows remain immutable | | | |
+
 ## Completion record
 
 - Operator name / initials:

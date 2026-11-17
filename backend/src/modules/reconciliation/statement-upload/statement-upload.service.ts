@@ -64,6 +64,15 @@ function mapTransaction(transaction: CurrentTransaction) {
     eventCampaignId: transaction.eventCampaignId,
     baseAmount: decimalToString(transaction.baseAmount),
     remark: transaction.remark,
+    itemSale: transaction.itemSalePurchase ? {
+      id: transaction.itemSalePurchase.id,
+      quantity: transaction.itemSalePurchase.quantity,
+      unitPrice: transaction.itemSalePurchase.unitPriceSnapshot.toString(),
+      totalAmount: transaction.itemSalePurchase.totalAmount.toString(),
+      paymentAmount: decimalToString(transaction.itemSalePurchase.paymentAmountSnapshot),
+      status: transaction.itemSalePurchase.status,
+      resolutionReason: transaction.itemSalePurchase.resolutionReason
+    } : null,
     requiresClassification: storedTransactionRequiresClassification(transaction)
   };
 }
@@ -99,7 +108,8 @@ function mapSummary(rawStatements: RawSummaryRecords, childrenByParentId: Map<st
     for (const transaction of statement.transactions) {
       if (storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))) {
         statementNeedsReview += 1;
-      } else if (transactionNeedsChildReview(transaction, childrenByParentId)) {
+      } else if (transactionNeedsChildReview(transaction, childrenByParentId)
+        || (transaction.eventCode?.eventType === "ITEM_SALE" && (!transaction.itemSalePurchase || transaction.itemSalePurchase.status === "REVIEW_REQUIRED"))) {
         statementNeedsReview += 1;
       }
     }
@@ -122,7 +132,8 @@ function mapWorkspace(records: WorkspaceRecords, childrenByParentId: Map<string,
     drafts: records.rawStatements.map((draft) => {
       const needsReview = draft.transactions.filter((transaction) => {
         if (storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))) return true;
-        return transactionNeedsChildReview(transaction, childrenByParentId);
+        return transactionNeedsChildReview(transaction, childrenByParentId)
+          || (transaction.eventCode?.eventType === "ITEM_SALE" && (!transaction.itemSalePurchase || transaction.itemSalePurchase.status === "REVIEW_REQUIRED"));
       }).length;
       return {
         id: draft.id,
@@ -172,6 +183,9 @@ function mapWorkspace(records: WorkspaceRecords, childrenByParentId: Map<string,
       childName: child.childName,
       displayOrder: child.displayOrder,
       activeFlag: child.activeFlag
+      ,itemSaleUnitPrice: child.itemSaleConfig?.unitPrice.toString() ?? null
+      ,itemSaleStockOnHand: child.itemSaleConfig?.stockOnHand ?? null
+      ,itemSaleVersion: child.itemSaleConfig?.version ?? null
     })),
     campaigns: records.campaigns.map((campaign) => ({
       id: campaign.id,
@@ -349,6 +363,7 @@ export async function updateFinalEvent(
     eventCodeId: input.eventCodeId,
     eventCodeChildId: input.eventCodeChildId,
     eventCampaignId: input.eventCampaignId,
+    itemSaleQuantity: input.itemSaleQuantity,
     remark: input.remark,
     userId
   });

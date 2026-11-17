@@ -95,6 +95,7 @@ export function TransactionInquiryTable(props: Props) {
     { key: "finalEvent", header: "Final Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventDisplay(row, row.finalEvent)}</span> },
     { key: "eventCodeChild", header: "Child", minWidth: "140px", render: (row) => <span className={styles.eventText}>{childDisplay(row)}</span> },
     { key: "eventCampaign", header: "Campaign", minWidth: "170px", render: (row) => <span className={styles.eventText}>{row.eventCampaign?.campaignName ?? "—"}</span> },
+    { key: "itemSale", header: "Item Sale", minWidth: "190px", render: (row) => row.itemSale ? <div className={styles.descriptionCell}><strong>{row.itemSale.quantity} × {formatMoney(row.itemSale.unitPrice)}</strong><small>{formatMoney(row.itemSale.totalAmount)} · {row.itemSale.status}</small></div> : <span className={styles.eventText}>—</span> },
     { key: "status", header: "Status", minWidth: "135px", render: (row) => <span className={`${styles.statusBadge} ${styles[`status${row.status}`]}`}>{getLifecycleLabel(row.status)}</span> },
     { key: "action", header: "Action", minWidth: "90px", sticky: "right", align: "center", render: (row) => <Button type="button" variant="outline" size="sm" icon={<Eye size={13} />} disabled={props.detailLoading} onClick={() => props.onView(row.id)}>View</Button> }
   ], [props.canViewMemberData, props.detailLoading, props.onView]);

@@ -12,6 +12,7 @@ function toResponse(item: {
   capacity: number | null;
   unitAmount: { toString(): string } | null;
   durationMonths: number | null;
+  itemSaleConfig: { unitPrice: { toString(): string }; stockOnHand: number; version: number } | null;
   createdAt: Date;
   updatedAt: Date;
   eventCode: { id: string; code: string; eventName: string; eventType: string; activeFlag: boolean };
@@ -34,6 +35,9 @@ function toResponse(item: {
     capacity: item.capacity,
     unitAmount: item.unitAmount ? item.unitAmount.toString() : null,
     durationMonths: item.durationMonths,
+    itemSaleUnitPrice: item.itemSaleConfig?.unitPrice.toString() ?? null,
+    itemSaleStockOnHand: item.itemSaleConfig?.stockOnHand ?? null,
+    itemSaleVersion: item.itemSaleConfig?.version ?? null,
     occupiedSlots: occupied,
     availableSlots: item.capacity !== null ? Math.max(0, item.capacity - occupied) : null,
     configurationComplete,

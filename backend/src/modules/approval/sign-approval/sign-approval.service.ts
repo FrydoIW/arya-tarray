@@ -154,6 +154,14 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
         proposedEventCodeChild: item.proposedEventCodeChild,
         beforeCampaign: item.beforeEventCampaign,
         proposedCampaign: item.proposedEventCampaign,
+        beforeItemSaleQuantity: item.beforeItemSaleQuantity,
+        proposedItemSaleQuantity: item.proposedItemSaleQuantity,
+        beforeItemSale: item.bankTransaction?.itemSalePurchase ? {
+          quantity: item.bankTransaction.itemSalePurchase.quantity,
+          unitPrice: decimalToString(item.bankTransaction.itemSalePurchase.unitPriceSnapshot),
+          totalAmount: decimalToString(item.bankTransaction.itemSalePurchase.totalAmount),
+          status: item.bankTransaction.itemSalePurchase.status
+        } : null,
         beforeRemark: item.beforeRemark,
         proposedRemark: item.proposedRemark,
         correctionReason: item.correctionReason,
@@ -198,6 +206,15 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
         : null,
       campaign: transaction.eventCampaign,
       sponsorship: timeBasedPaymentPreview(transaction),
+      itemSale: transaction.itemSalePurchase ? {
+        id: transaction.itemSalePurchase.id,
+        quantity: transaction.itemSalePurchase.quantity,
+        unitPrice: decimalToString(transaction.itemSalePurchase.unitPriceSnapshot),
+        totalAmount: decimalToString(transaction.itemSalePurchase.totalAmount),
+        paymentAmount: transaction.itemSalePurchase.paymentAmountSnapshot ? decimalToString(transaction.itemSalePurchase.paymentAmountSnapshot) : null,
+        status: transaction.itemSalePurchase.status,
+        resolutionReason: transaction.itemSalePurchase.resolutionReason
+      } : null,
       status: transaction.status
     })),
     history: approval.history.map((item) => ({

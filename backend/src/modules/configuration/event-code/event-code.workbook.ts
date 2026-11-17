@@ -84,7 +84,7 @@ function schemaErrors(row: EventCodeBulkPreviewRow) {
     if (field === "code") return row.code ? "Event Code must contain exactly 3 digits." : "Event Code is required.";
     if (field === "eventName") return row.eventName ? "Event Name must not exceed 150 characters." : "Event Name is required.";
     if (field === "category") return "Category must not exceed 50 characters.";
-    if (field === "eventType") return "Type must be STANDARD, CAMPAIGN, or TIME_BASED.";
+    if (field === "eventType") return "Type must be STANDARD, CAMPAIGN, TIME_BASED, or ITEM_SALE.";
     if (field === "description") return "Description must not exceed 500 characters.";
     return issue.message;
   });
@@ -122,8 +122,8 @@ export async function createEventCodeTemplate() {
       error: "Choose Active or Inactive."
     };
     sheet.getCell(`F${rowNumber}`).dataValidation = { type: "list", allowBlank: true,
-      formulae: ['"STANDARD,CAMPAIGN,TIME_BASED"'], showErrorMessage: true,
-      errorTitle: "Invalid type", error: "Choose STANDARD, CAMPAIGN, or TIME_BASED." };
+      formulae: ['"STANDARD,CAMPAIGN,TIME_BASED,ITEM_SALE"'], showErrorMessage: true,
+      errorTitle: "Invalid type", error: "Choose STANDARD, CAMPAIGN, TIME_BASED, or ITEM_SALE." };
   }
 
   const instructions = workbook.addWorksheet("Instructions");
@@ -136,7 +136,7 @@ export async function createEventCodeTemplate() {
   instructions.addRow(["Category", "Optional. Maximum 50 characters. Values are imported exactly as supplied; no mapping is inferred."]);
   instructions.addRow(["Description", "Optional. Maximum 500 characters."]);
   instructions.addRow(["Status", "Required. Choose Active or Inactive."]);
-  instructions.addRow(["Type", "Optional. Choose STANDARD, CAMPAIGN, or TIME_BASED. Blank defaults to STANDARD."]);
+  instructions.addRow(["Type", "Optional. Choose STANDARD, CAMPAIGN, TIME_BASED, or ITEM_SALE. Blank defaults to STANDARD."]);
   instructions.addRow([]);
   instructions.addRow(["Important", "Blank rows are ignored. Existing or already-staged Event Codes are rejected and never overwritten."]);
   instructions.addRow(["Saving", "Upload validates and stages rows only. Nothing is saved until Execute is confirmed."]);

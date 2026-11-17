@@ -30,6 +30,7 @@ const modifiedCorrectionSchema = z.object({
   eventCodeId: z.string().uuid().nullable(),
   eventCodeChildId: z.string().uuid().nullable().optional().default(null),
   eventCampaignId: z.string().uuid().nullable().optional().default(null),
+  itemSaleQuantity: z.number().int().positive().max(1_000_000_000).nullable().optional().default(null),
   remark: z.string().trim().max(1000).nullable()
 });
 
@@ -50,6 +51,7 @@ const addedCorrectionSchema = z.object({
   eventCodeId: z.string().uuid().nullable(),
   eventCodeChildId: z.string().uuid().nullable().optional().default(null),
   eventCampaignId: z.string().uuid().nullable().optional().default(null),
+  itemSaleQuantity: z.number().int().positive().max(1_000_000_000).nullable().optional().default(null),
   remark: z.string().trim().max(1000).nullable(),
   reason: z.string().trim().min(1, "Correction Reason is required").max(1000)
 });

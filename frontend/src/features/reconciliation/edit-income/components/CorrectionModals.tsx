@@ -28,6 +28,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
   const [eventCodeId, setEventCodeId] = useState("");
   const [eventCodeChildId, setEventCodeChildId] = useState("");
   const [eventCampaignId, setEventCampaignId] = useState("");
+  const [itemSaleQuantity, setItemSaleQuantity] = useState("");
   const [remark, setRemark] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -41,6 +42,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
     setEventCodeId("");
     setEventCodeChildId("");
     setEventCampaignId("");
+    setItemSaleQuantity("");
     setRemark("");
     setReason("");
     setError("");
@@ -62,6 +64,14 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
       return;
     }
     if (direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" && !eventCampaignId) { setError("Campaign is required for this Event Code."); return; }
+    const selectedEvent = props.eventCodes.find((item) => item.id === eventCodeId);
+    const selectedChildId = eventCodeChildId || (eligibleChildren.length === 1 ? eligibleChildren[0].id : "");
+    const selectedChild = eligibleChildren.find(item => item.id === selectedChildId);
+    if (direction === "INCOMING" && selectedEvent?.eventType === "ITEM_SALE") {
+      const quantity = Number(itemSaleQuantity);
+      if (!Number.isInteger(quantity) || quantity <= 0 || !selectedChild?.itemSaleUnitPrice) { setError("ITEM_SALE requires a configured item and positive whole quantity."); return; }
+      if (Number(amount) !== Number(selectedChild.itemSaleUnitPrice) * quantity) { setError("ITEM_SALE amount must equal quantity × unit price."); return; }
+    }
     if (!reason.trim()) {
       setError("Correction Reason is required.");
       return;
@@ -74,6 +84,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
       eventCodeId: direction === "INCOMING" ? eventCodeId : null,
       eventCodeChildId: direction === "INCOMING" ? (eventCodeChildId || (eligibleChildren.length === 1 ? eligibleChildren[0].id : null)) : null,
       eventCampaignId: direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" ? eventCampaignId : null,
+      itemSaleQuantity: direction === "INCOMING" && selectedEvent?.eventType === "ITEM_SALE" ? Number(itemSaleQuantity) : null,
       remark: remark.trim() || null,
       reason: reason.trim()
     });
@@ -92,6 +103,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
           {direction === "INCOMING" && eligibleChildren.length > 1 && <label className={styles.field}><span>Child</span><select value={eventCodeChildId} disabled={props.disabled} onChange={(event) => setEventCodeChildId(event.target.value)}><option value="">Select Child...</option>{eligibleChildren.map((child) => <option key={child.id} value={child.id}>{child.childCode} - {child.childName}</option>)}</select></label>}
           {direction === "INCOMING" && eligibleChildren.length === 1 && <label className={styles.field}><span>Child</span><input value={`${eligibleChildren[0].childCode} - ${eligibleChildren[0].childName} (auto)`} disabled readOnly /></label>}
           {direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" && <label className={styles.field}><span>Campaign</span><select value={eventCampaignId} disabled={props.disabled} onChange={(event) => setEventCampaignId(event.target.value)}><option value="">Select Campaign...</option>{props.campaigns.filter((item) => item.eventCodeId === eventCodeId && item.activeFlag && (!item.startDate || transactionDate >= item.startDate) && (!item.endDate || transactionDate <= item.endDate)).map((item) => <option key={item.id} value={item.id}>{item.campaignName}</option>)}</select></label>}
+          {direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "ITEM_SALE" && <label className={styles.field}><span>Quantity</span><input type="number" min={1} step={1} value={itemSaleQuantity} disabled={props.disabled} onChange={event => setItemSaleQuantity(event.target.value)} /></label>}
         </div>
         {direction === "INCOMING" ? <p className={styles.modalHint}>TIME_BASED programs are unavailable for manual adjustments because they require a verified payment identity for sponsorship allocation.</p> : null}
         <label className={styles.field}><span>Description</span><input value={description} maxLength={2000} disabled={props.disabled} placeholder="Manual adjustment description" onChange={(event) => setDescription(event.target.value)} /></label>

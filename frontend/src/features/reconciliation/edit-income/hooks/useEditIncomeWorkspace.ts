@@ -261,7 +261,7 @@ export function useEditIncomeWorkspace() {
     setError("");
   }
 
-  function updateTransaction(transactionId: string, field: "eventCodeId" | "eventCodeChildId" | "eventCampaignId" | "remark", value: string | null) {
+  function updateTransaction(transactionId: string, field: "eventCodeId" | "eventCodeChildId" | "eventCampaignId" | "itemSaleQuantity" | "remark", value: string | number | null) {
     if (!canEdit) return;
     setMessage("");
     setError("");
@@ -310,6 +310,7 @@ export function useEditIncomeWorkspace() {
       eventCodeChildId: input.eventCodeChildId,
       eventCampaignId: input.eventCampaignId,
       baseAmount: input.direction === "INCOMING" ? input.amount : null,
+      itemSaleQuantity: input.itemSaleQuantity,
       remark: input.remark,
       requiresClassification: input.direction === "INCOMING",
       sourceType: "MANUAL",

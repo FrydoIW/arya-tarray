@@ -3,7 +3,7 @@
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { ChartNoAxesCombined } from "lucide-react";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import { DashboardMetrics } from "./DashboardMetrics";
 import { RecentActivities } from "./RecentActivities";
 import { StatementStatus } from "./StatementStatus";
@@ -34,6 +34,18 @@ export function DashboardScreen() {
         <PeriodPicker value={period} maxMonth={currentMonthValue()} maxDate={currentDayValue()} onChange={changePeriod} disabled={loading} ariaLabel="Dashboard period" />
       </div>
       <DashboardMetrics data={data} loading={loading} comparisonLabel={data?.filters.comparisonLabel ?? (period.mode === "DAY" ? "vs previous day" : "vs last month")} />
+
+      <article className="ui-card dashboard-panel">
+        <div className="dashboard-panel-header"><div><h2>Physical Item Sales</h2><p>Separate sales and inventory view for {monthLabel}; excluded from donation analytics.</p></div><span>ITEM_SALE</span></div>
+        {loading && !data ? <p>Loading item sales…</p> : <div className="dashboard-item-sales">
+          <div><span>Confirmed sales</span><strong>{data?.itemSales.confirmedPurchases ?? 0}</strong></div>
+          <div><span>Units sold</span><strong>{data?.itemSales.confirmedQuantity ?? 0}</strong></div>
+          <div><span>Sales amount</span><strong>{formatMoney(data?.itemSales.confirmedAmount ?? "0")}</strong></div>
+          <div><span>Pending resolution</span><strong>{data?.itemSales.pendingPurchases ?? 0}</strong></div>
+          <div><span>Reversed</span><strong>{data?.itemSales.reversedPurchases ?? 0}</strong></div>
+          {(data?.itemSales.items ?? []).map(item => <div key={item.eventCodeChildId}><span>{item.childCode} · {item.childName}</span><strong>{item.quantity} sold · {item.stockOnHand ?? "—"} on hand</strong></div>)}
+        </div>}
+      </article>
 
       <section className="dashboard-main-grid">
         <article className="ui-card dashboard-panel dashboard-trend-panel">

@@ -17,6 +17,7 @@ export const updateFinalEventSchema = z.object({
   eventCodeId: z.string().uuid().nullable(),
   eventCodeChildId: z.string().uuid().nullable().optional().default(null),
   eventCampaignId: z.string().uuid().nullable().optional().default(null),
+  itemSaleQuantity: z.number().int().positive().max(1_000_000_000).nullable().optional(),
   remark: z.string().trim().max(1000).optional()
 });
 

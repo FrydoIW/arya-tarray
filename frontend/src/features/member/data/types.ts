@@ -33,6 +33,7 @@ export type IdentityMetadataInput = {
 export type MemberDetail = Omit<MemberRow, "identityCount" | "lifetimeDonation" | "lifetimeTransactions"> & {
   address: string | null; remark: string | null; createdAt: string; updatedAt: string;
   registeredBy: Actor | null; createdBy: Actor | null; updatedBy: Actor | null; identities: Identity[];
+  itemSalePurchases: Array<{ purchaseId: string; transactionId: string; transactionDate: string | null; referenceNo: string | null; description: string | null; event: { eventCodeId: string; code: string; eventName: string }; item: { eventCodeChildId: string; childCode: string; childName: string }; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string | null; status: string; resolutionReason: string | null; confirmedAt: string | null; reversedAt: string | null; inventoryMovements: Array<{ id: string; movementType: string; quantityDelta: number; stockBefore: number; stockAfter: number; reason: string; createdAt: string }> }>;
 };
 export type Actor = { id: string; fullName: string };
 export type IdentityOption = Omit<Identity, "normalizedName" | "verificationStatus" | "verifiedAt" | "remark">;

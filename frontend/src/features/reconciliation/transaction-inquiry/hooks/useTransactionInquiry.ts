@@ -7,7 +7,8 @@ import {
   generateTransactionInquiryReport,
   getTransactionInquiryDetail,
   getTransactionInquiryMemberOptions,
-  getTransactionInquiryWorkspace
+  getTransactionInquiryWorkspace,
+  retryItemSalePurchase
 } from "../api/transaction-inquiry.api";
 import type {
   TransactionInquiryDetail,
@@ -174,6 +175,17 @@ export function useTransactionInquiry() {
     }
   }
 
+  async function retryItemSale(transactionId: string) {
+    setDetailLoading(true); setError("");
+    try {
+      await retryItemSalePurchase(transactionId);
+      const next = await getTransactionInquiryDetail(transactionId);
+      setDetail(next);
+      await load(true);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Failed to retry item sale."); }
+    finally { setDetailLoading(false); }
+  }
+
   async function generateReport(options: TransactionReportOptions) {
     setReportLoading(true);
     setError("");
@@ -236,6 +248,7 @@ export function useTransactionInquiry() {
     refresh: () => load(true),
     requestMemberOptions: () => setMemberOptionsRequested(true),
     openDetail,
+    retryItemSale,
     closeDetail: () => setDetail(null),
     generateReport
   };

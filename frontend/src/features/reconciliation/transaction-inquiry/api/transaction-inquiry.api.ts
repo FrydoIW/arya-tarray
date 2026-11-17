@@ -39,6 +39,10 @@ export function getTransactionInquiryDetail(transactionId: string, signal?: Abor
   return apiFetch<TransactionInquiryDetail>(`/reconciliation/transaction-inquiry/${encodeURIComponent(transactionId)}`, { signal });
 }
 
+export function retryItemSalePurchase(transactionId: string) {
+  return apiFetch(`/reconciliation/edit-income/transactions/${encodeURIComponent(transactionId)}/item-sale/retry`, { method: "POST" });
+}
+
 export function generateTransactionInquiryReport(
   query: Omit<TransactionInquiryQuery, "page" | "pageSize">,
   options: TransactionReportOptions

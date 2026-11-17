@@ -40,10 +40,12 @@ export function findEventCodeUsage(ids: string[]) {
           suggestedTransactions: true,
           transactions: true,
           campaigns: true,
-          memberSubscriptions: true
+          memberSubscriptions: true,
+          itemSalePurchases: true
         }
       },
-      timeRule: { select: { eventCodeId: true } }
+      timeRule: { select: { eventCodeId: true } },
+      children: { select: { itemSaleConfig: { select: { eventCodeChildId: true } } } }
     }
   });
 }
@@ -75,7 +77,9 @@ export async function applyEventCodeChangesAtomic(data: {
     const requestedTypes = new Map(data.updates.map((item) => [item.id, item.input.eventType]));
     const currentTypes = await tx.eventCode.findMany({
       where: { id: { in: [...requestedTypes.keys()] } },
-      select: { id: true, eventType: true, code: true, timeRule: { select: { eventCodeId: true } }, _count: { select: { transactions: true, memberSubscriptions: true } } }
+      select: { id: true, eventType: true, code: true, timeRule: { select: { eventCodeId: true } },
+        children: { select: { itemSaleConfig: { select: { eventCodeChildId: true } } } },
+        _count: { select: { transactions: true, memberSubscriptions: true, itemSalePurchases: true } } }
     });
     for (const current of currentTypes) {
       const nextType = requestedTypes.get(current.id)!;
@@ -84,6 +88,12 @@ export async function applyEventCodeChangesAtomic(data: {
       }
       if (current.eventType === "TIME_BASED" && nextType !== "TIME_BASED" && (current._count.transactions > 0 || current._count.memberSubscriptions > 0 || current.timeRule)) {
         throw new HttpError(409, `TIME_BASED Event Code ${current.code} with a Time Rule, transaction or subscription history must remain TIME_BASED. Deactivate it instead.`);
+      }
+      if (current.eventType !== "ITEM_SALE" && nextType === "ITEM_SALE" && current._count.transactions > 0) {
+        throw new HttpError(409, `Event Code ${current.code} with transaction history cannot become ITEM_SALE. Create a new Event Code instead.`);
+      }
+      if (current.eventType === "ITEM_SALE" && nextType !== "ITEM_SALE" && (current._count.transactions > 0 || current._count.itemSalePurchases > 0 || current.children.some(child => child.itemSaleConfig))) {
+        throw new HttpError(409, `ITEM_SALE Event Code ${current.code} with item configuration, purchase or transaction history must remain ITEM_SALE. Deactivate it instead.`);
       }
     }
     const nonCampaignIds = data.updates.filter((item) => item.input.eventType !== "CAMPAIGN").map((item) => item.id);

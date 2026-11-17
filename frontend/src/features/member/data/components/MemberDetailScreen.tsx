@@ -9,7 +9,7 @@ import type { DataTableColumn } from "@/components/ui/DataTable/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useAuthSession } from "@/features/auth/context/AuthSessionContext";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { useMemberDetail } from "../hooks/useMemberDetail";
 import type { Identity } from "../types";
 import { AddIdentityModal, DetachIdentityModal, EditIdentityModal, MoveIdentityModal } from "./IdentityModals";
@@ -20,7 +20,7 @@ import { ProgramAllocation } from "./ProgramAllocation";
 import styles from "../styles/member-data.module.css";
 
 type Action = { kind: "edit-profile" } | { kind: "add" } | { kind: "edit-identity" | "move" | "detach"; identity: Identity } | null;
-type DetailTab = "profile" | "identities" | "ownership-history" | "donations" | "sponsorship";
+type DetailTab = "profile" | "identities" | "ownership-history" | "donations" | "purchases" | "sponsorship";
 function Field({ label, value, wide = false }: { label: string; value: React.ReactNode; wide?: boolean }) {
   return <div className={`${styles.profileField} ${wide ? styles.wide : ""}`}><dt>{label}</dt><dd>{value ?? "—"}</dd></div>;
 }
@@ -31,7 +31,7 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
   const state = useMemberDetail(memberId);
   const [tab, setTab] = useState<DetailTab>("profile");
   const [action, setAction] = useState<Action>(() => editProfileInitially ? { kind: "edit-profile" } : null);
-  const tabs: DetailTab[] = ["profile", "identities", "ownership-history", "donations", "sponsorship"];
+  const tabs: DetailTab[] = ["profile", "identities", "ownership-history", "donations", "purchases", "sponsorship"];
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -80,6 +80,7 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
       <button type="button" id="member-tab-identities" role="tab" aria-selected={tab === "identities"} aria-controls="member-panel-identities" tabIndex={tab === "identities" ? 0 : -1} className={tab === "identities" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("identities")}>Identitas <span>{member.identities.length}</span></button>
       <button type="button" id="member-tab-ownership-history" role="tab" aria-selected={tab === "ownership-history"} aria-controls="member-panel-ownership-history" tabIndex={tab === "ownership-history" ? 0 : -1} className={tab === "ownership-history" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("ownership-history")}>Riwayat Kepemilikan</button>
       <button type="button" id="member-tab-donations" role="tab" aria-selected={tab === "donations"} aria-controls="member-panel-donations" tabIndex={tab === "donations" ? 0 : -1} className={tab === "donations" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("donations")}>Riwayat Donasi</button>
+      <button type="button" id="member-tab-purchases" role="tab" aria-selected={tab === "purchases"} aria-controls="member-panel-purchases" tabIndex={tab === "purchases" ? 0 : -1} className={tab === "purchases" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("purchases")}>Pembelian Item <span>{member.itemSalePurchases.length}</span></button>
       <button type="button" id="member-tab-sponsorship" role="tab" aria-selected={tab === "sponsorship"} aria-controls="member-panel-sponsorship" tabIndex={tab === "sponsorship" ? 0 : -1} className={tab === "sponsorship" ? styles.activeTab : ""} onKeyDown={handleTabKeyDown} onClick={() => setTab("sponsorship")}>Program &amp; Allocation</button>
     </div>
     {tab === "profile" ? <section id="member-panel-profile" role="tabpanel" aria-labelledby="member-tab-profile" tabIndex={0} className={styles.detailPanel}>
@@ -98,6 +99,15 @@ export function MemberDetailScreen({ memberId, editProfileInitially = false }: {
       <DataTable rows={member.identities} columns={columns} rowKey={row => row.memberIdentityId} minWidth={canMutate ? "1250px" : "1020px"} emptyState={{ title: "Belum ada identitas", description: "Tambahkan identitas belum terverifikasi ketika tersedia." }} />
     </section> : tab === "ownership-history" ? <div id="member-panel-ownership-history" role="tabpanel" aria-labelledby="member-tab-ownership-history" tabIndex={0}><MemberIdentityHistory memberId={memberId} /></div>
       : tab === "donations" ? <div id="member-panel-donations" role="tabpanel" aria-labelledby="member-tab-donations" tabIndex={0}><MemberDonationHistory memberId={memberId} /></div>
+      : tab === "purchases" ? <section id="member-panel-purchases" role="tabpanel" aria-labelledby="member-tab-purchases" tabIndex={0} className={styles.detailPanel}><div className={styles.sectionHead}><div><h2>Riwayat pembelian item fisik</h2><p>Terpisah dari donasi, wallet, carry, dan sponsorship.</p></div></div><DataTable rows={member.itemSalePurchases} rowKey={row => row.purchaseId} minWidth="1050px" columns={[
+        { key: "transactionDate", header: "Tanggal", render: row => formatDate(row.transactionDate) },
+        { key: "item", header: "Item", minWidth: "210px", render: row => <div className={styles.name}><strong>{row.item.childName}</strong><small>{row.item.childCode} · {row.event.code}</small></div> },
+        { key: "quantity", header: "Qty", align: "center" },
+        { key: "unitPrice", header: "Harga", align: "right", render: row => formatMoney(row.unitPrice) },
+        { key: "totalAmount", header: "Total", align: "right", render: row => formatMoney(row.totalAmount) },
+        { key: "referenceNo", header: "Referensi", render: row => row.referenceNo ?? "—" },
+        { key: "status", header: "Status / inventory history", minWidth: "260px", render: row => <div className={styles.name}><strong>{row.status}</strong><small>{row.resolutionReason ?? (row.inventoryMovements.length ? row.inventoryMovements.map(movement => `${movement.movementType} ${movement.quantityDelta > 0 ? "+" : ""}${movement.quantityDelta}`).join(" · ") : "No stock movement")}</small></div> }
+      ]} emptyState={{ title: "Belum ada pembelian item", description: "Pembelian ITEM_SALE yang terhubung ke member akan tampil di sini." }} /></section>
       : <div id="member-panel-sponsorship" role="tabpanel" aria-labelledby="member-tab-sponsorship" tabIndex={0}><ProgramAllocation memberId={memberId} memberActive={member.activeFlag} canMutate={canMutate} /></div>}
     {canMutate && action?.kind === "edit-profile" ? <MemberProfileModal member={member} busy={state.busy} error={state.error} onClose={close} onSubmit={state.updateProfile} /> : null}
     {canMutate && action?.kind === "add" ? <AddIdentityModal memberId={memberId} busy={state.busy} error={state.error} onClose={close} onSubmit={state.attach} /> : null}

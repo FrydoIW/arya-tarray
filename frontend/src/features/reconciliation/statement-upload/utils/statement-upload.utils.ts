@@ -77,6 +77,11 @@ export function getDraftRowStatus(transaction: DraftTransaction, eventCodes: Eve
   if (event?.eventType === "TIME_BASED" && (!event.timeRule?.activeFlag
     || !paymentOnlyTimePreview(transaction.baseAmount ?? "", event.timeRule.unitAmount, event.timeRule.durationMonths))) return "NEEDS_REVIEW";
   if (childNeedsReview(transaction, children)) return "NEEDS_REVIEW";
+  if (event?.eventType === "ITEM_SALE") {
+    const child = children.find(item => item.id === transaction.eventCodeChildId);
+    const quantity = transaction.itemSaleQuantity ?? transaction.itemSale?.quantity ?? null;
+    if (!child?.itemSaleUnitPrice || !quantity || quantity <= 0) return "NEEDS_REVIEW";
+  }
   if (transaction.suggestedEventCodeId && transaction.eventCodeId === transaction.suggestedEventCodeId) {
     return "MATCHED";
   }

@@ -37,6 +37,7 @@ export function transactionChanged(
   return current.eventCodeId !== original.eventCodeId
     || current.eventCodeChildId !== original.eventCodeChildId
     || current.eventCampaignId !== original.eventCampaignId
+    || (current.itemSaleQuantity ?? current.itemSale?.quantity ?? null) !== (original.itemSaleQuantity ?? original.itemSale?.quantity ?? null)
     || normalizeRemark(current.remark) !== normalizeRemark(original.remark);
 }
 
@@ -65,6 +66,7 @@ export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactio
       eventCodeId: item.eventCodeId,
       eventCodeChildId: item.eventCodeChildId,
       eventCampaignId: item.eventCampaignId,
+      itemSaleQuantity: item.itemSaleQuantity ?? item.itemSale?.quantity ?? null,
       remark: normalizeRemark(item.remark),
       reason: item.correctionReason!
     });
@@ -79,6 +81,7 @@ export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactio
       eventCodeId: item.eventCodeId,
       eventCodeChildId: item.eventCodeChildId,
       eventCampaignId: item.eventCampaignId,
+      itemSaleQuantity: item.itemSaleQuantity ?? item.itemSale?.quantity ?? null,
       remark: normalizeRemark(item.remark)
     });
   }

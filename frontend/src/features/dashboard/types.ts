@@ -38,6 +38,14 @@ export interface DashboardSummary {
     totalOutgoing: DashboardMoneyMetricValue;
     completeTransactions: DashboardMetricValue;
   };
+  itemSales: {
+    confirmedPurchases: number;
+    confirmedQuantity: number;
+    confirmedAmount: string;
+    pendingPurchases: number;
+    reversedPurchases: number;
+    items: Array<{ eventCodeChildId: string; childCode: string; childName: string; purchaseCount: number; quantity: number; amount: string; stockOnHand: number | null }>;
+  };
   trend: Array<{
     month: string;
     label: string;

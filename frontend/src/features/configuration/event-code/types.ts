@@ -75,6 +75,9 @@ export type EventCodeChild = {
   occupiedSlots: number;
   availableSlots: number | null;
   configurationComplete: boolean;
+  itemSaleUnitPrice?: string | null;
+  itemSaleStockOnHand?: number | null;
+  itemSaleVersion?: number | null;
   eventCode: { id: string; code: string; eventName: string; eventType: EventType; activeFlag: boolean };
   transactionCount: number;
   correctionCount: number;
@@ -83,6 +86,16 @@ export type EventCodeChild = {
 };
 
 export type ChildInput = Pick<EventCodeChild, "eventCodeId" | "childCode" | "childName" | "description" | "displayOrder" | "activeFlag" | "capacity" | "unitAmount" | "durationMonths">;
+
+export type ItemSaleConfigDetail = {
+  id: string;
+  childCode: string;
+  childName: string;
+  activeFlag: boolean;
+  eventCode: { id: string; code: string; eventName: string; eventType: EventType; activeFlag: boolean };
+  itemSaleConfig: { unitPrice: string; stockOnHand: number; version: number; createdAt: string; updatedAt: string; createdBy: EventCodeUser; updatedBy: EventCodeUser } | null;
+  itemSaleInventoryMovements: Array<{ id: string; movementType: string; quantityDelta: number; stockBefore: number; stockAfter: number; sourceReference: string; reversalOfMovementId: string | null; reason: string; createdAt: string; createdBy: EventCodeUser }>;
+};
 
 export type EventCodeExecutePayload = {
   creates: EventCodeInput[];

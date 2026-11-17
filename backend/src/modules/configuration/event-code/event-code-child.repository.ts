@@ -15,6 +15,7 @@ const childSelect = {
   capacity: true,
   unitAmount: true,
   durationMonths: true,
+  itemSaleConfig: { select: { unitPrice: true, stockOnHand: true, version: true } },
   createdAt: true,
   updatedAt: true,
   eventCode: {
@@ -71,9 +72,12 @@ export function findChildUsage(ids: string[]) {
         select: {
           transactions: true,
           correctionItemsBefore: true,
-          correctionItemsProposed: true
+          correctionItemsProposed: true,
+          itemSalePurchases: true,
+          itemSaleInventoryMovements: true
         }
-      }
+      },
+      itemSaleConfig: { select: { eventCodeChildId: true } }
     }
   });
 }
@@ -173,7 +177,8 @@ export async function applyChildChangesAtomic(input: {
 
     if (input.deletes.length > 0) {
       const usage = await findChildUsage(input.deletes);
-      const used = usage.find((item) => item._count.transactions > 0 || item._count.correctionItemsBefore > 0 || item._count.correctionItemsProposed > 0);
+      const used = usage.find((item) => item._count.transactions > 0 || item._count.correctionItemsBefore > 0 || item._count.correctionItemsProposed > 0
+        || item._count.itemSalePurchases > 0 || item._count.itemSaleInventoryMovements > 0 || item.itemSaleConfig);
       if (used) {
         throw new HttpError(409, `Child ${used.childCode} sudah dipakai transaksi atau koreksi. Ubah status menjadi Inactive daripada menghapusnya.`);
       }

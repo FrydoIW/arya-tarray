@@ -61,11 +61,33 @@ function donationTotalsByMember(groups: Array<{ memberIdentityId: string | null;
 }
 
 export async function getDetail(memberId: string) {
-  const row = await repository.findMemberDetail(memberId);
+  const [row, itemSalePurchases] = await Promise.all([
+    repository.findMemberDetail(memberId),
+    repository.loadMemberItemSalePurchases(memberId)
+  ]);
   if (!row) throw new HttpError(404, "Donatur tidak ditemukan.");
   const { id, birthDate, identities, ...member } = row;
   return { ...member, memberId: id, birthDate: dateOnly(birthDate), age: deriveAge(birthDate, currentBusinessDayValue()),
-    identities: identities.map(({ id: identityId, _count, ...identity }) => ({ ...identity, memberIdentityId: identityId, transactionCount: _count.transactions })) };
+    identities: identities.map(({ id: identityId, _count, ...identity }) => ({ ...identity, memberIdentityId: identityId, transactionCount: _count.transactions })),
+    itemSalePurchases: itemSalePurchases.map(purchase => ({
+      purchaseId: purchase.id,
+      transactionId: purchase.bankTransaction.id,
+      transactionDate: dateOnly(purchase.bankTransaction.transactionDate),
+      referenceNo: purchase.bankTransaction.referenceNo,
+      description: purchase.bankTransaction.description,
+      event: { eventCodeId: purchase.eventCode.id, code: purchase.eventCode.code, eventName: purchase.eventCode.eventName },
+      item: { eventCodeChildId: purchase.eventCodeChild.id, childCode: purchase.eventCodeChild.childCode, childName: purchase.eventCodeChild.childName },
+      quantity: purchase.quantity,
+      unitPrice: purchase.unitPriceSnapshot.toString(),
+      totalAmount: purchase.totalAmount.toString(),
+      paymentAmount: purchase.paymentAmountSnapshot?.toString() ?? null,
+      status: purchase.status,
+      resolutionReason: purchase.resolutionReason,
+      confirmedAt: purchase.confirmedAt,
+      reversedAt: purchase.reversedAt,
+      inventoryMovements: purchase.inventoryMovements
+    }))
+  };
 }
 
 export function sponsorshipStatus(item: { activeFlag: boolean }) {

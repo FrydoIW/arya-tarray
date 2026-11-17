@@ -16,6 +16,7 @@ export function TransactionInquiryScreen() {
   const inquiry = useTransactionInquiry();
   const user = useAuthSession();
   const canViewMemberData = user.menuCodes.includes("MEMBER_DATA");
+  const canRetryItemSale = user.menuCodes.includes("RECON_EDIT_INCOME");
   const [reportOpen, setReportOpen] = useState(false);
 
   return (
@@ -74,7 +75,7 @@ export function TransactionInquiryScreen() {
         onView={(id) => void inquiry.openDetail(id)}
       />
       <div className={styles.infoNote}><strong>Report information</strong><span>PDF reports use all active filters, including Member and Member Link Status, and always query the full filtered dataset rather than only the visible table page.</span></div>
-      <TransactionDetailModal detail={inquiry.detail} open={Boolean(inquiry.detail)} canViewMemberData={canViewMemberData} onClose={inquiry.closeDetail} />
+      <TransactionDetailModal detail={inquiry.detail} open={Boolean(inquiry.detail)} canViewMemberData={canViewMemberData} canRetryItemSale={canRetryItemSale} retrying={inquiry.detailLoading} onRetry={(id) => void inquiry.retryItemSale(id)} onClose={inquiry.closeDetail} />
       <GenerateReportModal
         open={reportOpen}
         period={inquiry.period}

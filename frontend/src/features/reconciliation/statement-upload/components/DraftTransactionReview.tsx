@@ -48,6 +48,7 @@ type Props = {
   onReload: () => void;
   onFinalEventChange: (transactionId: string, eventCodeId: string | null, eventCodeChildId?: string | null, eventCampaignId?: string | null) => void;
   onRemarkChange: (transactionId: string, remark: string | null) => void;
+  onItemSaleQuantityChange: (transactionId: string, quantity: number | null) => void;
 };
 
 function childLabel(child: EventCodeChildOption | null) {
@@ -110,6 +111,7 @@ export function DraftTransactionReview({
   onReload,
   onFinalEventChange,
   onRemarkChange
+  ,onItemSaleQuantityChange
 }: Props) {
   const columns = useMemo<DataTableColumn<DraftTransaction>[]>(() => [
     {
@@ -221,6 +223,26 @@ export function DraftTransactionReview({
       }
     },
     {
+      key: "itemSaleQuantity",
+      header: "Item sale",
+      minWidth: "210px",
+      render: (row) => {
+        const event = getEventCode(eventCodes, row.eventCodeId);
+        if (event?.eventType !== "ITEM_SALE") return <span className={styles.notApplicableText}>—</span>;
+        const child = eventCodeChildren.find(item => item.id === row.eventCodeChildId);
+        if (!child?.itemSaleUnitPrice) return <span className={styles.noMatch}>Item not configured</span>;
+        const quantity = row.itemSaleQuantity ?? row.itemSale?.quantity ?? null;
+        return <div className={styles.entitlementCell}>
+          <input className="ui-table-input" type="number" min={1} step={1} value={quantity ?? ""} disabled={disabled}
+            aria-label={`Item quantity row ${row.rowNo}`}
+            onChange={event => onItemSaleQuantityChange(row.id, event.target.value ? Number(event.target.value) : null)} />
+          <small>{formatMoney(child.itemSaleUnitPrice)} each · stock {child.itemSaleStockOnHand ?? 0}</small>
+          <strong>{quantity ? `Total ${formatMoney(String(Number(child.itemSaleUnitPrice) * quantity))}` : "Quantity required"}</strong>
+          {row.itemSale?.status ? <small>{row.itemSale.status}{row.itemSale.resolutionReason ? ` · ${row.itemSale.resolutionReason}` : ""}</small> : null}
+        </div>;
+      }
+    },
+    {
       key: "program",
       header: "Program / Entitlement",
       minWidth: "190px",
@@ -278,7 +300,7 @@ export function DraftTransactionReview({
       sticky: "right",
       render: (row) => <RowStatus status={getDraftRowStatus(row, eventCodes, eventCodeChildren)} outgoing={row.direction === "DB"} />
     }
-  ], [disabled, eventCodes, eventCodeChildren, campaigns, onFinalEventChange, onRemarkChange]);
+  ], [disabled, eventCodes, eventCodeChildren, campaigns, onFinalEventChange, onRemarkChange, onItemSaleQuantityChange]);
 
   return (
     <CollapsibleSection

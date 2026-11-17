@@ -38,7 +38,7 @@ export function validateRows(rows: EventCode[]) {
       return `Row ${index + 1}: Category maksimal 50 karakter.`;
     }
     if ((row.description?.trim().length ?? 0) > 500) return `Row ${index + 1}: Description maksimal 500 karakter.`;
-    if (!["STANDARD", "CAMPAIGN", "TIME_BASED"].includes(row.eventType)) return `Row ${index + 1}: Invalid Event Type.`;
+    if (!["STANDARD", "CAMPAIGN", "TIME_BASED", "ITEM_SALE"].includes(row.eventType)) return `Row ${index + 1}: Invalid Event Type.`;
     if (usedCodes.has(code)) {
       return `Event Code ${code} muncul lebih dari satu kali.`;
     }

@@ -6,6 +6,7 @@ export type OfficialDonationCandidate = {
   originalAmount: { toString(): string } | string;
   eventCodeId: string | null;
   reconciliationExcludedAt?: Date | string | null;
+  eventType?: string | null;
 };
 
 export type CanonicalMemberDonationCandidate = OfficialDonationCandidate & {
@@ -19,6 +20,7 @@ export function officialDonationTransactionWhere(): Prisma.BankTransactionWhereI
     status: "FINALIZED",
     originalAmount: { gt: 0 },
     eventCodeId: { not: null },
+    eventCode: { is: { eventType: { not: "ITEM_SALE" } } },
     reconciliationExcludedAt: null
   };
 }
@@ -38,6 +40,7 @@ export function isOfficialDonationCandidate(row: OfficialDonationCandidate) {
   return row.status === "FINALIZED"
     && decimalStringToCents(amount) > 0n
     && Boolean(row.eventCodeId)
+    && row.eventType !== "ITEM_SALE"
     && row.reconciliationExcludedAt == null;
 }
 

@@ -92,8 +92,10 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
           include: {
             suggestedEventCode: { select: eventCodeSelect },
             eventCode: { select: eventCodeSelect },
-            eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true, displayOrder: true } },
+            eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true, displayOrder: true,
+              itemSaleConfig: { select: { unitPrice: true, stockOnHand: true, version: true } } } },
             eventCampaign: { select: { id: true, campaignName: true } },
+            itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, status: true, resolutionReason: true } },
             ...timeBasedHistoryInclude
           },
           orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }]
@@ -134,7 +136,8 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
         { activeFlag: true, eventCode: { activeFlag: true } },
         { transactions: { some: { statementUploadId: statementId } } }
       ] },
-      select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true },
+      select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true,
+        itemSaleConfig: { select: { unitPrice: true, stockOnHand: true, version: true } } },
       orderBy: [{ activeFlag: "desc" }, { displayOrder: "asc" }, { childCode: "asc" }, { childName: "asc" }]
     })
   ]);
@@ -146,7 +149,7 @@ export type EditIncomeCorrectionInput = {
   statementId: string;
   userId: string;
   corrections: Array<
-    | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCodeChildId?: string | null; eventCampaignId?: string | null; remark: string | null }
+    | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCodeChildId?: string | null; eventCampaignId?: string | null; itemSaleQuantity?: number | null; remark: string | null }
     | { action: "EXCLUDED"; transactionId: string; reason: string }
     | {
         action: "ADDED";
@@ -158,6 +161,7 @@ export type EditIncomeCorrectionInput = {
         eventCodeId: string | null;
         eventCodeChildId?: string | null;
         eventCampaignId?: string | null;
+        itemSaleQuantity?: number | null;
         remark: string | null;
         reason: string;
       }
@@ -203,6 +207,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
             transactionDate: true,
             remark: true,
             reconciliationExcludedAt: true
+            ,itemSalePurchase: { select: { quantity: true, unitPriceSnapshot: true, status: true } }
           }
         }
       }
@@ -254,7 +259,8 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       tx.eventCampaign.findMany({ where: { id: { in: selectedCampaignIds } }, select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } }),
       tx.eventCodeChild.findMany({
         where: { eventCodeId: { in: selectedEventIds } },
-        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true }
+        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true,
+          itemSaleConfig: { select: { unitPrice: true, stockOnHand: true } } }
       })
     ]);
     const selectedEventById = new Map(selectedEvents.map((event) => [event.id, event]));
@@ -296,11 +302,20 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
           requireComplete: true
         });
         const effectiveChildId = childId ?? selectSingleEligibleChild(event, children);
+        const effectiveChild = effectiveChildId ? children.find((item) => item.id === effectiveChildId) ?? null : null;
+        const itemSaleQuantity = requested.itemSaleQuantity ?? null;
+        if (event?.eventType === "ITEM_SALE") {
+          if (!itemSaleQuantity || !effectiveChild?.itemSaleConfig) throw new HttpError(400, "ITEM_SALE manual adjustment requires a configured item and positive quantity");
+          if (!new Prisma.Decimal(requested.amount).equals(effectiveChild.itemSaleConfig.unitPrice.mul(itemSaleQuantity))) {
+            throw new HttpError(400, "ITEM_SALE amount must equal quantity × current unit price");
+          }
+        } else if (itemSaleQuantity !== null) throw new HttpError(400, "Item quantity is only valid for ITEM_SALE");
         proposalItems.push({
           action: "ADDED",
           proposedEventCodeId: requested.eventCodeId,
           proposedEventCodeChildId: effectiveChildId,
           proposedEventCampaignId: requested.eventCampaignId ?? null,
+          proposedItemSaleQuantity: itemSaleQuantity,
           proposedRemark: requested.remark?.trim() || null,
           correctionReason: requested.reason.trim(),
           manualTransactionDate: transactionDate,
@@ -322,9 +337,11 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
           beforeEventCodeId: current.eventCodeId,
           beforeEventCodeChildId: current.eventCodeChildId,
           beforeEventCampaignId: current.eventCampaignId,
+          beforeItemSaleQuantity: current.itemSalePurchase?.quantity ?? null,
           proposedEventCodeId: current.eventCodeId,
           proposedEventCodeChildId: current.eventCodeChildId,
           proposedEventCampaignId: current.eventCampaignId,
+          proposedItemSaleQuantity: current.itemSalePurchase?.quantity ?? null,
           beforeRemark: current.remark?.trim() || null,
           proposedRemark: current.remark?.trim() || null,
           correctionReason: requested.reason.trim()
@@ -364,19 +381,35 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
         historicalChildId: current.eventCodeId === requested.eventCodeId ? current.eventCodeChildId : null
       });
       const effectiveChildId = childId ?? selectSingleEligibleChild(event, children);
+      const effectiveChild = effectiveChildId ? children.find((item) => item.id === effectiveChildId) ?? null : null;
+      const itemSaleQuantity = event?.eventType === "ITEM_SALE" ? requested.itemSaleQuantity ?? current.itemSalePurchase?.quantity ?? null : null;
+      if (event?.eventType === "ITEM_SALE") {
+        if (!itemSaleQuantity || !effectiveChild?.itemSaleConfig) throw new HttpError(400, "ITEM_SALE correction requires a configured item and positive quantity");
+        const unitPrice = current.itemSalePurchase && current.eventCodeChildId === effectiveChildId
+          ? current.itemSalePurchase.unitPriceSnapshot
+          : effectiveChild.itemSaleConfig.unitPrice;
+        if (!current.baseAmount?.equals(unitPrice.mul(itemSaleQuantity))) {
+          throw new HttpError(400, "ITEM_SALE bank base amount must equal quantity × applicable unit price");
+        }
+      } else if (requested.itemSaleQuantity !== null && requested.itemSaleQuantity !== undefined) {
+        throw new HttpError(400, "Item quantity is only valid for ITEM_SALE");
+      }
 
       const normalizedRemark = requested.remark?.trim() || null;
       const currentRemark = current.remark?.trim() || null;
-      if (current.eventCodeId === requested.eventCodeId && current.eventCodeChildId === effectiveChildId && current.eventCampaignId === (requested.eventCampaignId ?? null) && currentRemark === normalizedRemark) continue;
+      if (current.eventCodeId === requested.eventCodeId && current.eventCodeChildId === effectiveChildId && current.eventCampaignId === (requested.eventCampaignId ?? null)
+        && (current.itemSalePurchase?.quantity ?? null) === itemSaleQuantity && currentRemark === normalizedRemark) continue;
       proposalItems.push({
         action: "MODIFIED",
         bankTransactionId: current.id,
         beforeEventCodeId: current.eventCodeId,
         beforeEventCodeChildId: current.eventCodeChildId,
         beforeEventCampaignId: current.eventCampaignId,
+        beforeItemSaleQuantity: current.itemSalePurchase?.quantity ?? null,
         proposedEventCodeId: requested.eventCodeId,
         proposedEventCodeChildId: effectiveChildId,
         proposedEventCampaignId: requested.eventCampaignId ?? null,
+        proposedItemSaleQuantity: itemSaleQuantity,
         beforeRemark: currentRemark,
         proposedRemark: normalizedRemark
       });
