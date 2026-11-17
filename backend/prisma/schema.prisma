@@ -144,6 +144,8 @@ model User {
   updatedEventCampaigns EventCampaign[] @relation("EventCampaignUpdatedBy")
   createdEventTimeRules EventTimeRule[] @relation("EventTimeRuleCreatedBy")
   updatedEventTimeRules EventTimeRule[] @relation("EventTimeRuleUpdatedBy")
+  createdEventCodeChildren EventCodeChild[] @relation("EventCodeChildCreatedBy")
+  updatedEventCodeChildren EventCodeChild[] @relation("EventCodeChildUpdatedBy")
   createdMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionCreatedBy")
   updatedMemberEventSubscriptions MemberEventSubscription[] @relation("MemberEventSubscriptionUpdatedBy")
   createdMemberEventCoverages MemberEventCoverage[] @relation("MemberEventCoverageCreatedBy")
@@ -273,6 +275,7 @@ model EventCode {
   correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCode")
   correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCode")
   campaigns EventCampaign[]
+  children  EventCodeChild[]
   timeRule EventTimeRule?
   memberSubscriptions MemberEventSubscription[]
 
@@ -331,6 +334,36 @@ model EventTimeRule {
   @@index([createdById], map: "idx_event_time_rule_created_by")
   @@index([updatedById], map: "idx_event_time_rule_updated_by")
   @@map("arya_event_time_rule")
+}
+
+/// Generic child dimension of an Event Code. A child is a classification detail
+/// on transactions (for example "Amitabha" under 017 Rupang). It is not a
+/// Campaign and not a subscription item. Unique per parent by child_code.
+model EventCodeChild {
+  id           String   @id @default(uuid()) @map("event_code_child_id") @db.Char(36)
+  eventCodeId  String   @map("event_code_id") @db.Char(36)
+  childCode    String   @map("child_code") @db.VarChar(30)
+  childName    String   @map("child_name") @db.VarChar(150)
+  description  String?  @db.VarChar(500)
+  displayOrder Int      @default(0) @map("display_order")
+  activeFlag   Boolean  @default(true) @map("active_flag")
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  createdById  String?  @map("created_by") @db.Char(36)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  updatedById  String?  @map("updated_by") @db.Char(36)
+
+  eventCode EventCode @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_event_code")
+  createdBy User? @relation("EventCodeChildCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_created_by")
+  updatedBy User? @relation("EventCodeChildUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_event_code_child_updated_by")
+  transactions BankTransaction[]
+  correctionItemsBefore ReconciliationCorrectionItem[] @relation("CorrectionBeforeEventCodeChild")
+  correctionItemsProposed ReconciliationCorrectionItem[] @relation("CorrectionProposedEventCodeChild")
+
+  @@unique([eventCodeId, childCode], map: "uk_event_code_child_parent_code")
+  @@index([eventCodeId, activeFlag], map: "idx_event_code_child_parent_active")
+  @@index([createdById], map: "idx_event_code_child_created_by")
+  @@index([updatedById], map: "idx_event_code_child_updated_by")
+  @@map("arya_event_code_child")
 }
 
 model MemberEventSubscription {
@@ -707,6 +740,7 @@ model BankTransaction {
   suffixCode           String?   @map("suffix_code") @db.Char(3)
   suggestedEventCodeId String?   @map("suggested_event_code_id") @db.Char(36)
   eventCodeId          String?   @map("event_code_id") @db.Char(36)
+  eventCodeChildId     String?   @map("event_code_child_id") @db.Char(36)
   eventCampaignId      String?   @map("event_campaign_id") @db.Char(36)
   baseAmount           Decimal?  @map("base_amount") @db.Decimal(20, 2)
   status               String    @default("RAW") @db.VarChar(20)
@@ -724,6 +758,7 @@ model BankTransaction {
   statementUpload    BankStatementUpload       @relation(fields: [statementUploadId], references: [id])
   suggestedEventCode EventCode?                @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
   eventCode          EventCode?                @relation("FinalEventCode", fields: [eventCodeId], references: [id])
+  eventCodeChild     EventCodeChild?           @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_code_child")
   eventCampaign      EventCampaign?            @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_campaign")
   manualAddedBy      User?                     @relation("BankTransactionManualAddedBy", fields: [manualAddedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_manual_added_by")
   reconciliationExcludedBy User?               @relation("BankTransactionExcludedBy", fields: [reconciliationExcludedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_excluded_by")
@@ -736,6 +771,7 @@ model BankTransaction {
   matchedStatementUploadDuplicates BankStatementUploadDuplicate[]
 
   @@index([eventCampaignId], map: "idx_bank_transaction_event_campaign")
+  @@index([eventCodeChildId], map: "idx_bank_transaction_event_code_child")
   @@index([manualAddedById], map: "idx_bank_transaction_manual_added_by")
   @@index([reconciliationExcludedAt], map: "idx_bank_transaction_reconciliation_excluded")
   @@index([reconciliationExcludedById], map: "idx_bank_transaction_excluded_by")
@@ -827,8 +863,10 @@ model ReconciliationCorrectionItem {
   action                String    @db.VarChar(20)
   bankTransactionId     String?   @map("bank_transaction_id") @db.Char(36)
   beforeEventCodeId     String?   @map("before_event_code_id") @db.Char(36)
+  beforeEventCodeChildId String?  @map("before_event_code_child_id") @db.Char(36)
   beforeEventCampaignId String?   @map("before_event_campaign_id") @db.Char(36)
   proposedEventCodeId   String?   @map("proposed_event_code_id") @db.Char(36)
+  proposedEventCodeChildId String? @map("proposed_event_code_child_id") @db.Char(36)
   proposedEventCampaignId String? @map("proposed_event_campaign_id") @db.Char(36)
   beforeRemark          String?   @map("before_remark") @db.VarChar(1000)
   proposedRemark        String?   @map("proposed_remark") @db.VarChar(1000)
@@ -843,6 +881,8 @@ model ReconciliationCorrectionItem {
   bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_transaction")
   beforeEventCode   EventCode? @relation("CorrectionBeforeEventCode", fields: [beforeEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event")
   proposedEventCode EventCode? @relation("CorrectionProposedEventCode", fields: [proposedEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event")
+  beforeEventCodeChild EventCodeChild? @relation("CorrectionBeforeEventCodeChild", fields: [beforeEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event_child")
+  proposedEventCodeChild EventCodeChild? @relation("CorrectionProposedEventCodeChild", fields: [proposedEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event_child")
   beforeEventCampaign EventCampaign? @relation("CorrectionBeforeEventCampaign", fields: [beforeEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_campaign")
   proposedEventCampaign EventCampaign? @relation("CorrectionProposedEventCampaign", fields: [proposedEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_campaign")
 
@@ -850,6 +890,8 @@ model ReconciliationCorrectionItem {
   @@index([bankTransactionId], map: "idx_correction_item_transaction")
   @@index([beforeEventCodeId], map: "idx_correction_item_before_event")
   @@index([proposedEventCodeId], map: "idx_correction_item_proposed_event")
+  @@index([beforeEventCodeChildId], map: "idx_correction_item_before_event_child")
+  @@index([proposedEventCodeChildId], map: "idx_correction_item_proposed_event_child")
   @@index([beforeEventCampaignId], map: "idx_correction_item_before_campaign")
   @@index([proposedEventCampaignId], map: "idx_correction_item_proposed_campaign")
   @@map("arya_reconciliation_correction_item")

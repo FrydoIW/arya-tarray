@@ -59,6 +59,15 @@ export type EditIncomeEventCode = {
 
 export type EditIncomeCampaign = { id: string; eventCodeId: string; campaignName: string; startDate: string | null; endDate: string | null; activeFlag: boolean };
 
+export type EditIncomeEventCodeChild = {
+  id: string;
+  eventCodeId: string;
+  childCode: string;
+  childName: string;
+  displayOrder: number;
+  activeFlag: boolean;
+};
+
 export type EditIncomeTransaction = {
   id: string;
   rowNo: number;
@@ -71,6 +80,7 @@ export type EditIncomeTransaction = {
   suffixCode: string | null;
   suggestedEventCodeId: string | null;
   eventCodeId: string | null;
+  eventCodeChildId: string | null;
   eventCampaignId: string | null;
   baseAmount: string | null;
   sponsorship?: TimeBasedPaymentPreview | null;
@@ -88,6 +98,7 @@ export type EditIncomeDetail = {
     finalizedBy: { id: string; fullName: string } | null;
   };
   eventCodes: EditIncomeEventCode[];
+  eventCodeChildren: EditIncomeEventCodeChild[];
   campaigns: EditIncomeCampaign[];
   transactions: EditIncomeTransaction[];
   approvalHistory: Array<{
@@ -100,7 +111,7 @@ export type EditIncomeDetail = {
 };
 
 export type EditIncomeCorrectionRequest =
-  | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCampaignId: string | null; remark: string | null }
+  | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCodeChildId: string | null; eventCampaignId: string | null; remark: string | null }
   | { action: "EXCLUDED"; transactionId: string; reason: string }
   | {
       action: "ADDED";
@@ -110,6 +121,7 @@ export type EditIncomeCorrectionRequest =
       description: string;
       amount: string;
       eventCodeId: string | null;
+      eventCodeChildId: string | null;
       eventCampaignId: string | null;
       remark: string | null;
       reason: string;
@@ -121,6 +133,7 @@ export type ManualAdjustmentInput = {
   description: string;
   amount: string;
   eventCodeId: string | null;
+  eventCodeChildId: string | null;
   eventCampaignId: string | null;
   remark: string | null;
   reason: string;

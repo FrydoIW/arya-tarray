@@ -47,6 +47,14 @@ export function TransactionPreview({ items, totalTransactions }: TransactionPrev
         : "—"
     },
     {
+      key: "eventCodeChild",
+      header: "Child",
+      minWidth: "150px",
+      render: (row) => row.eventCodeChild
+        ? <div className={styles.eventCell}><strong>{row.eventCodeChild.childName}</strong><small>{row.eventCodeChild.childCode}</small></div>
+        : "—"
+    },
+    {
       key: "campaign",
       header: "Campaign",
       minWidth: "180px",
@@ -87,7 +95,7 @@ export function TransactionPreview({ items, totalTransactions }: TransactionPrev
           title: "No transactions available",
           description: "This statement does not currently have transaction rows to preview."
         }}
-        minWidth="1120px"
+        minWidth="1270px"
       />
     </section>
   );

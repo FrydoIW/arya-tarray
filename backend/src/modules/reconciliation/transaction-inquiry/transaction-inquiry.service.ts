@@ -7,7 +7,9 @@ import {
   loadReportGeneratedBy,
   loadTransactionInquiryEventOption,
   loadTransactionInquiryCampaignOption,
+  loadTransactionInquiryChildOption,
   loadCampaignLabels,
+  loadChildLabels,
   loadTransactionInquiryMemberOption,
   loadTransactionInquiryMemberOptions,
   loadTransactionInquiryDetailRecord,
@@ -23,7 +25,7 @@ import { resolveTimeBasedUnits } from "../time-based-classification.js";
 
 const REPORT_LIMIT = 20000;
 
-type TransactionInquiryFilterQuery = Pick<TransactionInquiryWorkspaceQuery, "periodMode" | "month" | "date" | "search" | "status" | "bankAccountId" | "finalEventId" | "eventCampaignId" | "memberId" | "memberLinkStatus">;
+type TransactionInquiryFilterQuery = Pick<TransactionInquiryWorkspaceQuery, "periodMode" | "month" | "date" | "search" | "status" | "bankAccountId" | "finalEventId" | "eventCodeChildId" | "eventCampaignId" | "memberId" | "memberLinkStatus">;
 
 function filterFromQuery(input: TransactionInquiryFilterQuery): TransactionInquiryFilter & { periodMode: "MONTH" | "DAY"; month: string; date: string } {
   const periodMode = input.periodMode ?? "MONTH";
@@ -40,6 +42,7 @@ function filterFromQuery(input: TransactionInquiryFilterQuery): TransactionInqui
     status: input.status ?? "ALL",
     bankAccountId: input.bankAccountId,
     finalEventId: input.finalEventId,
+    eventCodeChildId: input.eventCodeChildId,
     eventCampaignId: input.eventCampaignId,
     memberId: input.memberId,
     memberLinkStatus: input.memberLinkStatus ?? "ALL"
@@ -115,6 +118,14 @@ function mapTransaction(item: Awaited<ReturnType<typeof loadTransactionInquiryWo
     manualAddedAt: item.manualAddedAt,
     suggestedEvent: item.suggestedEventCode,
     finalEvent: item.eventCode,
+    eventCodeChild: item.eventCodeChild
+      ? {
+          id: item.eventCodeChild.id,
+          childCode: item.eventCodeChild.childCode,
+          childName: item.eventCodeChild.childName,
+          activeFlag: item.eventCodeChild.activeFlag
+        }
+      : null,
     eventCampaign: item.eventCampaign,
     memberIdentity: item.memberIdentity ? {
       id: item.memberIdentity.id,
@@ -144,6 +155,7 @@ export async function getTransactionInquiryWorkspace(input: TransactionInquiryWo
       status: filter.status,
       bankAccountId: filter.bankAccountId ?? null,
       finalEventId: filter.finalEventId ?? null,
+      eventCodeChildId: filter.eventCodeChildId ?? null,
       eventCampaignId: filter.eventCampaignId ?? null,
       memberId: filter.memberId ?? null,
       memberLinkStatus: filter.memberLinkStatus
@@ -158,6 +170,7 @@ export async function getTransactionInquiryWorkspace(input: TransactionInquiryWo
     },
     bankAccounts: records.bankAccounts,
     eventOptions: records.eventOptions,
+    eventCodeChildOptions: records.eventCodeChildOptions,
     campaignOptions: records.campaignOptions,
     transactions: records.transactions.map(mapTransaction),
     pagination: {
@@ -178,6 +191,8 @@ export async function getTransactionInquiryDetail(transactionId: string) {
   const eventLabels = new Map(eventCodes.map((item) => [item.id, `${item.code} - ${item.eventName}`]));
   const campaignIds = [...new Set(transaction.history.filter((item) => item.fieldName === "event_campaign_id").flatMap((item) => [item.oldValue, item.newValue]).filter((value): value is string => Boolean(value)))];
   const campaignLabels = new Map((await loadCampaignLabels(campaignIds)).map((item) => [item.id, item.campaignName]));
+  const childIds = [...new Set(transaction.history.filter((item) => item.fieldName === "event_code_child_id").flatMap((item) => [item.oldValue, item.newValue]).filter((value): value is string => Boolean(value)))];
+  const childLabels = new Map((await loadChildLabels(childIds)).map((item) => [item.id, `${item.childCode} - ${item.childName}`]));
   const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
   let sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; principalAmount: string; paymentCredited: string | null; paymentOnlyRemainder: string; carryBalanceAfterPayment: string | null; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: Date | null; coverageTo: Date | null } | null } | null = null;
   const relevantPayments = transaction.memberEventBalanceLedger.filter(row => row.subscription.memberId === member?.id
@@ -260,6 +275,14 @@ export async function getTransactionInquiryDetail(transactionId: string) {
       reconciliationExclusionReason: transaction.reconciliationExclusionReason,
       suggestedEvent: transaction.suggestedEventCode,
       finalEvent: transaction.eventCode,
+      eventCodeChild: transaction.eventCodeChild
+        ? {
+            id: transaction.eventCodeChild.id,
+            childCode: transaction.eventCodeChild.childCode,
+            childName: transaction.eventCodeChild.childName,
+            activeFlag: transaction.eventCodeChild.activeFlag
+          }
+        : null,
       eventCampaign: transaction.eventCampaign,
       memberIdentity: transaction.memberIdentity ? {
         id: transaction.memberIdentity.id,
@@ -280,8 +303,8 @@ export async function getTransactionInquiryDetail(transactionId: string) {
       fieldName: item.fieldName,
       oldValue: item.oldValue,
       newValue: item.newValue,
-      oldValueLabel: item.oldValue ? (item.fieldName === "event_code_id" ? eventLabels.get(item.oldValue) : item.fieldName === "event_campaign_id" ? campaignLabels.get(item.oldValue) : null) ?? item.oldValue : item.oldValue,
-      newValueLabel: item.newValue ? (item.fieldName === "event_code_id" ? eventLabels.get(item.newValue) : item.fieldName === "event_campaign_id" ? campaignLabels.get(item.newValue) : null) ?? item.newValue : item.newValue,
+      oldValueLabel: item.oldValue ? (item.fieldName === "event_code_id" ? eventLabels.get(item.oldValue) : item.fieldName === "event_code_child_id" ? childLabels.get(item.oldValue) : item.fieldName === "event_campaign_id" ? campaignLabels.get(item.oldValue) : null) ?? item.oldValue : item.oldValue,
+      newValueLabel: item.newValue ? (item.fieldName === "event_code_id" ? eventLabels.get(item.newValue) : item.fieldName === "event_code_child_id" ? childLabels.get(item.newValue) : item.fieldName === "event_campaign_id" ? campaignLabels.get(item.newValue) : null) ?? item.newValue : item.newValue,
       remark: item.remark,
       changedAt: item.changedAt,
       changedBy: item.changedBy
@@ -291,10 +314,11 @@ export async function getTransactionInquiryDetail(transactionId: string) {
 
 export async function generateTransactionInquiryReport(input: TransactionInquiryReportQuery, userId: string) {
   const filter = filterFromQuery(input);
-  const [records, generatedBy, selectedEvent, selectedCampaign, selectedMember] = await Promise.all([
+  const [records, generatedBy, selectedEvent, selectedChild, selectedCampaign, selectedMember] = await Promise.all([
     loadTransactionInquiryReportRecords({ filter, limit: REPORT_LIMIT }),
     loadReportGeneratedBy(userId),
     filter.finalEventId ? loadTransactionInquiryEventOption(filter.finalEventId) : Promise.resolve(null),
+    filter.eventCodeChildId ? loadTransactionInquiryChildOption(filter.eventCodeChildId) : Promise.resolve(null),
     filter.eventCampaignId ? loadTransactionInquiryCampaignOption(filter.eventCampaignId) : Promise.resolve(null),
     filter.memberId ? loadTransactionInquiryMemberOption(filter.memberId) : Promise.resolve(null)
   ]);
@@ -359,6 +383,7 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
     bankAccountLabel: bankLabel,
     statusLabel: filter.status === "ALL" ? "All Status" : statusLabel(filter.status),
     finalEventLabel: selectedEvent ? `${selectedEvent.code} - ${selectedEvent.eventName}` : "All Final Events",
+    childLabel: selectedChild ? `${selectedChild.childCode} - ${selectedChild.childName}` : (filter.eventCodeChildId ? "Selected Child" : "All Children"),
     campaignLabel: selectedCampaign?.campaignName ?? (filter.eventCampaignId ? "Selected Campaign" : "All Campaigns"),
     memberLabel: selectedMember
       ? `${selectedMember.memberCode} - ${selectedMember.memberName}${selectedMember.activeFlag ? "" : " (Inactive)"}`
@@ -379,6 +404,9 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
     classifications: classificationRows,
     transactions: records.transactions.map((transaction) => {
       const member = resolveCanonicalTransactionMember(transaction.memberIdentity);
+      const child = transaction.eventCodeChild
+        ? `${transaction.eventCodeChild.childCode} - ${transaction.eventCodeChild.childName}`
+        : null;
       return {
         date: formatDate(transaction.transactionDate),
         description: `${transaction.sourceType === "MANUAL" ? "[MANUAL] " : ""}${transaction.description ?? transaction.senderName ?? "-"}`,
@@ -387,7 +415,7 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
         amount: formatIdr(absDecimal(transaction.originalAmount)),
         finalEvent: decimalToCents(transaction.originalAmount) < 0n
           ? "Outgoing"
-          : transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}` : "N/A",
+          : transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}${child ? ` / ${child}` : ""}` : "N/A",
         campaign: transaction.eventCampaign?.campaignName ?? "—",
         member: member ? `${member.memberCode} - ${member.memberName}${member.activeFlag ? "" : " (Inactive)"}` : "Belum Terhubung",
         status: statusLabel(transaction.status)

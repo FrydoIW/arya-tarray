@@ -10,6 +10,7 @@ export type MemberRow = {
   identityCount: number; registeredAt: string; lifetimeDonation: string; lifetimeTransactions: number;
 };
 export type EventOption = { id: string; code: string; eventName: string; category: string | null; activeFlag: boolean };
+export type EventChildOption = { id: string; eventCodeId: string; childCode: string; childName: string; displayOrder: number; activeFlag: boolean };
 export type MemberWorkspace = {
   summary: { total: number; active: number; inactive: number; manual: number; statement: number };
   filters: { cities: string[] }; rows: MemberRow[];
@@ -36,21 +37,23 @@ export type MemberDetail = Omit<MemberRow, "identityCount" | "lifetimeDonation" 
 export type Actor = { id: string; fullName: string };
 export type IdentityOption = Omit<Identity, "normalizedName" | "verificationStatus" | "verifiedAt" | "remark">;
 export type MemberOption = { memberId: string; memberCode: string; memberName: string; initialName: string | null; city: string | null; activeFlag: boolean };
-export type DonationQuery = { periodMode: PeriodMode; month: string; date: string; eventCodeId: string; search: string; page: number; pageSize: number };
+export type DonationQuery = { periodMode: PeriodMode; month: string; date: string; eventCodeId: string; eventCodeChildId: string; search: string; page: number; pageSize: number };
 export type DonationRow = {
   transactionId: string; transactionDate: string | null; sourceType: string; correctionReason: string | null;
   manualAddedAt: string | null; manualAddedBy: Actor | null;
   identity: { memberIdentityId: string; accountName: string; initialName: string | null; sourceType: string } | null;
   referenceNo: string | null; description: string | null; amount: string;
   finalEvent: { eventCodeId: string; eventCode: string; eventName: string; category: string } | null;
+  eventCodeChild: { eventCodeChildId: string; childCode: string; childName: string; activeFlag: boolean } | null;
   statement: { statementId: string; fileName: string };
 };
 export type DonationWorkspace = {
   member: { memberId: string; memberCode: string; memberName: string };
-  filters: { periodMode: PeriodMode; month: string; date: string; eventCodeId: string | null; search: string };
+  filters: { periodMode: PeriodMode; month: string; date: string; eventCodeId: string | null; eventCodeChildId: string | null; search: string };
   summary: { lifetimeAmount: string; lifetimeTransactionCount: number; periodAmount: string; periodTransactionCount: number };
-  rows: DonationRow[]; eventOptions: EventOption[];
+  rows: DonationRow[]; eventOptions: EventOption[]; childOptions: EventChildOption[];
   eventBreakdown: Array<{ eventCodeId: string; eventCode: string; eventName: string; category: string; transactionCount: number; amount: string }>;
+  childBreakdown: Array<{ eventCodeChildId: string; childCode: string; childName: string; eventCodeId: string; transactionCount: number; amount: string }>;
   categoryBreakdown: Array<{ category: string; transactionCount: number; eventCount: number; amount: string }>;
   pagination: { page: number; pageSize: number; totalRows: number; totalPages: number };
 };

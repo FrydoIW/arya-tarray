@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
 import { compatibleHistoricalTimePreview, paymentOnlyTimePreview } from "@/lib/time-based-preview";
 import type { CorrectionDirectionFilter, CorrectionRowStatus, CorrectionRowStatusFilter, EditIncomeDetail, EditIncomeMode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
-import { getCorrectionRowStatus, getEventCode, getEventCodeLabel } from "../utils/edit-income.utils";
+import { getChildLabel, getCorrectionRowStatus, getEventCode, getEventCodeLabel } from "../utils/edit-income.utils";
 import { AddAdjustmentModal, ExcludeTransactionModal } from "./CorrectionModals";
 import styles from "../styles/edit-income.module.css";
 
@@ -40,7 +40,7 @@ type Props = {
   onBack: () => void;
   onEditMode: () => void;
   onInquiryMode: () => void;
-  onTransactionChange: (transactionId: string, field: "eventCodeId" | "eventCampaignId" | "remark", value: string | null) => void;
+  onTransactionChange: (transactionId: string, field: "eventCodeId" | "eventCodeChildId" | "eventCampaignId" | "remark", value: string | null) => void;
   onAddAdjustment: (input: ManualAdjustmentInput) => void;
   onExclude: (transactionId: string, reason: string) => void;
   onRestore: (transactionId: string) => void;
@@ -122,6 +122,24 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       }
     },
     {
+      key: "eventCodeChildId", header: "Child", minWidth: "170px",
+      editable: (row) => props.canEdit && row.requiresClassification && Boolean(row.eventCodeId) && row.correctionAction !== "EXCLUDED" && !row.reconciliationExcludedAt,
+      getValue: (row) => row.eventCodeChildId ?? "",
+      renderEditor: ({ row, value, onChange }) => {
+        const originalChildId = props.originalById.get(row.id)?.eventCodeChildId ?? null;
+        const eligible = detail.eventCodeChildren.filter((child) => child.eventCodeId === row.eventCodeId && (child.activeFlag || child.id === originalChildId || child.id === row.eventCodeChildId));
+        if (eligible.length === 0) return <span className={styles.notApplicableText}>—</span>;
+        return <Select className={styles.eventSelect} value={String(value ?? "")} disabled={!props.canEdit || props.busy} onChange={(event) => onChange(event.target.value || null)} aria-label={`Child row ${row.rowNo || "manual"}`}><option value="">Select Child...</option>{eligible.map((child) => <option value={child.id} key={child.id}>{child.childCode} - {child.childName}{!child.activeFlag ? " (historical)" : ""}</option>)}</Select>;
+      },
+      render: (row) => {
+        if (!row.requiresClassification || !row.eventCodeId) return <span className={styles.notApplicableText}>—</span>;
+        const parentChildren = detail.eventCodeChildren.filter((child) => child.eventCodeId === row.eventCodeId);
+        if (parentChildren.length === 0) return <span className={styles.notApplicableText}>—</span>;
+        const current = detail.eventCodeChildren.find((child) => child.id === row.eventCodeChildId) ?? null;
+        return <span className={current ? styles.finalEvent : styles.noMatch}>{getChildLabel(current) ?? "Select Child..."}</span>;
+      }
+    },
+    {
       key: "program", header: "Program", minWidth: "220px",
       render: (row) => {
         const event = getEventCode(detail.eventCodes, row.eventCodeId);
@@ -156,7 +174,7 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
       if (row.correctionAction || row.reconciliationExcludedAt) return <IconButton label={row.correctionAction === "ADDED" ? "Remove staged adjustment" : "Undo staged exclusion"} icon={<Undo2 size={14} />} disabled={props.busy || Boolean(row.reconciliationExcludedAt)} onClick={() => props.onRestore(row.id)} />;
       return <IconButton label="Exclude from reconciliation" icon={<ShieldMinus size={14} />} variant="danger" disabled={props.busy} onClick={() => setExcludeTarget(row)} />;
     } }
-  ], [detail.eventCodes, detail.campaigns, props.busy, props.canEdit, props.onRestore, props.originalById, props.onTransactionChange]);
+  ], [detail.eventCodes, detail.eventCodeChildren, detail.campaigns, props.busy, props.canEdit, props.onRestore, props.originalById, props.onTransactionChange]);
 
   return (
     <section className={styles.correctionPanel}>
@@ -171,9 +189,9 @@ export function EditIncomeCorrectionWorkspace(props: Props) {
 
       <div className={styles.correctionFilters}><SearchInput value={props.search} disabled={props.loading} placeholder="Search description or reference" onChange={(event) => props.onSearchChange(event.target.value)} /><Select value={props.statusFilter} disabled={props.loading} onChange={(event) => props.onStatusFilterChange(event.target.value as CorrectionRowStatusFilter)} aria-label="Correction status"><option value="ALL">All Status</option><option value="CURRENT">Current</option><option value="MODIFIED">Modified</option><option value="ADDED">Added</option><option value="EXCLUDED">Excluded</option></Select><Select value={props.eventCodeFilter} disabled={props.loading} onChange={(event) => props.onEventCodeFilterChange(event.target.value)} aria-label="Final Event filter"><option value="ALL">All Event Codes</option>{detail.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</Select><Select value={props.directionFilter} disabled={props.loading} onChange={(event) => props.onDirectionFilterChange(event.target.value as CorrectionDirectionFilter)} aria-label="Direction filter"><option value="ALL">All Direction</option><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></Select><Button type="button" variant="secondary" size="sm" icon={<RotateCw size={14} className={props.loading ? "spin" : ""} />} disabled={props.loading || props.busy} onClick={props.onReload}>Reload</Button></div>
 
-      <DataTable rows={props.rows} columns={columns} rowKey={(row) => row.id} loading={props.loading} disabled={!props.canEdit || props.busy} minWidth="1520px" onCellChange={(row, columnKey, value) => { if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null); if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? "")); }} emptyState={{ title: "No transactions", description: "Try another transaction search or filter." }} pagination={{ page: props.page, pageSize: props.pageSize, total: props.rows.length, pageSizeOptions: [10, 25, 50], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }} />
+      <DataTable rows={props.rows} columns={columns} rowKey={(row) => row.id} loading={props.loading} disabled={!props.canEdit || props.busy} minWidth="1700px" onCellChange={(row, columnKey, value) => { if (columnKey === "eventCodeId") props.onTransactionChange(row.id, "eventCodeId", value ? String(value) : null); if (columnKey === "eventCodeChildId") props.onTransactionChange(row.id, "eventCodeChildId", value ? String(value) : null); if (columnKey === "remark") props.onTransactionChange(row.id, "remark", String(value ?? "")); }} emptyState={{ title: "No transactions", description: "Try another transaction search or filter." }} pagination={{ page: props.page, pageSize: props.pageSize, total: props.rows.length, pageSizeOptions: [10, 25, 50], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }} />
 
-      <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes.filter((eventCode) => eventCode.activeFlag && eventCode.eventType !== "TIME_BASED")} campaigns={detail.campaigns} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
+      <AddAdjustmentModal open={addOpen} defaultDate={(detail.statement.periodTo ?? detail.statement.periodFrom ?? "").slice(0, 10)} eventCodes={detail.eventCodes.filter((eventCode) => eventCode.activeFlag && eventCode.eventType !== "TIME_BASED")} eventCodeChildren={detail.eventCodeChildren} campaigns={detail.campaigns} disabled={props.busy} onClose={() => setAddOpen(false)} onSubmit={props.onAddAdjustment} />
       <ExcludeTransactionModal transaction={excludeTarget} disabled={props.busy} onClose={() => setExcludeTarget(null)} onSubmit={props.onExclude} />
     </section>
   );

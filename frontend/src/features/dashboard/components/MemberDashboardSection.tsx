@@ -111,8 +111,19 @@ export function MemberDashboardSection({ data, loading, periodLabel, canViewMemb
                   <summary><strong>{group.category}</strong><span>{group.memberCount.toLocaleString("id-ID")} Members · {group.transactionCount.toLocaleString("id-ID")} tx</span><em>{formatMoney(group.amount)}</em></summary>
                   <div>
                     {group.events.map(event => (
-                      <div className="dashboard-member-event-row" key={event.eventCodeId}>
-                        <strong>{event.eventCode}</strong><span>{event.eventName}</span><small>{event.memberCount.toLocaleString("id-ID")} Members · {event.transactionCount.toLocaleString("id-ID")} tx</small><em>{formatMoney(event.amount)}</em>
+                      <div className="dashboard-member-event-block" key={event.eventCodeId}>
+                        <div className="dashboard-member-event-row">
+                          <strong>{event.eventCode}</strong><span>{event.eventName}</span><small>{event.memberCount.toLocaleString("id-ID")} Members · {event.transactionCount.toLocaleString("id-ID")} tx</small><em>{formatMoney(event.amount)}</em>
+                        </div>
+                        {event.children.length > 0 ? (
+                          <div className="dashboard-child-rows">
+                            {event.children.map(child => (
+                              <div className="dashboard-child-row" key={`${event.eventCodeId}-${child.childCode}`}>
+                                <strong>{child.childCode}</strong><span>{child.childName}</span><small>{child.memberCount.toLocaleString("id-ID")} Members · {child.transactionCount.toLocaleString("id-ID")} tx</small><em>{formatMoney(child.amount)}</em>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>

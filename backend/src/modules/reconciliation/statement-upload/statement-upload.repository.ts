@@ -10,6 +10,14 @@ import { canonicalDuplicateSignature, matchDuplicateTransactions, signedAmountCe
 import { centsToDecimalString } from "./statement-upload.classifier.js";
 import { assertCampaignClassification, selectSingleEligibleCampaign } from "../campaign-classification.js";
 import { resolveTimeBasedUnits } from "../time-based-classification.js";
+import {
+  assertChildClassification,
+  selectSingleEligibleChild,
+  storedChildAttentionReason,
+  storedChildNeedsAttention,
+  type ChildOption,
+  type ChildParent
+} from "../event-child-classification.js";
 
 const bankAccountSelect = {
   id: true,
@@ -30,6 +38,15 @@ const eventCodeSelect = {
   timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } }
 } as const;
 
+const eventCodeChildSelect = {
+  id: true,
+  eventCodeId: true,
+  childCode: true,
+  childName: true,
+  activeFlag: true,
+  displayOrder: true
+} as const;
+
 const statementInclude = {
   bankAccount: { select: bankAccountSelect },
   uploadedBy: { select: { id: true, fullName: true } },
@@ -46,6 +63,7 @@ const statementInclude = {
     include: {
       suggestedEventCode: { select: eventCodeSelect },
       eventCode: { select: eventCodeSelect },
+      eventCodeChild: { select: eventCodeChildSelect },
       eventCampaign: { select: { id: true, campaignName: true } }
     },
     orderBy: [{ rowNo: "asc" as const }, { createdAt: "asc" as const }]
@@ -71,8 +89,10 @@ export function loadRawStatementsForSummary() {
           transactionType: true,
           originalAmount: true,
           eventCodeId: true,
+          eventCodeChildId: true,
           eventCampaignId: true,
-          eventCode: { select: { eventType: true } }
+          eventCode: { select: { eventType: true } },
+          eventCodeChild: { select: { id: true, activeFlag: true, eventCodeId: true } }
         }
       }
     },
@@ -91,7 +111,7 @@ export function buildOverlapCandidateWhere(current: { id: string; bankAccountId:
 }
 
 export async function loadStatementUploadWorkspaceRecords(statementId?: string) {
-  const [bankAccounts, activeEventCodes, campaigns, rawStatements, currentStatement] = await Promise.all([
+  const [bankAccounts, activeEventCodes, campaigns, eventCodeChildren, rawStatements, currentStatement] = await Promise.all([
     prisma.bankAccount.findMany({
       where: { activeFlag: true },
       select: bankAccountSelect,
@@ -109,6 +129,14 @@ export async function loadStatementUploadWorkspaceRecords(statementId?: string) 
       ] },
       select: { id: true, eventCodeId: true, campaignName: true, startDate: true, endDate: true, activeFlag: true },
       orderBy: [{ startDate: "desc" }, { campaignName: "asc" }]
+    }),
+    prisma.eventCodeChild.findMany({
+      where: { OR: [
+        { activeFlag: true, eventCode: { activeFlag: true } },
+        ...(statementId ? [{ transactions: { some: { statementUploadId: statementId } } }] : [])
+      ] },
+      select: eventCodeChildSelect,
+      orderBy: [{ displayOrder: "asc" }, { childCode: "asc" }, { childName: "asc" }]
     }),
     loadRawStatementsForSummary(),
     statementId
@@ -129,7 +157,15 @@ export async function loadStatementUploadWorkspaceRecords(statementId?: string) 
       })
     : [];
 
-  return { bankAccounts, activeEventCodes, campaigns, rawStatements, currentStatement, overlappingStatements };
+  return { bankAccounts, activeEventCodes, campaigns, eventCodeChildren, rawStatements, currentStatement, overlappingStatements };
+}
+
+export function loadChildrenForParents(parentIds: string[]): Promise<ChildOption[]> {
+  if (parentIds.length === 0) return Promise.resolve([]);
+  return prisma.eventCodeChild.findMany({
+    where: { eventCodeId: { in: parentIds } },
+    select: eventCodeChildSelect
+  });
 }
 
 export function findActiveBankAccount(bankAccountId: string) {
@@ -292,6 +328,16 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
             select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true }
           }) : [];
           const classifiedEventCodeById = new Map(classifiedEventCodes.map((eventCode) => [eventCode.id, eventCode]));
+          const childRecords = classifiedEventCodeIds.length ? await tx.eventCodeChild.findMany({
+            where: { eventCodeId: { in: classifiedEventCodeIds } },
+            select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true }
+          }) : [];
+          const childrenByParent = new Map<string, typeof childRecords>();
+          for (const child of childRecords) {
+            const group = childrenByParent.get(child.eventCodeId) ?? [];
+            group.push(child);
+            childrenByParent.set(child.eventCodeId, group);
+          }
 
           await tx.bankTransaction.createMany({
             data: newRows.map((transaction) => ({
@@ -306,6 +352,10 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
               suffixCode: transaction.suffixCode,
               suggestedEventCodeId: transaction.suggestedEventCodeId,
               eventCodeId: transaction.eventCodeId,
+              eventCodeChildId: selectSingleEligibleChild(
+                transaction.eventCodeId ? classifiedEventCodeById.get(transaction.eventCodeId) ?? null : null,
+                transaction.eventCodeId ? childrenByParent.get(transaction.eventCodeId) ?? [] : []
+              ),
               eventCampaignId: selectSingleEligibleCampaign({
                 eventCode: transaction.eventCodeId ? classifiedEventCodeById.get(transaction.eventCodeId) ?? null : null,
                 campaigns,
@@ -395,6 +445,7 @@ export async function updateTransactionFinalEventAtomic(input: {
   statementId: string;
   transactionId: string;
   eventCodeId: string | null;
+  eventCodeChildId?: string | null;
   eventCampaignId?: string | null;
   remark?: string;
   userId: string;
@@ -406,6 +457,7 @@ export async function updateTransactionFinalEventAtomic(input: {
         statementUpload: { select: { id: true, status: true } },
         suggestedEventCode: { select: eventCodeSelect },
         eventCode: { select: eventCodeSelect },
+        eventCodeChild: { select: eventCodeChildSelect },
         eventCampaign: { select: { id: true, campaignName: true } }
       }
     });
@@ -418,12 +470,29 @@ export async function updateTransactionFinalEventAtomic(input: {
       throw new HttpError(400, "Final Event is not applicable to this bank transaction.");
     }
 
+    let effectiveChildId: string | null = null;
     if (input.eventCodeId) {
       const eventCode = await tx.eventCode.findFirst({
         where: { id: input.eventCodeId, activeFlag: true },
         select: { id: true, eventType: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } }
       });
       if (!eventCode) throw new HttpError(400, "The selected Final Event is inactive or no longer available.");
+      const children = await tx.eventCodeChild.findMany({
+        where: { eventCodeId: eventCode.id },
+        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true }
+      });
+      const childId = input.eventCodeChildId ?? null;
+      const child = childId ? children.find((item) => item.id === childId) ?? null : null;
+      assertChildClassification({
+        eventCode,
+        childId,
+        child,
+        children,
+        requiresClassification: storedTransactionRequiresClassification(current),
+        requireComplete: false,
+        historicalChildId: current.eventCodeId === input.eventCodeId ? current.eventCodeChildId : null
+      });
+      effectiveChildId = childId ?? selectSingleEligibleChild(eventCode, children);
       const campaign = input.eventCampaignId ? await tx.eventCampaign.findUnique({
         where: { id: input.eventCampaignId },
         select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true }
@@ -438,12 +507,18 @@ export async function updateTransactionFinalEventAtomic(input: {
         historicalCampaignId: current.eventCodeId === input.eventCodeId ? current.eventCampaignId : null
       });
       resolveTimeBasedUnits({ eventCode, rule: eventCode.timeRule, transaction: current, requiresClassification: storedTransactionRequiresClassification(current) });
-    } else if (input.eventCampaignId) {
-      throw new HttpError(400, "Campaign requires a Final Event");
+    } else {
+      if (input.eventCodeChildId) {
+        throw new HttpError(400, "Child requires a Final Event");
+      }
+      if (input.eventCampaignId) {
+        throw new HttpError(400, "Campaign requires a Final Event");
+      }
     }
 
     const remarkUpdate = resolveRemarkUpdate(current.remark, input.remark);
     if (current.eventCodeId === input.eventCodeId
+      && current.eventCodeChildId === effectiveChildId
       && current.eventCampaignId === (input.eventCampaignId ?? null)
       && !remarkUpdate.changed) return current;
 
@@ -451,6 +526,7 @@ export async function updateTransactionFinalEventAtomic(input: {
       where: { id: current.id },
       data: {
         eventCodeId: input.eventCodeId,
+        eventCodeChildId: effectiveChildId,
         eventCampaignId: input.eventCampaignId ?? null,
         remark: remarkUpdate.next
       },
@@ -458,6 +534,7 @@ export async function updateTransactionFinalEventAtomic(input: {
         statementUpload: { select: { id: true, status: true } },
         suggestedEventCode: { select: eventCodeSelect },
         eventCode: { select: eventCodeSelect },
+        eventCodeChild: { select: eventCodeChildSelect },
         eventCampaign: { select: { id: true, campaignName: true } }
       }
     });
@@ -468,6 +545,16 @@ export async function updateTransactionFinalEventAtomic(input: {
         fieldName: "event_code_id",
         oldValue: current.eventCodeId,
         newValue: input.eventCodeId,
+        remark: input.remark ?? null,
+        changedById: input.userId
+      }
+    });
+    if (current.eventCodeChildId !== effectiveChildId) await tx.bankTransactionHistory.create({
+      data: {
+        bankTransactionId: current.id,
+        fieldName: "event_code_child_id",
+        oldValue: current.eventCodeChildId,
+        newValue: effectiveChildId,
         remark: input.remark ?? null,
         changedById: input.userId
       }
@@ -515,8 +602,10 @@ export async function executeStatementAtomic(input: { statementId: string; userI
             originalAmount: true,
             baseAmount: true,
             eventCodeId: true,
+            eventCodeChildId: true,
             eventCampaignId: true,
             eventCode: { select: { id: true, eventType: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
+            eventCodeChild: { select: { id: true, eventCodeId: true, activeFlag: true } },
             eventCampaign: { select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } },
             transactionDate: true
           }
@@ -547,6 +636,45 @@ export async function executeStatementAtomic(input: { statementId: string; userI
       throw new HttpError(
         400,
         `${unresolvedCount} transaction${unresolvedCount === 1 ? "" : "s"} still require Final Event classification.`
+      );
+    }
+
+    const childParentIds = [...new Set(statement.transactions.map((transaction) => transaction.eventCodeId).filter((value): value is string => Boolean(value)))];
+    const childRecords = childParentIds.length
+      ? await tx.eventCodeChild.findMany({
+          where: { eventCodeId: { in: childParentIds } },
+          select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true }
+        })
+      : [];
+    const childrenByParent = new Map<string, ChildOption[]>();
+    for (const child of childRecords) {
+      const group = childrenByParent.get(child.eventCodeId) ?? [];
+      group.push(child);
+      childrenByParent.set(child.eventCodeId, group);
+    }
+
+    const childBlocked = statement.transactions.filter((transaction) => {
+      if (!storedTransactionRequiresClassification(transaction) || !transaction.eventCodeId) return false;
+      return storedChildNeedsAttention({
+        requiresClassification: true,
+        eventCodeId: transaction.eventCodeId,
+        childId: transaction.eventCodeChildId,
+        child: transaction.eventCodeChild,
+        children: childrenByParent.get(transaction.eventCodeId) ?? []
+      });
+    });
+
+    if (childBlocked.length > 0) {
+      const firstReason = storedChildAttentionReason({
+        requiresClassification: true,
+        eventCodeId: childBlocked[0].eventCodeId,
+        childId: childBlocked[0].eventCodeChildId,
+        child: childBlocked[0].eventCodeChild,
+        children: childrenByParent.get(childBlocked[0].eventCodeId!) ?? []
+      });
+      throw new HttpError(
+        400,
+        `${childBlocked.length} transaction${childBlocked.length === 1 ? "" : "s"} require a valid Child selection before Execute. First issue: ${firstReason ?? "invalid Child state"}. Reopen the draft review.`
       );
     }
 

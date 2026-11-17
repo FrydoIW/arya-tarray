@@ -73,11 +73,21 @@ export async function loadDashboardPeriodSummary(range: DashboardPeriodRange) {
         transactionType: true,
         originalAmount: true,
         eventCodeId: true,
+        eventCodeChildId: true,
         eventCampaignId: true,
-        eventCode: { select: { eventType: true } }
+        eventCode: { select: { eventType: true } },
+        eventCodeChild: { select: { id: true, activeFlag: true, eventCodeId: true } }
       }
     })
   ]);
+
+  const rawChildParentIds = [...new Set(rawTransactions.map((transaction) => transaction.eventCodeId).filter((value): value is string => Boolean(value)))];
+  const rawChildren = rawChildParentIds.length
+    ? await prisma.eventCodeChild.findMany({
+        where: { eventCodeId: { in: rawChildParentIds } },
+        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true }
+      })
+    : [];
 
   return {
     totalStatements,
@@ -89,7 +99,8 @@ export async function loadDashboardPeriodSummary(range: DashboardPeriodRange) {
     completeTransactions,
     transactionStatusGroups,
     statementStatusGroups,
-    rawTransactions
+    rawTransactions,
+    rawChildren
   };
 }
 
@@ -128,18 +139,43 @@ export async function loadTopFinalEvents(range: DashboardPeriodRange) {
     orderBy: { _sum: { originalAmount: "desc" } }
   });
 
+  const childGroups = await prisma.bankTransaction.groupBy({
+    by: ["eventCodeChildId"],
+    where: {
+      AND: [
+        transactionPeriodWhere(range),
+        officialDonationTransactionWhere(),
+        { eventCodeChildId: { not: null } }
+      ]
+    },
+    _count: { _all: true },
+    _sum: { originalAmount: true },
+    orderBy: { _sum: { originalAmount: "desc" } }
+  });
+
   const ids = groups
     .map((group) => group.eventCodeId)
     .filter((value): value is string => Boolean(value));
+  const childIds = childGroups
+    .map((group) => group.eventCodeChildId)
+    .filter((value): value is string => Boolean(value));
 
-  const eventCodes = ids.length
-    ? await prisma.eventCode.findMany({
-        where: { id: { in: ids } },
-        select: { id: true, code: true, eventName: true, category: true }
-      })
-    : [];
+  const [eventCodes, children] = await Promise.all([
+    ids.length
+      ? prisma.eventCode.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, code: true, eventName: true, category: true }
+        })
+      : Promise.resolve([]),
+    childIds.length
+      ? prisma.eventCodeChild.findMany({
+          where: { id: { in: childIds } },
+          select: { id: true, eventCodeId: true, childCode: true, childName: true }
+        })
+      : Promise.resolve([])
+  ]);
 
-  return { groups, eventCodes };
+  return { groups, childGroups, eventCodes, children };
 }
 
 export async function loadDashboardRecentActivityCandidates() {
@@ -241,10 +277,16 @@ const registrationFollowUpTransactionWhere = (range: DashboardPeriodRange): Pris
 
 export async function loadDashboardMemberRecords(range: DashboardPeriodRange) {
   const followUpTransactionWhere = registrationFollowUpTransactionWhere(range);
-  const [donationGroups, unverifiedIdentityCount, followUpIdentities] = await Promise.all([
+  const [donationGroups, childDonationGroups, unverifiedIdentityCount, followUpIdentities] = await Promise.all([
     prisma.bankTransaction.groupBy({
       by: ["memberIdentityId", "eventCodeId"],
       where: officialMemberDonationWhere(range),
+      _count: { _all: true },
+      _sum: { originalAmount: true }
+    }),
+    prisma.bankTransaction.groupBy({
+      by: ["memberIdentityId", "eventCodeChildId"],
+      where: { AND: [officialMemberDonationWhere(range), { eventCodeChildId: { not: null } }] },
       _count: { _all: true },
       _sum: { originalAmount: true }
     }),
@@ -269,8 +311,9 @@ export async function loadDashboardMemberRecords(range: DashboardPeriodRange) {
 
   const identityIds = donationGroups.flatMap(group => group.memberIdentityId ? [group.memberIdentityId] : []);
   const eventCodeIds = donationGroups.flatMap(group => group.eventCodeId ? [group.eventCodeId] : []);
+  const childIds = childDonationGroups.flatMap(group => group.eventCodeChildId ? [group.eventCodeChildId] : []);
   const followUpIds = followUpIdentities.map(identity => identity.id);
-  const [identities, eventCodes, followUpTransactionGroups] = await Promise.all([
+  const [identities, eventCodes, children, followUpTransactionGroups] = await Promise.all([
     identityIds.length ? prisma.memberIdentity.findMany({
       where: { id: { in: identityIds } },
       select: {
@@ -283,6 +326,10 @@ export async function loadDashboardMemberRecords(range: DashboardPeriodRange) {
       where: { id: { in: eventCodeIds } },
       select: { id: true, code: true, eventName: true, category: true }
     }) : Promise.resolve([]),
+    childIds.length ? prisma.eventCodeChild.findMany({
+      where: { id: { in: childIds } },
+      select: { id: true, eventCodeId: true, childCode: true, childName: true }
+    }) : Promise.resolve([]),
     followUpIds.length ? prisma.bankTransaction.groupBy({
       by: ["memberIdentityId"],
       where: { AND: [followUpTransactionWhere, { memberIdentityId: { in: followUpIds } }] },
@@ -290,5 +337,5 @@ export async function loadDashboardMemberRecords(range: DashboardPeriodRange) {
     }) : Promise.resolve([])
   ]);
 
-  return { donationGroups, identities, eventCodes, unverifiedIdentityCount, followUpIdentities, followUpTransactionGroups };
+  return { donationGroups, childDonationGroups, identities, eventCodes, children, unverifiedIdentityCount, followUpIdentities, followUpTransactionGroups };
 }

@@ -4,7 +4,7 @@ import styles from "../styles/edit-income.module.css";
 
 const steps = [
   { title: "Complete", detail: "Income has been approved and finalized.", icon: CheckCircle2, tone: "green" },
-  { title: "Edit Income", detail: "Correct Final Event and/or Remark.", icon: PencilLine, tone: "blue" },
+  { title: "Edit Income", detail: "Correct Final Event, Child, and/or Remark.", icon: PencilLine, tone: "blue" },
   { title: "Pending Approval", detail: "Submit changes for re-approval.", icon: Clock3, tone: "gold" },
   { title: "Complete", detail: "Changes approved and finalized.", icon: CheckCircle2, tone: "green" }
 ] as const;

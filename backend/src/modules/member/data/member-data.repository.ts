@@ -10,7 +10,7 @@ import { reconcileTimeBasedCoverageForIdentity, synchronizePendingTimeBasedForMe
 import { reconcileCampaignContributionsForIdentity, synchronizePendingCampaignContributionsForMember } from "../campaign/member-campaign-wallet.service.js";
 import { currentBusinessDayValue } from "../../../lib/business-time.js";
 
-export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string; search?: string };
+export type MemberDonationFilter = { periodStart: Date; periodEnd: Date; eventCodeId?: string; eventCodeChildId?: string; search?: string };
 
 const actorSelect = { id: true, fullName: true } as const;
 const eventSelect = { id: true, code: true, eventName: true, category: true, activeFlag: true } as const;
@@ -84,7 +84,9 @@ export async function loadWorkspaceDonationAnalytics(memberIds: string[]) {
 export async function loadMemberDonationRecords(memberId: string, filter: MemberDonationFilter, requestedPage: number, pageSize: number) {
   const relation = canonicalMemberDonationWhere(memberId);
   const periodWhere: Prisma.BankTransactionWhereInput = { AND: [relation, {
-    transactionDate: { gte: filter.periodStart, lt: filter.periodEnd }, ...(filter.eventCodeId ? { eventCodeId: filter.eventCodeId } : {})
+    transactionDate: { gte: filter.periodStart, lt: filter.periodEnd },
+    ...(filter.eventCodeId ? { eventCodeId: filter.eventCodeId } : {}),
+    ...(filter.eventCodeChildId ? { eventCodeChildId: filter.eventCodeChildId } : {})
   }] };
   const rowWhere: Prisma.BankTransactionWhereInput = filter.search ? {
     AND: [periodWhere, { OR: [
@@ -94,16 +96,23 @@ export async function loadMemberDonationRecords(memberId: string, filter: Member
   } : periodWhere;
 
   return prisma.$transaction(async tx => {
-    const [member, lifetime, period, total, eventGroups, eventOptions] = await Promise.all([
+    const [member, lifetime, period, total, eventGroups, childGroups, eventOptions, childOptions] = await Promise.all([
       tx.member.findUnique({ where: { id: memberId }, select: { id: true, memberCode: true, memberName: true } }),
       tx.bankTransaction.aggregate({ where: relation, _sum: { originalAmount: true }, _count: { _all: true } }),
       tx.bankTransaction.aggregate({ where: periodWhere, _sum: { originalAmount: true }, _count: { _all: true } }),
       tx.bankTransaction.count({ where: rowWhere }),
       tx.bankTransaction.groupBy({ by: ["eventCodeId"], where: periodWhere,
         _sum: { originalAmount: true }, _count: { _all: true }, orderBy: { _sum: { originalAmount: "desc" } } }),
+      tx.bankTransaction.groupBy({ by: ["eventCodeChildId"], where: periodWhere,
+        _sum: { originalAmount: true }, _count: { _all: true }, orderBy: { _sum: { originalAmount: "desc" } } }),
       tx.eventCode.findMany({
         where: { OR: [{ activeFlag: true }, { transactions: { some: relation } }] },
         select: eventSelect, orderBy: [{ code: "asc" }, { eventName: "asc" }]
+      }),
+      tx.eventCodeChild.findMany({
+        where: { OR: [{ activeFlag: true }, { transactions: { some: relation } }] },
+        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true },
+        orderBy: [{ displayOrder: "asc" }, { childCode: "asc" }, { childName: "asc" }]
       })
     ]);
     const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
@@ -116,12 +125,17 @@ export async function loadMemberDonationRecords(memberId: string, filter: Member
         manualAddedBy: { select: actorSelect },
         memberIdentity: { select: { id: true, accountName: true, initialName: true, sourceType: true } },
         eventCode: { select: eventSelect },
+        eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
         statementUpload: { select: { id: true, fileName: true } }
       }
     });
     const eventIds = eventGroups.flatMap(group => group.eventCodeId ? [group.eventCodeId] : []);
-    const events = eventIds.length ? await tx.eventCode.findMany({ where: { id: { in: eventIds } }, select: eventSelect }) : [];
-    return { member, lifetime, period, total, page, rows, eventGroups, events, eventOptions };
+    const childIds = childGroups.flatMap(group => group.eventCodeChildId ? [group.eventCodeChildId] : []);
+    const [events, children] = await Promise.all([
+      eventIds.length ? tx.eventCode.findMany({ where: { id: { in: eventIds } }, select: eventSelect }) : Promise.resolve([]),
+      childIds.length ? tx.eventCodeChild.findMany({ where: { id: { in: childIds } }, select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } }) : Promise.resolve([])
+    ]);
+    return { member, lifetime, period, total, page, rows, eventGroups, events, eventOptions, childGroups, children, childOptions };
   });
 }
 

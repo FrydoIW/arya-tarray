@@ -9,10 +9,12 @@ import {
 } from "../reconciliation-classification.js";
 import { normalizeAccountNumber, parseBcaStatementWorkbook } from "./statement-upload.parser.js";
 import type { UpdateFinalEventInput, WithdrawStatementInput } from "./statement-upload.schema.js";
+import { storedChildNeedsAttention, type ChildOption } from "../event-child-classification.js";
 import {
   executeStatementAtomic,
   findActiveBankAccount,
   listActiveEventCodesForClassification,
+  loadChildrenForParents,
   loadRawStatementsForSummary,
   loadStatementUploadWorkspaceRecords,
   persistParsedStatement,
@@ -58,6 +60,7 @@ function mapTransaction(transaction: CurrentTransaction) {
     suffixCode: transaction.suffixCode,
     suggestedEventCodeId: transaction.suggestedEventCodeId,
     eventCodeId: transaction.eventCodeId,
+    eventCodeChildId: transaction.eventCodeChildId,
     eventCampaignId: transaction.eventCampaignId,
     baseAmount: decimalToString(transaction.baseAmount),
     remark: transaction.remark,
@@ -65,7 +68,27 @@ function mapTransaction(transaction: CurrentTransaction) {
   };
 }
 
-function mapSummary(rawStatements: RawSummaryRecords) {
+function childrenByParent(children: ChildOption[]) {
+  const grouped = new Map<string, ChildOption[]>();
+  for (const child of children) {
+    const group = grouped.get(child.eventCodeId) ?? [];
+    group.push(child);
+    grouped.set(child.eventCodeId, group);
+  }
+  return grouped;
+}
+
+function transactionNeedsChildReview(transaction: RawSummaryRecords[number]["transactions"][number], children: Map<string, ChildOption[]>) {
+  return storedChildNeedsAttention({
+    requiresClassification: storedTransactionRequiresClassification(transaction),
+    eventCodeId: transaction.eventCodeId,
+    childId: transaction.eventCodeChildId,
+    child: transaction.eventCodeChild,
+    children: transaction.eventCodeId ? children.get(transaction.eventCodeId) ?? [] : []
+  });
+}
+
+function mapSummary(rawStatements: RawSummaryRecords, childrenByParentId: Map<string, ChildOption[]>) {
   let totalTransactions = 0;
   let needsReview = 0;
   let readyForSubmission = 0;
@@ -75,6 +98,8 @@ function mapSummary(rawStatements: RawSummaryRecords) {
     let statementNeedsReview = 0;
     for (const transaction of statement.transactions) {
       if (storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))) {
+        statementNeedsReview += 1;
+      } else if (transactionNeedsChildReview(transaction, childrenByParentId)) {
         statementNeedsReview += 1;
       }
     }
@@ -90,14 +115,15 @@ function mapSummary(rawStatements: RawSummaryRecords) {
   };
 }
 
-function mapWorkspace(records: WorkspaceRecords) {
+function mapWorkspace(records: WorkspaceRecords, childrenByParentId: Map<string, ChildOption[]>) {
   const statement = records.currentStatement;
   return {
-    summary: mapSummary(records.rawStatements),
+    summary: mapSummary(records.rawStatements, childrenByParentId),
     drafts: records.rawStatements.map((draft) => {
-      const needsReview = draft.transactions.filter((transaction) =>
-        storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))
-      ).length;
+      const needsReview = draft.transactions.filter((transaction) => {
+        if (storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))) return true;
+        return transactionNeedsChildReview(transaction, childrenByParentId);
+      }).length;
       return {
         id: draft.id,
         bankAccountLabel: `${draft.bankAccount.bankName} - ${draft.bankAccount.accountName}`,
@@ -139,6 +165,14 @@ function mapWorkspace(records: WorkspaceRecords) {
       eventType: eventCode.eventType,
       timeRule: eventCode.timeRule ? { unitAmount: eventCode.timeRule.unitAmount.toString(), durationMonths: eventCode.timeRule.durationMonths, activeFlag: eventCode.timeRule.activeFlag } : null
     })),
+    eventCodeChildren: records.eventCodeChildren.map((child) => ({
+      id: child.id,
+      eventCodeId: child.eventCodeId,
+      childCode: child.childCode,
+      childName: child.childName,
+      displayOrder: child.displayOrder,
+      activeFlag: child.activeFlag
+    })),
     campaigns: records.campaigns.map((campaign) => ({
       id: campaign.id,
       eventCodeId: campaign.eventCodeId,
@@ -160,7 +194,12 @@ export async function getStatementUploadWorkspace(statementId?: string) {
   if (statementId && !records.currentStatement) {
     throw new HttpError(404, "RAW statement draft not found. Reload the draft list.");
   }
-  return mapWorkspace(records);
+  const parentIds = [...new Set(records.rawStatements.flatMap((statement) =>
+    statement.transactions.map((transaction) => transaction.eventCodeId).filter((value): value is string => Boolean(value))
+  ))];
+  const childRecords = await loadChildrenForParents(parentIds);
+  const children = childrenByParent(childRecords);
+  return mapWorkspace(records, children);
 }
 
 function assertUploadFile(file: Express.Multer.File | undefined) {
@@ -308,15 +347,20 @@ export async function updateFinalEvent(
     statementId,
     transactionId,
     eventCodeId: input.eventCodeId,
+    eventCodeChildId: input.eventCodeChildId,
     eventCampaignId: input.eventCampaignId,
     remark: input.remark,
     userId
   });
 
   const rawStatements = await loadRawStatementsForSummary();
+  const parentIds = [...new Set(rawStatements.flatMap((statement) =>
+    statement.transactions.map((transaction) => transaction.eventCodeId).filter((value): value is string => Boolean(value))
+  ))];
+  const children = childrenByParent(await loadChildrenForParents(parentIds));
   return {
     transaction: mapTransaction(updatedTransaction),
-    summary: mapSummary(rawStatements)
+    summary: mapSummary(rawStatements, children)
   };
 }
 

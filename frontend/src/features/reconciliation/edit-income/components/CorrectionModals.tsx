@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatMoney } from "@/lib/format";
-import type { EditIncomeCampaign, EditIncomeEventCode, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
+import type { EditIncomeCampaign, EditIncomeEventCode, EditIncomeEventCodeChild, EditIncomeTransaction, ManualAdjustmentInput } from "../types";
 import styles from "../styles/edit-income.module.css";
 
 type AddAdjustmentModalProps = {
   open: boolean;
   defaultDate: string;
   eventCodes: EditIncomeEventCode[];
+  eventCodeChildren: EditIncomeEventCodeChild[];
   campaigns: EditIncomeCampaign[];
   disabled: boolean;
   onClose: () => void;
@@ -25,6 +26,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [eventCodeId, setEventCodeId] = useState("");
+  const [eventCodeChildId, setEventCodeChildId] = useState("");
   const [eventCampaignId, setEventCampaignId] = useState("");
   const [remark, setRemark] = useState("");
   const [reason, setReason] = useState("");
@@ -37,11 +39,14 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
     setDescription("");
     setAmount("");
     setEventCodeId("");
+    setEventCodeChildId("");
     setEventCampaignId("");
     setRemark("");
     setReason("");
     setError("");
   }, [props.defaultDate, props.open]);
+
+  const eligibleChildren = props.eventCodeChildren.filter((child) => child.eventCodeId === eventCodeId && child.activeFlag);
 
   function submit() {
     if (!transactionDate || !description.trim() || !/^\d{1,18}(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
@@ -50,6 +55,10 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
     }
     if (direction === "INCOMING" && !eventCodeId) {
       setError("Final Event is required for an incoming adjustment.");
+      return;
+    }
+    if (direction === "INCOMING" && eligibleChildren.length > 1 && !eventCodeChildId) {
+      setError("Child selection is required for this Final Event.");
       return;
     }
     if (direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" && !eventCampaignId) { setError("Campaign is required for this Event Code."); return; }
@@ -63,6 +72,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
       description: description.trim(),
       amount,
       eventCodeId: direction === "INCOMING" ? eventCodeId : null,
+      eventCodeChildId: direction === "INCOMING" ? (eventCodeChildId || (eligibleChildren.length === 1 ? eligibleChildren[0].id : null)) : null,
       eventCampaignId: direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" ? eventCampaignId : null,
       remark: remark.trim() || null,
       reason: reason.trim()
@@ -78,7 +88,9 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
           <label className={styles.field}><span>Direction</span><select value={direction} disabled={props.disabled} onChange={(event) => { setDirection(event.target.value as "INCOMING" | "OUTGOING"); setEventCodeId(""); }}><option value="INCOMING">Incoming</option><option value="OUTGOING">Outgoing</option></select></label>
           <label className={styles.field}><span>Date</span><input type="date" value={transactionDate} disabled={props.disabled} onChange={(event) => setTransactionDate(event.target.value)} /></label>
           <label className={styles.field}><span>Amount</span><MoneyInput value={amount} disabled={props.disabled} placeholder="500000" onValueChange={setAmount} /></label>
-          <label className={styles.field}><span>Final Event</span><select value={eventCodeId} disabled={props.disabled || direction === "OUTGOING"} onChange={(event) => { setEventCodeId(event.target.value); setEventCampaignId(""); }}><option value="">{direction === "OUTGOING" ? "Not applicable" : "Select Event..."}</option>{props.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</select></label>
+          <label className={styles.field}><span>Final Event</span><select value={eventCodeId} disabled={props.disabled || direction === "OUTGOING"} onChange={(event) => { setEventCodeId(event.target.value); setEventCodeChildId(""); setEventCampaignId(""); }}><option value="">{direction === "OUTGOING" ? "Not applicable" : "Select Event..."}</option>{props.eventCodes.map((eventCode) => <option value={eventCode.id} key={eventCode.id}>{eventCode.code} - {eventCode.eventName}{eventCode.activeFlag ? "" : " (Inactive)"}</option>)}</select></label>
+          {direction === "INCOMING" && eligibleChildren.length > 1 && <label className={styles.field}><span>Child</span><select value={eventCodeChildId} disabled={props.disabled} onChange={(event) => setEventCodeChildId(event.target.value)}><option value="">Select Child...</option>{eligibleChildren.map((child) => <option key={child.id} value={child.id}>{child.childCode} - {child.childName}</option>)}</select></label>}
+          {direction === "INCOMING" && eligibleChildren.length === 1 && <label className={styles.field}><span>Child</span><input value={`${eligibleChildren[0].childCode} - ${eligibleChildren[0].childName} (auto)`} disabled readOnly /></label>}
           {direction === "INCOMING" && props.eventCodes.find((item) => item.id === eventCodeId)?.eventType === "CAMPAIGN" && <label className={styles.field}><span>Campaign</span><select value={eventCampaignId} disabled={props.disabled} onChange={(event) => setEventCampaignId(event.target.value)}><option value="">Select Campaign...</option>{props.campaigns.filter((item) => item.eventCodeId === eventCodeId && item.activeFlag && (!item.startDate || transactionDate >= item.startDate) && (!item.endDate || transactionDate <= item.endDate)).map((item) => <option key={item.id} value={item.id}>{item.campaignName}</option>)}</select></label>}
         </div>
         {direction === "INCOMING" ? <p className={styles.modalHint}>TIME_BASED programs are unavailable for manual adjustments because they require a verified payment identity for sponsorship allocation.</p> : null}

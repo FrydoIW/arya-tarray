@@ -64,6 +64,21 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 4.4 | TIME_BASED rule | Set unit amount/duration for a TIME_BASED code | Rule saved; preview reflects it | | | |
 | 4.5 | CAMPAIGN creation | Create a campaign under an event code with period/target | Campaign saved and visible | | | |
 
+## 4b. Event Code Child configuration
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 4b.1 | Create child | Open Event Code Children, add a child (code + name) for a parent | Child saved; listed with parent and ACTIVE status | | | |
+| 4b.2 | Duplicate child code | Add a second child with the same child code under the same parent | Rejected with validation error (unique per parent) | | | |
+| 4b.3 | Same code, different parent | Use the same child code under a different parent | Allowed (uniqueness is per parent) | | | |
+| 4b.4 | Edit child | Rename child / change display order / description | Saved; updated fields shown | | | |
+| 4b.5 | Deactivate child | Set an unused child to Inactive | Saved; child listed as INACTIVE, historical display preserved | | | |
+| 4b.6 | Delete unreferenced child | Delete a child with 0 transactions and 0 corrections | Deleted | | | |
+| 4b.7 | Delete referenced child | Try to delete a child used by transactions/corrections | Rejected; guided to deactivate instead | | | |
+| 4b.8 | Move child to another parent | Try to change a child's parent Event Code | Rejected (child cannot move parent) | | | |
+| 4b.9 | Create under inactive parent | Try to create a child for an inactive Event Code | Rejected with clear message | | | |
+| 4b.10 | RBAC | Open Children as a viewer-role user | Hidden or access denied (CONFIG_EVENT_CODE) | | | |
+
 ## 5. Approval configuration
 
 | # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
@@ -98,6 +113,21 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 8.3 | Withdraw | Withdraw a RAW/CHECK statement | Statement marked withdrawn; no FINALIZED data created | | | |
 | 8.4 | Prevent FINALIZED edit | Try to edit a FINALIZED statement | Changes rejected without approval flow | | | |
 
+## 8b. Child classification on Statement Upload
+
+| # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
+|---|---|---|---|---|---|---|
+| 8b.1 | Parent without children | Classify a transaction whose Final Event has no children | Legacy parent-only behavior; Child column shows "—"; row READY | | | |
+| 8b.2 | Single active child | Classify with a parent that has exactly one active child | Child auto-selected on save/upload; row READY | | | |
+| 8b.3 | Multiple active children | Parent has 2+ active children and no child chosen | Row shows NEEDS_REVIEW; Execute blocked with actionable message | | | |
+| 8b.4 | Manual child selection | Pick a child from the eligible dropdown | Saved; preview shows parent + child | | | |
+| 8b.5 | All children inactive | Parent has children but all are inactive and none selected | Row NEEDS_REVIEW; Execute blocked ("no active Child") | | | |
+| 8b.6 | Stale child at Execute | Select a child, then deactivate it in Configuration, then Execute | Execute blocked with clear conflict message; no silent re-selection | | | |
+| 8b.7 | Cross-parent child | Attempt to save a child that belongs to a different parent | Rejected backend (Child does not belong) | | | |
+| 8b.8 | Parent change resets child | Change Final Event to another parent | Child resets; re-resolved (auto when single active child) | | | |
+| 8b.9 | Historical inactive child | View an old transaction that keeps an inactive child | Still readable; child shown as historical | | | |
+| 8b.10 | Bulk execute | Execute a statement where only some rows are unresolved children | Execute rejected atomically; nothing moves to CHECK | | | |
+
 ## 9. Approval workflow
 
 | # | Scenario | Steps | Expected Result | Actual Result | PASS/FAIL | Notes |
@@ -114,6 +144,11 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 10.1 | Propose correction | Change final event/amount/remark of a FINALIZED transaction | Correction proposal created with before/after diff | | | |
 | 10.2 | Approve correction | Approve the correction proposal | Transaction updated; history records the change | | | |
 | 10.3 | Reject correction | Reject the correction proposal | Transaction unchanged | | | |
+| 10.4 | Child-only correction | Change only the Child (same parent), e.g. Amitabha → Kwan Im | Recognized as a meaningful MODIFIED correction; proposal shows before/proposed Child | | | |
+| 10.5 | Approve child-only correction | Approve the child-only proposal | Transaction child updated; history records `event_code_child_id`; no duplicate coverage/allocation/ledger entries | | | |
+| 10.6 | Child correction with parent change | Change parent and child together | Proposal stores both; approval re-validates both | | | |
+| 10.7 | Manual adjustment with child | Add an incoming manual adjustment under a parent with multiple children | Child select required; proposal stores proposed child | | | |
+| 10.8 | Stale child proposal | Propose a child, deactivate that child, then approve | Approval aborted with stale-configuration message; no partial writes | | | |
 
 ## 11. Transaction Inquiry
 
@@ -122,6 +157,8 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 11.1 | Query | Filter by account/period/status | Correct transactions returned | | | |
 | 11.2 | Detail | Open a transaction detail | Full field history and status shown | | | |
 | 11.3 | PDF report | Generate the inquiry PDF | Downloadable PDF with matching rows | | | |
+| 11.4 | Child column and filter | Open inquiry; filter by a child | Child column shown; filter narrows rows to that child | | | |
+| 11.5 | Child audit history | Open a transaction whose child was corrected | History shows the `Child` change with before/after labels | | | |
 
 ## 12. Member registration and identity
 
@@ -140,6 +177,8 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 13.1 | Donation history | Open a member with FINALIZED positive transactions | Donations listed with correct periods/amounts | | | |
 | 13.2 | Period filter | Switch MONTH/DAY filter | Totals/history match the selected period; lifetime totals unchanged | | | |
 | 13.3 | Event breakdown | Filter by a final event | Breakdown uses the event and orders amounts descending | | | |
+| 13.4 | Child column and filter | Open donation history with child-tagged transactions | Child column shown; child filter narrows rows | | | |
+| 13.5 | Child breakdown | Open donation history | Child Breakdown panel lists children with counts/amounts; event totals unchanged | | | |
 
 ## 14. TIME_BASED and carry transfer
 
@@ -170,6 +209,7 @@ Fill one row per scenario. Never record credentials or database URLs in this fil
 | 16.4 | Trend chart | View transaction trend | Trend matches per-period finalized data | | | |
 | 16.5 | TIME_BASED monitoring | Open time-based monitoring | Coverage timeline matches subscriptions | | | |
 | 16.6 | CAMPAIGN monitoring | Open campaign monitoring | Target progress matches allocations | | | |
+| 16.7 | Child breakdown on dashboard | Open dashboard with finalized child-tagged donations | Parent totals correct; child sub-rows shown and summed ≤ parent total (no double counting) | | | |
 
 ## 17. Export and reporting
 

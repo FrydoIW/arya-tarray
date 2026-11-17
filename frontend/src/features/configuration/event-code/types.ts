@@ -61,6 +61,23 @@ export type EventTimeRule = {
 };
 export type TimeRuleInput = Pick<EventTimeRule, "unitAmount" | "durationMonths" | "activeFlag" | "remark">;
 
+export type EventCodeChild = {
+  id: string;
+  eventCodeId: string;
+  childCode: string;
+  childName: string;
+  description: string | null;
+  displayOrder: number;
+  activeFlag: boolean;
+  eventCode: { id: string; code: string; eventName: string; eventType: EventType; activeFlag: boolean };
+  transactionCount: number;
+  correctionCount: number;
+  updatedAt?: string;
+  updatedBy?: EventCodeUser | null;
+};
+
+export type ChildInput = Pick<EventCodeChild, "eventCodeId" | "childCode" | "childName" | "description" | "displayOrder" | "activeFlag">;
+
 export type EventCodeExecutePayload = {
   creates: EventCodeInput[];
   updates: Array<{

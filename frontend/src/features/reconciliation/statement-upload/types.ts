@@ -15,6 +15,15 @@ export type EventCodeOption = {
 
 export type CampaignOption = { id: string; eventCodeId: string; campaignName: string; startDate: string | null; endDate: string | null; activeFlag: boolean };
 
+export type EventCodeChildOption = {
+  id: string;
+  eventCodeId: string;
+  childCode: string;
+  childName: string;
+  displayOrder: number;
+  activeFlag: boolean;
+};
+
 export type BankAccountOption = {
   id: string;
   label: string;
@@ -72,6 +81,7 @@ export type DraftTransaction = {
   suffixCode?: string | null;
   suggestedEventCodeId?: string | null;
   eventCodeId?: string | null;
+  eventCodeChildId?: string | null;
   eventCampaignId?: string | null;
   baseAmount?: string | null;
   remark?: string | null;
@@ -91,6 +101,7 @@ export type StatementUploadWorkspace = {
   statement: StatementDraft | null;
   transactions: DraftTransaction[];
   eventCodes: EventCodeOption[];
+  eventCodeChildren: EventCodeChildOption[];
   campaigns: CampaignOption[];
   bankAccounts: BankAccountOption[];
 };
@@ -135,6 +146,7 @@ export type UpdateFinalEventInput = {
   statementId: string;
   transactionId: string;
   eventCodeId: string | null;
+  eventCodeChildId: string | null;
   eventCampaignId: string | null;
   remark?: string | null;
 };

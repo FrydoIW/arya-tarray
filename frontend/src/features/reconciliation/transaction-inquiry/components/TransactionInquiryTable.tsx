@@ -10,7 +10,7 @@ import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatMoney } from "@/lib/format";
-import type { TransactionInquiryBankAccount, TransactionInquiryCampaign, TransactionInquiryEvent, TransactionInquiryMember, TransactionInquiryMemberLinkStatus, TransactionInquiryPeriodMode, TransactionInquiryRow, TransactionInquiryStatus } from "../types";
+import type { TransactionInquiryBankAccount, TransactionInquiryCampaign, TransactionInquiryEvent, TransactionInquiryEventCodeChild, TransactionInquiryMember, TransactionInquiryMemberLinkStatus, TransactionInquiryPeriodMode, TransactionInquiryRow, TransactionInquiryStatus } from "../types";
 import { eventLabel, formatPeriodLabel, getLifecycleLabel, periodContext } from "../utils/transaction-inquiry.utils";
 import styles from "../styles/transaction-inquiry.module.css";
 
@@ -26,6 +26,7 @@ type Props = {
   status: TransactionInquiryStatus;
   bankAccountId: string;
   finalEventId: string;
+  eventCodeChildId: string;
   eventCampaignId: string;
   memberId: string;
   memberLinkStatus: TransactionInquiryMemberLinkStatus;
@@ -35,6 +36,7 @@ type Props = {
   memberOptionsLoading: boolean;
   canViewMemberData: boolean;
   eventOptions: TransactionInquiryEvent[];
+  eventCodeChildOptions: TransactionInquiryEventCodeChild[];
   campaignOptions: TransactionInquiryCampaign[];
   page: number;
   pageSize: number;
@@ -46,6 +48,7 @@ type Props = {
   onStatusChange: (value: TransactionInquiryStatus) => void;
   onBankAccountChange: (value: string) => void;
   onFinalEventChange: (value: string) => void;
+  onEventCodeChildChange: (value: string) => void;
   onCampaignChange: (value: string) => void;
   onMemberSearchChange: (value: string) => void;
   onMemberOptionsRequest: () => void;
@@ -63,6 +66,12 @@ function typeOf(row: TransactionInquiryRow) {
 
 function eventDisplay(row: TransactionInquiryRow, event: TransactionInquiryRow["finalEvent"]) {
   return typeOf(row) === "Outgoing" ? "Outgoing" : eventLabel(event);
+}
+
+function childDisplay(row: TransactionInquiryRow) {
+  if (typeOf(row) === "Outgoing") return "Outgoing";
+  const child = row.eventCodeChild;
+  return child ? `${child.childCode} - ${child.childName}` : "—";
 }
 
 function memberLabel(member: TransactionInquiryMember) {
@@ -84,6 +93,7 @@ export function TransactionInquiryTable(props: Props) {
     { key: "type", header: "Type", minWidth: "96px", render: (row) => <span className={`${styles.typeBadge} ${typeOf(row) === "Incoming" ? styles.credit : styles.debit}`}>{typeOf(row)}</span> },
     { key: "suggestedEvent", header: "Suggested Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventDisplay(row, row.suggestedEvent)}</span> },
     { key: "finalEvent", header: "Final Event", minWidth: "160px", render: (row) => <span className={styles.eventText}>{eventDisplay(row, row.finalEvent)}</span> },
+    { key: "eventCodeChild", header: "Child", minWidth: "140px", render: (row) => <span className={styles.eventText}>{childDisplay(row)}</span> },
     { key: "eventCampaign", header: "Campaign", minWidth: "170px", render: (row) => <span className={styles.eventText}>{row.eventCampaign?.campaignName ?? "—"}</span> },
     { key: "status", header: "Status", minWidth: "135px", render: (row) => <span className={`${styles.statusBadge} ${styles[`status${row.status}`]}`}>{getLifecycleLabel(row.status)}</span> },
     { key: "action", header: "Action", minWidth: "90px", sticky: "right", align: "center", render: (row) => <Button type="button" variant="outline" size="sm" icon={<Eye size={13} />} disabled={props.detailLoading} onClick={() => props.onView(row.id)}>View</Button> }
@@ -114,6 +124,10 @@ export function TransactionInquiryTable(props: Props) {
             <option value="ALL">All Events</option>
             {props.eventOptions.map((event) => <option key={event.id} value={event.id}>{event.code} - {event.eventName}{event.activeFlag ? "" : " (Inactive)"}</option>)}
           </Select>
+          <Select className={styles.eventFilter} value={props.eventCodeChildId} disabled={props.loading} onChange={(event) => props.onEventCodeChildChange(event.target.value)} aria-label="Child">
+            <option value="ALL">All Children</option>
+            {props.eventCodeChildOptions.filter((child) => props.finalEventId === "ALL" || child.eventCodeId === props.finalEventId).map((child) => <option key={child.id} value={child.id}>{child.childCode} - {child.childName}{child.activeFlag ? "" : " (Inactive)"}</option>)}
+          </Select>
           <Select className={styles.eventFilter} value={props.eventCampaignId} disabled={props.loading} onChange={(event) => props.onCampaignChange(event.target.value)} aria-label="Campaign">
             <option value="ALL">All Campaigns</option>
             {props.campaignOptions.filter((item) => props.finalEventId === "ALL" || item.eventCodeId === props.finalEventId).map((item) => <option key={item.id} value={item.id}>{item.campaignName}{item.activeFlag ? "" : " (Inactive)"}</option>)}
@@ -136,7 +150,7 @@ export function TransactionInquiryTable(props: Props) {
         columns={columns}
         rowKey={(row) => row.id}
         loading={props.loading}
-        minWidth="1475px"
+        minWidth="1615px"
         emptyState={{ title: `No transactions ${periodContext(props.periodMode, props.month, props.date)}`, description: "Choose another period or adjust the search and filters." }}
         pagination={{ mode: "server", page: props.page, pageSize: props.pageSize, total: props.total, pageSizeOptions: [10, 25, 50, 100], onPageChange: props.onPageChange, onPageSizeChange: props.onPageSizeChange }}
       />

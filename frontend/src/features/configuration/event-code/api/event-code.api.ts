@@ -1,5 +1,5 @@
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import type { CampaignInput, EventCampaign, EventCode, EventCodeBulkPreview, EventCodeExecutePayload, EventCodeUser, EventTimeRule, EventType, TimeRuleInput } from "../types";
+import type { CampaignInput, ChildInput, EventCampaign, EventCode, EventCodeBulkPreview, EventCodeChild, EventCodeExecutePayload, EventCodeUser, EventTimeRule, EventType, TimeRuleInput } from "../types";
 
 type EventCodeApiUser = {
   id: string;
@@ -59,6 +59,21 @@ export function executeCampaignChanges(payload: { creates: CampaignInput[]; upda
 export function getTimeRules() { return apiFetch<EventTimeRule[]>("/configuration/event-codes/time-rules"); }
 export function executeTimeRules(payload: { updates: Array<{ eventCodeId: string; input: TimeRuleInput }> }) {
   return apiFetch<EventTimeRule[]>("/configuration/event-codes/time-rules/execute", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function getEventCodeChildren() {
+  return apiFetch<EventCodeChild[]>("/configuration/event-codes/children");
+}
+
+export function executeChildChanges(payload: {
+  creates: ChildInput[];
+  updates: Array<{ id: string; input: ChildInput }>;
+  deletes: string[];
+}) {
+  return apiFetch<{ changedCount: number; items: EventCodeChild[] }>("/configuration/event-codes/children/execute", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function getEventCodes() {

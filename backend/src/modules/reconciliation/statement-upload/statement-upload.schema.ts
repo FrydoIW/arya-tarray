@@ -15,6 +15,7 @@ export const transactionParamsSchema = z.object({
 
 export const updateFinalEventSchema = z.object({
   eventCodeId: z.string().uuid().nullable(),
+  eventCodeChildId: z.string().uuid().nullable().optional().default(null),
   eventCampaignId: z.string().uuid().nullable().optional().default(null),
   remark: z.string().trim().max(1000).optional()
 });

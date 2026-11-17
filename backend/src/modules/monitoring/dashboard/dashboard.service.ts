@@ -3,6 +3,7 @@ import { HttpError } from "../../../lib/http.js";
 import { centsToDecimal } from "../../../lib/money.js";
 import { formatPeriodLabel, resolvePeriod } from "../../../lib/period.js";
 import { storedTransactionRequiresClassification } from "../../reconciliation/reconciliation-classification.js";
+import { storedChildNeedsAttention } from "../../reconciliation/event-child-classification.js";
 import {
   loadDashboardMemberRecords,
   loadDashboardPeriodSummary,
@@ -81,9 +82,25 @@ function summarizeTransactionStatus(records: Awaited<ReturnType<typeof loadDashb
   const raw = statusCount(records.transactionStatusGroups, "RAW");
   const pendingApproval = statusCount(records.transactionStatusGroups, "CHECK");
   const complete = statusCount(records.transactionStatusGroups, "FINALIZED");
+  const childrenByParent = new Map<string, typeof records.rawChildren>();
+  for (const child of records.rawChildren) {
+    const group = childrenByParent.get(child.eventCodeId) ?? [];
+    group.push(child);
+    childrenByParent.set(child.eventCodeId, group);
+  }
   const needsReview = records.rawTransactions.filter((transaction) =>
     storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))
-  ).length;
+  ).length + records.rawTransactions.filter((transaction) => {
+    if (!storedTransactionRequiresClassification(transaction) || !transaction.eventCodeId) return false;
+    if (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId) return false;
+    return storedChildNeedsAttention({
+      requiresClassification: true,
+      eventCodeId: transaction.eventCodeId,
+      childId: transaction.eventCodeChildId,
+      child: transaction.eventCodeChild,
+      children: childrenByParent.get(transaction.eventCodeId) ?? []
+    });
+  }).length;
   const draft = Math.max(0, raw - needsReview);
 
   return {
@@ -195,11 +212,30 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
   if (!viewer) throw new HttpError(401, "Current user is no longer available");
 
   const eventCodeById = new Map(topEventsRecords.eventCodes.map((event) => [event.id, event]));
+  const childGroupsByEventId = new Map<string, Array<{ eventCodeChildId: string; transactionCount: number; amountCents: bigint }>>();
+  for (const childGroup of topEventsRecords.childGroups) {
+    if (!childGroup.eventCodeChildId) continue;
+    const child = topEventsRecords.children.find((item) => item.id === childGroup.eventCodeChildId);
+    if (!child) continue;
+    const rows = childGroupsByEventId.get(child.eventCodeId) ?? [];
+    rows.push({
+      eventCodeChildId: child.id,
+      transactionCount: childGroup._count._all,
+      amountCents: decimalToCents(childGroup._sum.originalAmount)
+    });
+    childGroupsByEventId.set(child.eventCodeId, rows);
+  }
   const currentIncoming = decimalToCents(current.incomingAmount);
   const previousIncoming = decimalToCents(previous.incomingAmount);
   const currentOutgoing = decimalToCents(current.outgoingAmount);
   const previousOutgoing = decimalToCents(previous.outgoingAmount);
-  const memberAnalytics = summarizeDashboardMemberDonations(memberRecords.donationGroups, memberRecords.identities, memberRecords.eventCodes);
+  const memberAnalytics = summarizeDashboardMemberDonations(
+    memberRecords.donationGroups,
+    memberRecords.identities,
+    memberRecords.eventCodes,
+    memberRecords.childDonationGroups,
+    memberRecords.children
+  );
   const followUpCounts = new Map(memberRecords.followUpTransactionGroups.flatMap(group =>
     group.memberIdentityId ? [[group.memberIdentityId, group._count._all] as const] : []
   ));
@@ -207,7 +243,15 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     category: string;
     transactionCount: number;
     totalAmountCents: bigint;
-    events: Array<{ eventCodeId: string; code: string; eventName: string; transactionCount: number; totalAmount: string; amountCents: bigint }>;
+    events: Array<{
+      eventCodeId: string;
+      code: string;
+      eventName: string;
+      transactionCount: number;
+      totalAmount: string;
+      amountCents: bigint;
+      children: Array<{ eventCodeChildId: string; childCode: string; childName: string; transactionCount: number; totalAmount: string }>;
+    }>;
   }>();
 
   for (const group of topEventsRecords.groups) {
@@ -224,13 +268,24 @@ export async function getDashboardWorkspace(input: DashboardWorkspaceQuery, user
     };
     currentGroup.transactionCount += group._count._all;
     currentGroup.totalAmountCents += amountCents;
+    const childRows = (childGroupsByEventId.get(event.id) ?? []).map((child) => {
+      const label = topEventsRecords.children.find((item) => item.id === child.eventCodeChildId);
+      return {
+        eventCodeChildId: child.eventCodeChildId,
+        childCode: label?.childCode ?? "?",
+        childName: label?.childName ?? "Unknown Child",
+        transactionCount: child.transactionCount,
+        totalAmount: centsToDecimal(child.amountCents)
+      };
+    }).sort((left, right) => left.childCode.localeCompare(right.childCode));
     currentGroup.events.push({
       eventCodeId: event.id,
       code: event.code,
       eventName: event.eventName,
       transactionCount: group._count._all,
       totalAmount: centsToDecimal(amountCents),
-      amountCents
+      amountCents,
+      children: childRows
     });
     eventGroupsByCategory.set(category, currentGroup);
   }

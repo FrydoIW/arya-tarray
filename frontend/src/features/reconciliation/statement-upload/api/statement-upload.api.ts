@@ -26,8 +26,9 @@ export function uploadStatement(input: UploadStatementInput): Promise<StatementU
 export function updateDraftTransactionFinalEvent(
   input: UpdateFinalEventInput
 ): Promise<UpdateFinalEventResponse> {
-  const body: { eventCodeId: string | null; eventCampaignId: string | null; remark?: string | null } = {
+  const body: { eventCodeId: string | null; eventCodeChildId: string | null; eventCampaignId: string | null; remark?: string | null } = {
     eventCodeId: input.eventCodeId,
+    eventCodeChildId: input.eventCodeChildId,
     eventCampaignId: input.eventCampaignId
   };
   if (input.remark !== undefined) body.remark = input.remark;

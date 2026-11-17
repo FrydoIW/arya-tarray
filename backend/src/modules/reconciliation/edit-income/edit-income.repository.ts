@@ -4,6 +4,7 @@ import { prisma } from "../../../lib/prisma.js";
 import { storedTransactionRequiresClassification } from "../reconciliation-classification.js";
 import { assertCampaignClassification } from "../campaign-classification.js";
 import { resolveTimeBasedUnits } from "../time-based-classification.js";
+import { assertChildClassification, selectSingleEligibleChild } from "../event-child-classification.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../reconciliation-approval.js";
 
@@ -80,7 +81,7 @@ export async function loadEditIncomeWorkspaceRecords(range: EditIncomeWorkspaceR
 }
 
 export async function loadEditIncomeDetailRecord(statementId: string) {
-  const [statement, eventCodes, campaigns] = await Promise.all([
+  const [statement, eventCodes, campaigns, eventCodeChildren] = await Promise.all([
     prisma.bankStatementUpload.findUnique({
       where: { id: statementId },
       include: {
@@ -91,6 +92,7 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
           include: {
             suggestedEventCode: { select: eventCodeSelect },
             eventCode: { select: eventCodeSelect },
+            eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true } },
             eventCampaign: { select: { id: true, campaignName: true } },
             ...timeBasedHistoryInclude
           },
@@ -126,17 +128,25 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
       ] },
       select: { id: true, eventCodeId: true, campaignName: true, startDate: true, endDate: true, activeFlag: true },
       orderBy: [{ activeFlag: "desc" }, { startDate: "desc" }, { campaignName: "asc" }]
+    }),
+    prisma.eventCodeChild.findMany({
+      where: { OR: [
+        { activeFlag: true, eventCode: { activeFlag: true } },
+        { transactions: { some: { statementUploadId: statementId } } }
+      ] },
+      select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true },
+      orderBy: [{ activeFlag: "desc" }, { displayOrder: "asc" }, { childCode: "asc" }, { childName: "asc" }]
     })
   ]);
 
-  return { statement, eventCodes, campaigns };
+  return { statement, eventCodes, campaigns, eventCodeChildren };
 }
 
 export type EditIncomeCorrectionInput = {
   statementId: string;
   userId: string;
   corrections: Array<
-    | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCampaignId?: string | null; remark: string | null }
+    | { action: "MODIFIED"; transactionId: string; eventCodeId: string | null; eventCodeChildId?: string | null; eventCampaignId?: string | null; remark: string | null }
     | { action: "EXCLUDED"; transactionId: string; reason: string }
     | {
         action: "ADDED";
@@ -146,6 +156,7 @@ export type EditIncomeCorrectionInput = {
         description: string;
         amount: string;
         eventCodeId: string | null;
+        eventCodeChildId?: string | null;
         eventCampaignId?: string | null;
         remark: string | null;
         reason: string;
@@ -187,6 +198,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
             originalAmount: true,
             baseAmount: true,
             eventCodeId: true,
+            eventCodeChildId: true,
             eventCampaignId: true,
             transactionDate: true,
             remark: true,
@@ -237,12 +249,22 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
     const selectedCampaignIds = [...new Set(input.corrections.flatMap((change) =>
       change.action !== "EXCLUDED" && change.eventCampaignId ? [change.eventCampaignId] : []
     ))];
-    const [selectedEvents, selectedCampaigns] = await Promise.all([
+    const [selectedEvents, selectedCampaigns, selectedChildren] = await Promise.all([
       tx.eventCode.findMany({ where: { id: { in: selectedEventIds } }, select: { id: true, eventType: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } }),
-      tx.eventCampaign.findMany({ where: { id: { in: selectedCampaignIds } }, select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } })
+      tx.eventCampaign.findMany({ where: { id: { in: selectedCampaignIds } }, select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } }),
+      tx.eventCodeChild.findMany({
+        where: { eventCodeId: { in: selectedEventIds } },
+        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true }
+      })
     ]);
     const selectedEventById = new Map(selectedEvents.map((event) => [event.id, event]));
     const selectedCampaignById = new Map(selectedCampaigns.map((campaign) => [campaign.id, campaign]));
+    const childrenByParent = new Map<string, typeof selectedChildren>();
+    for (const child of selectedChildren) {
+      const group = childrenByParent.get(child.eventCodeId) ?? [];
+      group.push(child);
+      childrenByParent.set(child.eventCodeId, group);
+    }
 
     const proposalItems: Prisma.ReconciliationCorrectionItemCreateManyProposalInput[] = [];
     for (const requested of input.corrections) {
@@ -262,9 +284,22 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
         });
         const event = requested.eventCodeId ? selectedEventById.get(requested.eventCodeId) ?? null : null;
         if (event?.eventType === "TIME_BASED") throw new HttpError(400, "TIME_BASED Event Codes are not available for manual adjustments because they have no MemberIdentity for sponsorship allocation.");
+        const children = requested.eventCodeId ? childrenByParent.get(requested.eventCodeId) ?? [] : [];
+        const childId = requested.eventCodeChildId ?? null;
+        const child = childId ? children.find((item) => item.id === childId) ?? null : null;
+        assertChildClassification({
+          eventCode: event,
+          childId,
+          child,
+          children,
+          requiresClassification: requested.direction === "INCOMING",
+          requireComplete: true
+        });
+        const effectiveChildId = childId ?? selectSingleEligibleChild(event, children);
         proposalItems.push({
           action: "ADDED",
           proposedEventCodeId: requested.eventCodeId,
+          proposedEventCodeChildId: effectiveChildId,
           proposedEventCampaignId: requested.eventCampaignId ?? null,
           proposedRemark: requested.remark?.trim() || null,
           correctionReason: requested.reason.trim(),
@@ -285,8 +320,10 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
           action: "EXCLUDED",
           bankTransactionId: current.id,
           beforeEventCodeId: current.eventCodeId,
+          beforeEventCodeChildId: current.eventCodeChildId,
           beforeEventCampaignId: current.eventCampaignId,
           proposedEventCodeId: current.eventCodeId,
+          proposedEventCodeChildId: current.eventCodeChildId,
           proposedEventCampaignId: current.eventCampaignId,
           beforeRemark: current.remark?.trim() || null,
           proposedRemark: current.remark?.trim() || null,
@@ -314,16 +351,31 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       });
       const event = requested.eventCodeId ? selectedEventById.get(requested.eventCodeId) ?? null : null;
       resolveTimeBasedUnits({ eventCode: event, rule: event?.timeRule ?? null, transaction: current, requiresClassification });
+      const children = requested.eventCodeId ? childrenByParent.get(requested.eventCodeId) ?? [] : [];
+      const childId = requested.eventCodeChildId ?? null;
+      const child = childId ? children.find((item) => item.id === childId) ?? null : null;
+      assertChildClassification({
+        eventCode: event,
+        childId,
+        child,
+        children,
+        requiresClassification,
+        requireComplete: true,
+        historicalChildId: current.eventCodeId === requested.eventCodeId ? current.eventCodeChildId : null
+      });
+      const effectiveChildId = childId ?? selectSingleEligibleChild(event, children);
 
       const normalizedRemark = requested.remark?.trim() || null;
       const currentRemark = current.remark?.trim() || null;
-      if (current.eventCodeId === requested.eventCodeId && current.eventCampaignId === (requested.eventCampaignId ?? null) && currentRemark === normalizedRemark) continue;
+      if (current.eventCodeId === requested.eventCodeId && current.eventCodeChildId === effectiveChildId && current.eventCampaignId === (requested.eventCampaignId ?? null) && currentRemark === normalizedRemark) continue;
       proposalItems.push({
         action: "MODIFIED",
         bankTransactionId: current.id,
         beforeEventCodeId: current.eventCodeId,
+        beforeEventCodeChildId: current.eventCodeChildId,
         beforeEventCampaignId: current.eventCampaignId,
         proposedEventCodeId: requested.eventCodeId,
+        proposedEventCodeChildId: effectiveChildId,
         proposedEventCampaignId: requested.eventCampaignId ?? null,
         beforeRemark: currentRemark,
         proposedRemark: normalizedRemark

@@ -110,6 +110,10 @@ export async function getEditIncomeDetail(statementId: string) {
       endDate: item.endDate?.toISOString().slice(0, 10) ?? null,
       activeFlag: item.activeFlag
     })),
+    eventCodeChildren: records.eventCodeChildren.map((item) => ({
+      id: item.id, eventCodeId: item.eventCodeId, childCode: item.childCode, childName: item.childName,
+      displayOrder: item.displayOrder, activeFlag: item.activeFlag
+    })),
     transactions: statement.transactions.map((transaction) => ({
       id: transaction.id,
       rowNo: transaction.rowNo ?? 0,
@@ -122,6 +126,7 @@ export async function getEditIncomeDetail(statementId: string) {
       suffixCode: transaction.suffixCode,
       suggestedEventCodeId: transaction.suggestedEventCodeId,
       eventCodeId: transaction.eventCodeId,
+      eventCodeChildId: transaction.eventCodeChildId,
       eventCampaignId: transaction.eventCampaignId,
       baseAmount: transaction.baseAmount ? decimalToString(transaction.baseAmount) : null,
       sponsorship: timeBasedPaymentPreview(transaction),

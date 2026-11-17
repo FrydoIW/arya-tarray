@@ -11,7 +11,9 @@ export function getWorkspace(query: MemberDataQuery, signal?: AbortSignal) {
 export function getDetail(memberId: string, signal?: AbortSignal) { return apiFetch<MemberDetail>(base + "/" + encodeURIComponent(memberId), { signal }); }
 export function getDonations(memberId: string, query: DonationQuery, signal?: AbortSignal) {
   return apiFetch<DonationWorkspace>(`${base}/${encodeURIComponent(memberId)}/donations?` + new URLSearchParams({
-    periodMode: query.periodMode, month: query.month, date: query.date, ...(query.eventCodeId ? { eventCodeId: query.eventCodeId } : {}),
+    periodMode: query.periodMode, month: query.month, date: query.date,
+    ...(query.eventCodeId ? { eventCodeId: query.eventCodeId } : {}),
+    ...(query.eventCodeChildId ? { eventCodeChildId: query.eventCodeChildId } : {}),
     search: query.search, page: String(query.page), pageSize: String(query.pageSize)
   }), { signal });
 }

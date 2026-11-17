@@ -6,13 +6,13 @@ import type { DonationQuery, DonationWorkspace } from "../types";
 
 const today = currentBusinessDayValue(); const thisMonth = currentBusinessMonthValue();
 const empty: DonationWorkspace = { member: { memberId: "", memberCode: "", memberName: "" },
-  filters: { periodMode: "MONTH", month: thisMonth, date: today, eventCodeId: null, search: "" },
+  filters: { periodMode: "MONTH", month: thisMonth, date: today, eventCodeId: null, eventCodeChildId: null, search: "" },
   summary: { lifetimeAmount: "0.00", lifetimeTransactionCount: 0, periodAmount: "0.00", periodTransactionCount: 0 },
-  rows: [], eventOptions: [], eventBreakdown: [], categoryBreakdown: [], pagination: { page: 1, pageSize: 25, totalRows: 0, totalPages: 1 } };
+  rows: [], eventOptions: [], childOptions: [], eventBreakdown: [], childBreakdown: [], categoryBreakdown: [], pagination: { page: 1, pageSize: 25, totalRows: 0, totalPages: 1 } };
 
 export function useMemberDonations(memberId: string) {
   const [workspace, setWorkspace] = useState(empty);
-  const [query, setQuery] = useState<DonationQuery>({ periodMode: "MONTH", month: thisMonth, date: today, eventCodeId: "", search: "", page: 1, pageSize: 25 });
+  const [query, setQuery] = useState<DonationQuery>({ periodMode: "MONTH", month: thisMonth, date: today, eventCodeId: "", eventCodeChildId: "", search: "", page: 1, pageSize: 25 });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [reload, setReload] = useState(0);
   useEffect(() => { const timer = setTimeout(() => setQuery(current => ({ ...current, search: search.trim(), page: 1 })), 350); return () => clearTimeout(timer); }, [search]);

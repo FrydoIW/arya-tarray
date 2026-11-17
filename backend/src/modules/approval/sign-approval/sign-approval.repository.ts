@@ -194,6 +194,7 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
                   timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } }
                 }
               },
+              eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
               eventCampaign: { select: { id: true, campaignName: true } },
               ...timeBasedHistoryInclude
             },
@@ -255,6 +256,8 @@ export async function loadSignApprovalDetail(approvalId: string, userId: string)
               },
               beforeEventCode: { select: { id: true, code: true, eventName: true } },
               proposedEventCode: { select: { id: true, code: true, eventName: true } },
+              beforeEventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
+              proposedEventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
               beforeEventCampaign: { select: { id: true, campaignName: true } },
               proposedEventCampaign: { select: { id: true, campaignName: true } }
             },
@@ -358,8 +361,10 @@ export async function decideSignApprovalAtomic(input: {
                 action: true,
                 bankTransactionId: true,
                 beforeEventCodeId: true,
+                beforeEventCodeChildId: true,
                 beforeEventCampaignId: true,
                 proposedEventCodeId: true,
+                proposedEventCodeChildId: true,
                 proposedEventCampaignId: true,
                 beforeRemark: true,
                 proposedRemark: true,
@@ -372,6 +377,7 @@ export async function decideSignApprovalAtomic(input: {
                   select: {
                     id: true,
                     eventCodeId: true,
+                    eventCodeChildId: true,
                     eventCampaignId: true,
                     remark: true,
                     reconciliationExcludedAt: true,
@@ -426,13 +432,19 @@ export async function decideSignApprovalAtomic(input: {
         for (const item of correctionProposal.items) {
           if (item.action === "MODIFIED") {
             if (!item.bankTransaction || item.bankTransaction.eventCodeId !== item.beforeEventCodeId
+              || item.bankTransaction.eventCodeChildId !== item.beforeEventCodeChildId
               || item.bankTransaction.eventCampaignId !== item.beforeEventCampaignId
               || (item.bankTransaction.remark?.trim() || null) !== item.beforeRemark) {
               throw new HttpError(409, "Official transaction data changed after this correction was proposed. No correction was applied.");
             }
             await tx.bankTransaction.update({
               where: { id: item.bankTransaction.id },
-              data: { eventCodeId: item.proposedEventCodeId, eventCampaignId: item.proposedEventCampaignId, remark: item.proposedRemark }
+              data: {
+                eventCodeId: item.proposedEventCodeId,
+                eventCodeChildId: item.proposedEventCodeChildId,
+                eventCampaignId: item.proposedEventCampaignId,
+                remark: item.proposedRemark
+              }
             });
             if (item.beforeEventCodeId !== item.proposedEventCodeId) {
               await tx.bankTransactionHistory.create({ data: {
@@ -440,6 +452,17 @@ export async function decideSignApprovalAtomic(input: {
                 fieldName: "event_code_id",
                 oldValue: item.beforeEventCodeId,
                 newValue: item.proposedEventCodeId,
+                remark: "Approved Edit Income correction",
+                changedAt: now,
+                changedById: input.userId
+              } });
+            }
+            if (item.beforeEventCodeChildId !== item.proposedEventCodeChildId) {
+              await tx.bankTransactionHistory.create({ data: {
+                bankTransactionId: item.bankTransaction.id,
+                fieldName: "event_code_child_id",
+                oldValue: item.beforeEventCodeChildId,
+                newValue: item.proposedEventCodeChildId,
                 remark: "Approved Edit Income correction",
                 changedAt: now,
                 changedById: input.userId
@@ -501,6 +524,7 @@ export async function decideSignApprovalAtomic(input: {
                   ? item.manualOriginalAmount
                   : null,
                 eventCodeId: item.proposedEventCodeId,
+                eventCodeChildId: item.proposedEventCodeChildId,
                 eventCampaignId: item.proposedEventCampaignId,
                 remark: item.proposedRemark,
                 status: "FINALIZED",

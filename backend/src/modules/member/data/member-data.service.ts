@@ -595,18 +595,24 @@ export async function updateIdentity(memberId: string, identityId: string, input
 export async function getDonations(memberId: string, query: MemberDonationQuery) {
   const period = donationPeriod(query);
   const result = await repository.loadMemberDonationRecords(memberId, {
-    periodStart: period.start, periodEnd: period.end, eventCodeId: query.eventCodeId, search: query.search
+    periodStart: period.start, periodEnd: period.end, eventCodeId: query.eventCodeId, eventCodeChildId: query.eventCodeChildId, search: query.search
   }, query.page, query.pageSize);
   if (!result.member) throw new HttpError(404, "Donatur tidak ditemukan.");
   const events = new Map(result.events.map(event => [event.id, event]));
+  const children = new Map(result.children.map(child => [child.id, child]));
   const eventBreakdown = result.eventGroups.flatMap(group => {
     const event = group.eventCodeId ? events.get(group.eventCodeId) : undefined;
     return event ? [{ eventCodeId: event.id, eventCode: event.code, eventName: event.eventName, category: event.category?.trim() || "Uncategorized",
       transactionCount: group._count._all, amount: group._sum.originalAmount?.toString() ?? "0.00" }] : [];
   });
+  const childBreakdown = result.childGroups.flatMap(group => {
+    const child = group.eventCodeChildId ? children.get(group.eventCodeChildId) : undefined;
+    return child ? [{ eventCodeChildId: child.id, childCode: child.childCode, childName: child.childName, eventCodeId: child.eventCodeId,
+      transactionCount: group._count._all, amount: group._sum.originalAmount?.toString() ?? "0.00" }] : [];
+  });
   return {
     member: { memberId: result.member.id, memberCode: result.member.memberCode, memberName: result.member.memberName },
-    filters: { periodMode: period.mode, month: period.month, date: period.date, eventCodeId: query.eventCodeId ?? null, search: query.search },
+    filters: { periodMode: period.mode, month: period.month, date: period.date, eventCodeId: query.eventCodeId ?? null, eventCodeChildId: query.eventCodeChildId ?? null, search: query.search },
     summary: { lifetimeAmount: result.lifetime._sum.originalAmount?.toString() ?? "0.00", lifetimeTransactionCount: result.lifetime._count._all,
       periodAmount: result.period._sum.originalAmount?.toString() ?? "0.00", periodTransactionCount: result.period._count._all },
     rows: result.rows.map(row => ({
@@ -621,11 +627,14 @@ export async function getDonations(memberId: string, query: MemberDonationQuery)
       referenceNo: row.referenceNo, description: row.description, amount: row.originalAmount.toString(),
       finalEvent: row.eventCode ? { eventCodeId: row.eventCode.id, eventCode: row.eventCode.code, eventName: row.eventCode.eventName,
         category: row.eventCode.category?.trim() || "Uncategorized" } : null,
+      eventCodeChild: row.eventCodeChild ? { eventCodeChildId: row.eventCodeChild.id, childCode: row.eventCodeChild.childCode, childName: row.eventCodeChild.childName, activeFlag: row.eventCodeChild.activeFlag } : null,
       statement: { statementId: row.statementUpload.id, fileName: row.statementUpload.fileName }
     })),
     eventBreakdown,
+    childBreakdown,
     categoryBreakdown: aggregateCategories(eventBreakdown.map(row => ({ category: row.category, transactionCount: row.transactionCount, amount: row.amount }))),
     eventOptions: result.eventOptions,
+    childOptions: result.childOptions,
     pagination: { page: result.page, pageSize: query.pageSize, totalRows: result.total, totalPages: Math.max(1, Math.ceil(result.total / query.pageSize)) }
   };
 }

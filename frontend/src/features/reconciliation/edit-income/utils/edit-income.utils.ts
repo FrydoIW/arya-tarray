@@ -16,6 +16,10 @@ export function getEventCodeLabel(eventCode: EditIncomeEventCode) {
   return `${eventCode.code} - ${eventCode.eventName}`;
 }
 
+export function getChildLabel(child: { childCode: string; childName: string } | null) {
+  return child ? `${child.childCode} - ${child.childName}` : null;
+}
+
 export function getStatementStatusLabel(status: "COMPLETE" | "PENDING_REAPPROVAL") {
   return status === "PENDING_REAPPROVAL" ? "Pending Re-approval" : "Complete";
 }
@@ -31,6 +35,7 @@ export function transactionChanged(
 ) {
   if (!original) return current.correctionAction === "ADDED";
   return current.eventCodeId !== original.eventCodeId
+    || current.eventCodeChildId !== original.eventCodeChildId
     || current.eventCampaignId !== original.eventCampaignId
     || normalizeRemark(current.remark) !== normalizeRemark(original.remark);
 }
@@ -58,6 +63,7 @@ export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactio
       description: item.description,
       amount: item.originalAmount.replace(/^-/, ""),
       eventCodeId: item.eventCodeId,
+      eventCodeChildId: item.eventCodeChildId,
       eventCampaignId: item.eventCampaignId,
       remark: normalizeRemark(item.remark),
       reason: item.correctionReason!
@@ -71,6 +77,7 @@ export function buildCorrectionChanges(detail: EditIncomeDetail, draftTransactio
       action: "MODIFIED" as const,
       transactionId: item.id,
       eventCodeId: item.eventCodeId,
+      eventCodeChildId: item.eventCodeChildId,
       eventCampaignId: item.eventCampaignId,
       remark: normalizeRemark(item.remark)
     });

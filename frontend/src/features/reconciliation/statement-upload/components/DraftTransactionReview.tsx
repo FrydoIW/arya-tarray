@@ -14,9 +14,11 @@ import type {
   DraftRowStatusFilter,
   DraftTransaction,
   CampaignOption,
+  EventCodeChildOption,
   EventCodeOption
 } from "../types";
 import {
+  childrenOfParent,
   getDraftRowStatus,
   getDraftRowStatusLabel,
   getEventCode,
@@ -28,6 +30,7 @@ import styles from "../styles/statement-upload.module.css";
 type Props = {
   rows: DraftTransaction[];
   eventCodes: EventCodeOption[];
+  eventCodeChildren: EventCodeChildOption[];
   campaigns: CampaignOption[];
   search: string;
   statusFilter: DraftRowStatusFilter;
@@ -43,9 +46,13 @@ type Props = {
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onReload: () => void;
-  onFinalEventChange: (transactionId: string, eventCodeId: string | null, eventCampaignId?: string | null) => void;
+  onFinalEventChange: (transactionId: string, eventCodeId: string | null, eventCodeChildId?: string | null, eventCampaignId?: string | null) => void;
   onRemarkChange: (transactionId: string, remark: string | null) => void;
 };
+
+function childLabel(child: EventCodeChildOption | null) {
+  return child ? `${child.childCode} - ${child.childName}` : null;
+}
 
 function RowStatus({ status, outgoing }: { status: DraftRowStatus; outgoing: boolean }) {
   const icon = status === "NEEDS_REVIEW"
@@ -85,6 +92,7 @@ function RemarkCell({ row, disabled, onCommit }: { row: DraftTransaction; disabl
 export function DraftTransactionReview({
   rows,
   eventCodes,
+  eventCodeChildren,
   campaigns,
   search,
   statusFilter,
@@ -182,6 +190,37 @@ export function DraftTransactionReview({
       }
     },
     {
+      key: "eventCodeChildId",
+      header: "Child",
+      minWidth: "170px",
+      render: (row) => {
+        if (!requiresEventClassification(row) || !row.eventCodeId) return <span className={styles.notApplicableText}>—</span>;
+        const parentChildren = childrenOfParent(eventCodeChildren, row.eventCodeId);
+        if (parentChildren.length === 0) return <span className={styles.notApplicableText}>—</span>;
+        if (disabled) {
+          const selected = parentChildren.find((item) => item.id === row.eventCodeChildId) ?? null;
+          return selected
+            ? <span className={styles.finalEvent} title={childLabel(selected) ?? undefined}>{childLabel(selected)}{!selected.activeFlag ? " (historical)" : ""}</span>
+            : <span className={styles.noMatch}>Select Child...</span>;
+        }
+        const eligible = parentChildren.filter((item) => item.activeFlag || item.id === row.eventCodeChildId);
+        return (
+          <Select
+            className={styles.eventSelect}
+            value={row.eventCodeChildId ?? ""}
+            disabled={disabled}
+            onChange={(event) => onFinalEventChange(row.id, row.eventCodeId ?? null, event.target.value || null, row.eventCampaignId ?? null)}
+            aria-label={`Child row ${row.rowNo}`}
+          >
+            <option value="">Select Child...</option>
+            {eligible.map((child) => (
+              <option value={child.id} key={child.id}>{child.childCode} - {child.childName}{!child.activeFlag ? " (historical)" : ""}</option>
+            ))}
+          </Select>
+        );
+      }
+    },
+    {
       key: "program",
       header: "Program / Entitlement",
       minWidth: "190px",
@@ -200,7 +239,7 @@ export function DraftTransactionReview({
         }
         if (event?.eventType !== "CAMPAIGN") return <span className={styles.notApplicableText}>—</span>;
         const eligible = campaigns.filter((item) => item.eventCodeId === row.eventCodeId && ((item.activeFlag && (!item.startDate || row.transactionDate.slice(0, 10) >= item.startDate) && (!item.endDate || row.transactionDate.slice(0, 10) <= item.endDate)) || item.id === row.eventCampaignId));
-        return <Select className={styles.eventSelect} value={row.eventCampaignId ?? ""} disabled={disabled} onChange={(event) => onFinalEventChange(row.id, row.eventCodeId ?? null, event.target.value || null)} aria-label={`Campaign row ${row.rowNo}`}>
+        return <Select className={styles.eventSelect} value={row.eventCampaignId ?? ""} disabled={disabled} onChange={(event) => onFinalEventChange(row.id, row.eventCodeId ?? null, row.eventCodeChildId ?? null, event.target.value || null)} aria-label={`Campaign row ${row.rowNo}`}>
           <option value="">Select Campaign...</option>
           {eligible.map((item) => <option key={item.id} value={item.id}>{item.campaignName}{!item.activeFlag ? " (historical)" : ""}</option>)}
         </Select>;
@@ -237,9 +276,9 @@ export function DraftTransactionReview({
       header: "Status",
       minWidth: "120px",
       sticky: "right",
-      render: (row) => <RowStatus status={getDraftRowStatus(row, eventCodes)} outgoing={row.direction === "DB"} />
+      render: (row) => <RowStatus status={getDraftRowStatus(row, eventCodes, eventCodeChildren)} outgoing={row.direction === "DB"} />
     }
-  ], [disabled, eventCodes, campaigns, onFinalEventChange, onRemarkChange]);
+  ], [disabled, eventCodes, eventCodeChildren, campaigns, onFinalEventChange, onRemarkChange]);
 
   return (
     <CollapsibleSection

@@ -9,6 +9,7 @@ import { EventCodeMatchingRule } from "./EventCodeMatchingRule";
 import { EventCodeSummary } from "./EventCodeSummary";
 import { EventCodeTable } from "./EventCodeTable";
 import { EventCampaignSection } from "./EventCampaignSection";
+import { EventCodeChildSection } from "./EventCodeChildSection";
 import { EventTimeRuleSection } from "./EventTimeRuleSection";
 import { BulkUploadEventCodesModal } from "./BulkUploadEventCodesModal";
 import { getEventCodeTemplate } from "../api/event-code.api";
@@ -116,6 +117,7 @@ export function EventCodeScreen() {
         onAdd={addRow}
       />
       <EventCampaignSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
+      <EventCodeChildSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
       <EventTimeRuleSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
       <BulkUploadEventCodesModal
         open={bulkOpen}

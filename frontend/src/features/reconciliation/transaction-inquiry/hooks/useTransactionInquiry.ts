@@ -23,10 +23,11 @@ import { getCurrentDayValue, getCurrentMonthValue } from "../utils/transaction-i
 const CURRENT_MONTH = getCurrentMonthValue();
 const CURRENT_DAY = getCurrentDayValue();
 const EMPTY_WORKSPACE: TransactionInquiryWorkspace = {
-  filters: { periodMode: "MONTH", month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL", bankAccountId: null, finalEventId: null, eventCampaignId: null, memberId: null, memberLinkStatus: "ALL" },
+  filters: { periodMode: "MONTH", month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL", bankAccountId: null, finalEventId: null, eventCodeChildId: null, eventCampaignId: null, memberId: null, memberLinkStatus: "ALL" },
   summary: { totalTransactions: 0, totalCredit: "0.00", totalDebit: "0.00", completeTransactions: 0, incomingTransactions: 0, outgoingTransactions: 0 },
   bankAccounts: [],
   eventOptions: [],
+  eventCodeChildOptions: [],
   campaignOptions: [],
   transactions: [],
   pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 }
@@ -43,6 +44,7 @@ export function useTransactionInquiry() {
   const [status, setStatus] = useState<TransactionInquiryStatus>("ALL");
   const [bankAccountId, setBankAccountId] = useState("ALL");
   const [finalEventId, setFinalEventId] = useState("ALL");
+  const [eventCodeChildId, setEventCodeChildId] = useState("ALL");
   const [eventCampaignId, setEventCampaignId] = useState("ALL");
   const [memberId, setMemberId] = useState("ALL");
   const [memberLinkStatus, setMemberLinkStatus] = useState<TransactionInquiryMemberLinkStatus>("ALL");
@@ -53,7 +55,7 @@ export function useTransactionInquiry() {
   const [memberOptionsRequested, setMemberOptionsRequested] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const initialQuery = { periodMode: "MONTH" as const, month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL" as const, bankAccountId: "ALL", finalEventId: "ALL", eventCampaignId: "ALL", memberId: "ALL", memberLinkStatus: "ALL" as const, page: 1, pageSize: 25 };
+  const initialQuery = { periodMode: "MONTH" as const, month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL" as const, bankAccountId: "ALL", finalEventId: "ALL", eventCodeChildId: "ALL", eventCampaignId: "ALL", memberId: "ALL", memberLinkStatus: "ALL" as const, page: 1, pageSize: 25 };
   const initialKey = workspaceCacheKey(INQUIRY_WORKSPACE_PREFIX, initialQuery);
   const initialWorkspace = getWorkspaceCache<TransactionInquiryWorkspace>(initialKey)?.value ?? EMPTY_WORKSPACE;
   const [workspace, setWorkspace] = useState<TransactionInquiryWorkspace>(initialWorkspace);
@@ -95,7 +97,7 @@ export function useTransactionInquiry() {
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [memberOptionsRequested, memberSearch]);
 
-  const query = useMemo(() => ({ periodMode, month, date, search, status, bankAccountId, finalEventId, eventCampaignId, memberId, memberLinkStatus, page, pageSize }), [bankAccountId, date, finalEventId, eventCampaignId, memberId, memberLinkStatus, month, page, pageSize, periodMode, search, status]);
+  const query = useMemo(() => ({ periodMode, month, date, search, status, bankAccountId, finalEventId, eventCodeChildId, eventCampaignId, memberId, memberLinkStatus, page, pageSize }), [bankAccountId, date, finalEventId, eventCodeChildId, eventCampaignId, memberId, memberLinkStatus, month, page, pageSize, periodMode, search, status]);
 
   const load = useCallback(async (force = false) => {
     workspaceRequestRef.current?.abort();
@@ -142,7 +144,8 @@ export function useTransactionInquiry() {
   }
   function changeStatus(value: TransactionInquiryStatus) { setStatus(value); setPage(1); }
   function changeBankAccount(value: string) { setBankAccountId(value); setPage(1); }
-  function changeFinalEvent(value: string) { setFinalEventId(value); setPage(1); }
+  function changeFinalEvent(value: string) { setFinalEventId(value); setEventCodeChildId("ALL"); setPage(1); }
+  function changeEventCodeChild(value: string) { setEventCodeChildId(value); setPage(1); }
   function changeCampaign(value: string) { setEventCampaignId(value); setPage(1); }
   function changeMember(value: string) {
     setMemberId(value);
@@ -175,7 +178,7 @@ export function useTransactionInquiry() {
     setReportLoading(true);
     setError("");
     try {
-      const result = await generateTransactionInquiryReport({ periodMode, month, date, search, status, bankAccountId, finalEventId, eventCampaignId, memberId, memberLinkStatus }, options);
+      const result = await generateTransactionInquiryReport({ periodMode, month, date, search, status, bankAccountId, finalEventId, eventCodeChildId, eventCampaignId, memberId, memberLinkStatus }, options);
       const url = URL.createObjectURL(result.blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -202,6 +205,7 @@ export function useTransactionInquiry() {
     status,
     bankAccountId,
     finalEventId,
+    eventCodeChildId,
     eventCampaignId,
     memberId,
     memberLinkStatus,
@@ -222,6 +226,7 @@ export function useTransactionInquiry() {
     changeStatus,
     changeBankAccount,
     changeFinalEvent,
+    changeEventCodeChild,
     changeCampaign,
     setMemberSearch,
     changeMember,

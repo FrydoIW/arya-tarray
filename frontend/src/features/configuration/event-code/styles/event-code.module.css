@@ -513,6 +513,8 @@
 .campaignProgress { margin-top: 14px; padding-top: 11px; border-top: 1px solid #e5eaf2; font-size: 13px; font-weight: 650; color: #263b62; }
 .campaignBody { display: grid; gap: 16px; padding: 14px; }
 .campaignBody p { margin: 0; }
+.childFooter { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #e5eaf2; }
+.childUsage { font-size: 12px; font-weight: 650; color: #64748b; }
 .timeRuleBody { display: grid; gap: 16px; padding: 14px; }
 .timeRuleBody p { margin: 0; }
 .timeRuleFields { row-gap: 14px; column-gap: 12px; }

@@ -55,6 +55,7 @@ export const memberDonationQuerySchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
   date: z.string().refine(isValidPeriodDate, "Date must use YYYY-MM-DD format").optional(),
   eventCodeId: z.string().uuid().optional(),
+  eventCodeChildId: z.string().uuid().optional(),
   search: z.string().trim().max(150).default(""),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25)

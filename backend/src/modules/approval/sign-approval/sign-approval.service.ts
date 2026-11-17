@@ -150,6 +150,8 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
         } : null,
         beforeEvent: item.beforeEventCode,
         proposedEvent: item.proposedEventCode,
+        beforeEventCodeChild: item.beforeEventCodeChild,
+        proposedEventCodeChild: item.proposedEventCodeChild,
         beforeCampaign: item.beforeEventCampaign,
         proposedCampaign: item.proposedEventCampaign,
         beforeRemark: item.beforeRemark,
@@ -185,6 +187,13 @@ export async function getSignApprovalDetail(approvalId: string, userId: string) 
             id: transaction.eventCode.id,
             code: transaction.eventCode.code,
             eventName: transaction.eventCode.eventName
+          }
+        : null,
+      eventCodeChild: transaction.eventCodeChild
+        ? {
+            id: transaction.eventCodeChild.id,
+            childCode: transaction.eventCodeChild.childCode,
+            childName: transaction.eventCodeChild.childName
           }
         : null,
       campaign: transaction.eventCampaign,

@@ -39,6 +39,7 @@ const transactionListSelect = {
   reconciliationExclusionReason: true,
   suggestedEventCode: { select: eventCodeSelect },
   eventCode: { select: eventCodeSelect },
+  eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
   eventCampaign: { select: { id: true, campaignName: true, activeFlag: true, eventCodeId: true } },
   memberIdentity: {
     select: {
@@ -68,6 +69,7 @@ export type TransactionInquiryFilter = {
   status: "ALL" | "RAW" | "CHECK" | "FINALIZED";
   bankAccountId?: string;
   finalEventId?: string;
+  eventCodeChildId?: string;
   eventCampaignId?: string;
   memberId?: string;
   memberLinkStatus: "ALL" | "LINKED" | "UNLINKED";
@@ -86,6 +88,7 @@ export function buildTransactionInquiryWhere(filter: TransactionInquiryFilter): 
   if (filter.status !== "ALL") conditions.push({ status: filter.status });
   if (filter.bankAccountId) conditions.push({ statementUpload: { is: { bankAccountId: filter.bankAccountId } } });
   if (filter.finalEventId) conditions.push({ eventCodeId: filter.finalEventId });
+  if (filter.eventCodeChildId) conditions.push({ eventCodeChildId: filter.eventCodeChildId });
   if (filter.eventCampaignId) conditions.push({ eventCampaignId: filter.eventCampaignId });
   if (filter.memberId) conditions.push({ memberIdentity: { is: { memberId: filter.memberId } } });
   if (filter.memberLinkStatus === "LINKED") {
@@ -135,7 +138,7 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
     ]
   };
 
-  const [transactions, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions, campaignOptions] = await Promise.all([
+  const [transactions, totalCredit, totalDebit, completeTransactions, bankAccounts, eventOptions, eventCodeChildOptions, campaignOptions] = await Promise.all([
     prisma.bankTransaction.findMany({
       where,
       select: transactionListSelect,
@@ -163,6 +166,15 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
       select: eventCodeSelect,
       orderBy: [{ activeFlag: "desc" }, { code: "asc" }, { eventName: "asc" }]
     }),
+    prisma.eventCodeChild.findMany({
+      where: { OR: [
+        { activeFlag: true },
+        ...(input.filter.eventCodeChildId ? [{ id: input.filter.eventCodeChildId }] : []),
+        { transactions: { some: { transactionDate: { gte: input.filter.periodStart, lt: input.filter.periodEnd }, reconciliationExcludedAt: null } } }
+      ] },
+      select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true },
+      orderBy: [{ activeFlag: "desc" }, { childCode: "asc" }, { childName: "asc" }]
+    }),
     prisma.eventCampaign.findMany({
       where: { OR: [
         { activeFlag: true },
@@ -185,6 +197,7 @@ export async function loadTransactionInquiryWorkspaceRecords(input: {
     completeTransactions,
     bankAccounts,
     eventOptions,
+    eventCodeChildOptions,
     campaignOptions
   };
 }
@@ -195,6 +208,7 @@ export async function loadTransactionInquiryDetailRecord(transactionId: string) 
     include: {
       suggestedEventCode: { select: eventCodeSelect },
       eventCode: { select: eventCodeSelect },
+      eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
       eventCampaign: { select: { id: true, campaignName: true, eventCodeId: true, activeFlag: true } },
       memberEventCoverages: { where: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" }, select: { subscription: { select: { id: true, memberId: true, referenceNo: true, displayName: true } }, coverageFrom: true, coverageTo: true, unitAmountSnapshot: true, grantedUnits: true, durationMonthsSnapshot: true }, take: 1 },
       memberEventBalanceLedger: { where: { entryType: "PAYMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -295,6 +309,14 @@ export function loadTransactionInquiryEventOption(eventCodeId: string) {
 
 export function loadTransactionInquiryCampaignOption(eventCampaignId: string) {
   return prisma.eventCampaign.findUnique({ where: { id: eventCampaignId }, select: { id: true, campaignName: true } });
+}
+
+export function loadTransactionInquiryChildOption(eventCodeChildId: string) {
+  return prisma.eventCodeChild.findUnique({ where: { id: eventCodeChildId }, select: { id: true, childCode: true, childName: true } });
+}
+
+export function loadChildLabels(ids: string[]) {
+  return ids.length ? prisma.eventCodeChild.findMany({ where: { id: { in: ids } }, select: { id: true, childCode: true, childName: true } }) : Promise.resolve([]);
 }
 
 export function loadCampaignLabels(ids: string[]) {

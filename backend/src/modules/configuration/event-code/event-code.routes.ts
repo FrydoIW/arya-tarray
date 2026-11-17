@@ -9,6 +9,8 @@ import {
   executeCampaignsController,
   executeTimeRuleController,
   listTimeRulesController,
+  listChildrenController,
+  executeChildrenController,
   previewEventCodeBulkUploadController
 } from "./event-code.controller.js";
 
@@ -20,6 +22,8 @@ eventCodeRouter.get("/campaigns", asyncHandler(listCampaignsController));
 eventCodeRouter.post("/campaigns/execute", asyncHandler(executeCampaignsController));
 eventCodeRouter.get("/time-rules", asyncHandler(listTimeRulesController));
 eventCodeRouter.post("/time-rules/execute", asyncHandler(executeTimeRuleController));
+eventCodeRouter.get("/children", asyncHandler(listChildrenController));
+eventCodeRouter.post("/children/execute", asyncHandler(executeChildrenController));
 eventCodeRouter.get("/template", asyncHandler(downloadEventCodeTemplateController));
 eventCodeRouter.post("/bulk-preview", eventCodeUpload.single("file"), asyncHandler(previewEventCodeBulkUploadController));
 eventCodeRouter.post("/execute", asyncHandler(executeEventCodeChangesController));

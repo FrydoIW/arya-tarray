@@ -36,6 +36,14 @@ export type TransactionInquiryEvent = {
 
 export type TransactionInquiryCampaign = { id: string; eventCodeId: string; campaignName: string; activeFlag: boolean };
 
+export type TransactionInquiryEventCodeChild = {
+  id: string;
+  eventCodeId: string;
+  childCode: string;
+  childName: string;
+  activeFlag: boolean;
+};
+
 export type TransactionInquiryRow = {
   id: string;
   statementId: string;
@@ -55,6 +63,7 @@ export type TransactionInquiryRow = {
   manualAddedAt: string | null;
   suggestedEvent: TransactionInquiryEvent | null;
   finalEvent: TransactionInquiryEvent | null;
+  eventCodeChild: TransactionInquiryEventCodeChild | null;
   eventCampaign: TransactionInquiryCampaign | null;
   memberIdentity: TransactionInquiryMemberIdentity | null;
   member: TransactionInquiryMember | null;
@@ -70,6 +79,7 @@ export type TransactionInquiryWorkspace = {
     status: TransactionInquiryStatus;
     bankAccountId: string | null;
     finalEventId: string | null;
+    eventCodeChildId: string | null;
     eventCampaignId: string | null;
     memberId: string | null;
     memberLinkStatus: TransactionInquiryMemberLinkStatus;
@@ -84,6 +94,7 @@ export type TransactionInquiryWorkspace = {
   };
   bankAccounts: TransactionInquiryBankAccount[];
   eventOptions: TransactionInquiryEvent[];
+  eventCodeChildOptions: TransactionInquiryEventCodeChild[];
   campaignOptions: TransactionInquiryCampaign[];
   transactions: TransactionInquiryRow[];
   pagination: {
@@ -130,6 +141,7 @@ export type TransactionInquiryDetail = {
     reconciliationExclusionReason: string | null;
     suggestedEvent: TransactionInquiryEvent | null;
     finalEvent: TransactionInquiryEvent | null;
+    eventCodeChild: TransactionInquiryEventCodeChild | null;
     eventCampaign: TransactionInquiryCampaign | null;
     memberIdentity: TransactionInquiryMemberIdentity | null;
     member: TransactionInquiryMember | null;
@@ -156,6 +168,7 @@ export type TransactionInquiryQuery = {
   status: TransactionInquiryStatus;
   bankAccountId: string;
   finalEventId: string;
+  eventCodeChildId: string;
   eventCampaignId: string;
   memberId: string;
   memberLinkStatus: TransactionInquiryMemberLinkStatus;

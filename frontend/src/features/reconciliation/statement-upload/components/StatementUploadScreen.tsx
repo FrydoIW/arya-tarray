@@ -76,6 +76,7 @@ export function StatementUploadScreen() {
       <DraftTransactionReview
         rows={workspace.filteredTransactions}
         eventCodes={workspace.workspace.eventCodes}
+        eventCodeChildren={workspace.workspace.eventCodeChildren}
         campaigns={workspace.workspace.campaigns}
         search={workspace.search}
         statusFilter={workspace.statusFilter}
@@ -91,7 +92,7 @@ export function StatementUploadScreen() {
         onPageChange={workspace.setPage}
         onPageSizeChange={workspace.setPageSize}
         onReload={() => void workspace.refresh()}
-        onFinalEventChange={(transactionId, eventCodeId, eventCampaignId) => void workspace.updateFinalEvent(transactionId, eventCodeId, eventCampaignId)}
+        onFinalEventChange={(transactionId, eventCodeId, eventCodeChildId, eventCampaignId) => void workspace.updateFinalEvent(transactionId, eventCodeId, eventCodeChildId ?? null, eventCampaignId ?? null)}
         onRemarkChange={(transactionId, remark) => void workspace.updateRemark(transactionId, remark)}
       />
       <DraftReviewSummary

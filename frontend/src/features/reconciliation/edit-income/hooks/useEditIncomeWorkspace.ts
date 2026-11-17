@@ -261,12 +261,16 @@ export function useEditIncomeWorkspace() {
     setError("");
   }
 
-  function updateTransaction(transactionId: string, field: "eventCodeId" | "eventCampaignId" | "remark", value: string | null) {
+  function updateTransaction(transactionId: string, field: "eventCodeId" | "eventCodeChildId" | "eventCampaignId" | "remark", value: string | null) {
     if (!canEdit) return;
     setMessage("");
     setError("");
     setDraftTransactions((current) => current.map((transaction) =>
-      transaction.id === transactionId ? { ...transaction, [field]: value, ...(field === "eventCodeId" && value !== transaction.eventCodeId ? { eventCampaignId: null } : {}) } : transaction
+      transaction.id === transactionId ? {
+        ...transaction,
+        [field]: value,
+        ...(field === "eventCodeId" && value !== transaction.eventCodeId ? { eventCodeChildId: null, eventCampaignId: null } : {})
+      } : transaction
     ));
   }
 
@@ -303,6 +307,7 @@ export function useEditIncomeWorkspace() {
       suffixCode: null,
       suggestedEventCodeId: null,
       eventCodeId: input.eventCodeId,
+      eventCodeChildId: input.eventCodeChildId,
       eventCampaignId: input.eventCampaignId,
       baseAmount: input.direction === "INCOMING" ? input.amount : null,
       remark: input.remark,

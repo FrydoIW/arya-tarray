@@ -59,6 +59,12 @@ export type ApprovalEventCode = {
   eventName: string;
 };
 
+export type ApprovalEventCodeChild = {
+  id: string;
+  childCode: string;
+  childName: string;
+};
+
 export type ApprovalTransactionPreview = {
   id: string;
   rowNo: number | null;
@@ -67,6 +73,7 @@ export type ApprovalTransactionPreview = {
   originalAmount: string;
   suggestedEvent: ApprovalEventCode | null;
   finalEvent: ApprovalEventCode | null;
+  eventCodeChild: ApprovalEventCodeChild | null;
   campaign: { id: string; campaignName: string } | null;
   sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; principalAmount: string; paymentOnlyRemainder: string; historical: boolean; allocated: boolean } | null;
   status: string;
@@ -94,6 +101,8 @@ export type ApprovalCorrectionItem = {
   } | null;
   beforeEvent: ApprovalEventCode | null;
   proposedEvent: ApprovalEventCode | null;
+  beforeEventCodeChild: ApprovalEventCodeChild | null;
+  proposedEventCodeChild: ApprovalEventCodeChild | null;
   beforeCampaign: { id: string; campaignName: string } | null;
   proposedCampaign: { id: string; campaignName: string } | null;
   beforeRemark: string | null;

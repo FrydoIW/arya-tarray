@@ -48,11 +48,25 @@ export function TopFinalEvents({ data, loading, monthLabel, canViewInquiry }: {
               {expandedGroup ? (
                 <div id={panelId} className="dashboard-event-group-content">
                   {group.events.map((event) => (
-                    <div className="dashboard-event-row" key={event.eventCodeId}>
-                      <strong>{event.code}</strong>
-                      <span>{event.eventName}</span>
-                      <small>{event.transactionCount.toLocaleString("id-ID")} transactions</small>
-                      <em>{formatMoney(event.totalAmount)}</em>
+                    <div className="dashboard-event-block" key={event.eventCodeId}>
+                      <div className="dashboard-event-row">
+                        <strong>{event.code}</strong>
+                        <span>{event.eventName}</span>
+                        <small>{event.transactionCount.toLocaleString("id-ID")} transactions</small>
+                        <em>{formatMoney(event.totalAmount)}</em>
+                      </div>
+                      {event.children.length > 0 ? (
+                        <div className="dashboard-child-rows">
+                          {event.children.map((child) => (
+                            <div className="dashboard-child-row" key={child.eventCodeChildId}>
+                              <strong>{child.childCode}</strong>
+                              <span>{child.childName}</span>
+                              <small>{child.transactionCount.toLocaleString("id-ID")} transactions</small>
+                              <em>{formatMoney(child.totalAmount)}</em>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>

@@ -3,6 +3,8 @@ import { campaignExecuteSchema } from "./event-campaign.schema.js";
 import { executeCampaignChanges, getCampaignSummaries } from "./event-campaign.service.js";
 import { timeRuleBulkExecuteSchema } from "./event-time-rule.schema.js";
 import { executeTimeRules, getTimeRuleSummaries } from "./event-time-rule.service.js";
+import { childExecuteSchema } from "./event-code-child.schema.js";
+import { executeChildChanges, getChildSummaries } from "./event-code-child.service.js";
 import {
   eventCodeBulkPreviewBodySchema,
   eventCodeExecuteSchema,
@@ -32,6 +34,11 @@ export async function executeCampaignsController(req: Request, res: Response) {
 export async function listTimeRulesController(_req: Request, res: Response) { res.json(await getTimeRuleSummaries()); }
 export async function executeTimeRuleController(req: Request, res: Response) {
   res.json(await executeTimeRules(timeRuleBulkExecuteSchema.parse(req.body), req.auth!.userId));
+}
+
+export async function listChildrenController(_req: Request, res: Response) { res.json(await getChildSummaries()); }
+export async function executeChildrenController(req: Request, res: Response) {
+  res.json(await executeChildChanges(childExecuteSchema.parse(req.body), req.auth!.userId));
 }
 
 export async function executeEventCodeChangesController(req: Request, res: Response) {

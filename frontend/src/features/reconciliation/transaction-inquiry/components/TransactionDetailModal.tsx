@@ -68,6 +68,7 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
           <div className={styles.classificationGrid}>
             <div><span>Suggested Event</span><strong>{outgoing ? "Outgoing" : eventLabel(transaction.suggestedEvent)}</strong><small>{outgoing ? "Event Code is not required for debit transactions" : "Machine suggestion at upload"}</small></div>
             <div><span>Final Event</span><strong>{outgoing ? "Outgoing" : eventLabel(transaction.finalEvent)}</strong><small>{outgoing ? "Direction provides the business meaning" : "Current operator-approved classification"}</small></div>
+            <div><span>Child</span><strong>{outgoing ? "Outgoing" : transaction.eventCodeChild ? `${transaction.eventCodeChild.childCode} - ${transaction.eventCodeChild.childName}` : "—"}</strong><small>Event Code child classification</small></div>
             <div><span>Campaign</span><strong>{transaction.eventCampaign?.campaignName ?? "—"}</strong><small>Official Campaign assignment</small></div>
           </div>
         </section>
@@ -86,7 +87,7 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, onClos
             <div className={styles.historyList}>
               {detail.history.map((item) => (
                 <article key={item.id}>
-                  <div><strong>{item.fieldName === "event_code_id" ? "Final Event" : item.fieldName === "event_campaign_id" ? "Campaign" : item.fieldName === "remark" ? "Remark" : item.fieldName || "Change"}</strong><span>{formatDateTime(item.changedAt)}</span></div>
+                  <div><strong>{item.fieldName === "event_code_id" ? "Final Event" : item.fieldName === "event_code_child_id" ? "Child" : item.fieldName === "event_campaign_id" ? "Campaign" : item.fieldName === "remark" ? "Remark" : item.fieldName || "Change"}</strong><span>{formatDateTime(item.changedAt)}</span></div>
                   <p><b>{item.oldValueLabel || "-"}</b><i>→</i><b>{item.newValueLabel || "-"}</b></p>
                   <small>{item.changedBy.fullName}{item.remark ? ` · ${item.remark}` : ""}</small>
                 </article>

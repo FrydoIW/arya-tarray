@@ -10,6 +10,20 @@ export type DashboardDonationGroup = {
   _sum: { originalAmount: Amount };
 };
 
+export type DashboardChildDonationGroup = {
+  memberIdentityId: string | null;
+  eventCodeChildId: string | null;
+  _count: { _all: number };
+  _sum: { originalAmount: Amount };
+};
+
+export type DashboardEventCodeChild = {
+  id: string;
+  eventCodeId: string;
+  childCode: string;
+  childName: string;
+};
+
 export type DashboardIdentity = {
   id: string;
   verificationStatus: string;
@@ -34,19 +48,41 @@ export function isRegistrationFollowUpIdentity(identity: { verificationStatus: s
 export function summarizeDashboardMemberDonations(
   groups: DashboardDonationGroup[],
   identities: DashboardIdentity[],
-  eventCodes: DashboardEventCode[]
+  eventCodes: DashboardEventCode[],
+  childGroups: DashboardChildDonationGroup[] = [],
+  children: DashboardEventCodeChild[] = []
 ) {
   const identityById = new Map(identities.map(identity => [identity.id, identity]));
   const eventById = new Map(eventCodes.map(event => [event.id, event]));
+  const childById = new Map(children.map(child => [child.id, child]));
   const linkedIdentityIds = new Set<string>();
   const unlinkedIdentityIds = new Set<string>();
   const contributingMemberIds = new Set<string>();
   const members = new Map<string, { memberId: string; memberCode: string; memberName: string; activeFlag: boolean; transactionCount: number; cents: bigint }>();
   const categories = new Map<string, { category: string; memberIds: Set<string>; transactionCount: number; cents: bigint; events: Map<string, { eventCodeId: string; eventCode: string; eventName: string; category: string; memberIds: Set<string>; transactionCount: number; cents: bigint }> }>();
+  const childRowsByEvent = new Map<string, Map<string, { childCode: string; childName: string; memberIds: Set<string>; transactionCount: number; cents: bigint }>>();
   let linkedTransactionCount = 0;
   let linkedCents = 0n;
   let unlinkedTransactionCount = 0;
   let unlinkedCents = 0n;
+
+  for (const group of childGroups) {
+    if (!group.eventCodeChildId || !group.memberIdentityId) continue;
+    const identity = identityById.get(group.memberIdentityId);
+    const child = childById.get(group.eventCodeChildId);
+    if (!identity || !child) continue;
+    const member = identity.verificationStatus === "VERIFIED" ? identity.member : null;
+    if (!member) continue;
+    const byEvent = childRowsByEvent.get(child.eventCodeId) ?? new Map();
+    const row = byEvent.get(child.id) ?? {
+      childCode: child.childCode, childName: child.childName, memberIds: new Set<string>(), transactionCount: 0, cents: 0n
+    };
+    row.memberIds.add(member.id);
+    row.transactionCount += group._count._all;
+    row.cents += amountCents(group._sum.originalAmount);
+    byEvent.set(child.id, row);
+    childRowsByEvent.set(child.eventCodeId, byEvent);
+  }
 
   for (const group of groups) {
     if (!group.memberIdentityId) continue;
@@ -119,7 +155,16 @@ export function summarizeDashboardMemberDonations(
         transactionCount: category.transactionCount,
         amount: centsToDecimal(category.cents),
         events: [...category.events.values()].sort(compareAmountThenCode).map(({ cents, memberIds, ...event }) => ({
-          ...event, memberCount: memberIds.size, amount: centsToDecimal(cents)
+          ...event,
+          memberCount: memberIds.size,
+          amount: centsToDecimal(cents),
+          children: [...(childRowsByEvent.get(event.eventCodeId)?.values() ?? [])]
+            .sort((left, right) => left.childCode.localeCompare(right.childCode))
+            .map(({ cents: childCents, memberIds: childMemberIds, ...child }) => ({
+              ...child,
+              memberCount: childMemberIds.size,
+              amount: centsToDecimal(childCents)
+            }))
         }))
       }))
   };

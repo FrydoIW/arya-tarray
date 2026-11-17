@@ -3,6 +3,7 @@ import { paymentOnlyTimePreview } from "../../../../lib/time-based-preview";
 import type {
   DraftRowStatus,
   DraftTransaction,
+  EventCodeChildOption,
   EventCodeOption,
   StatementLifecycleStatus
 } from "../types";
@@ -33,13 +34,49 @@ export function requiresEventClassification(transaction: DraftTransaction) {
   return transaction.requiresClassification;
 }
 
-export function getDraftRowStatus(transaction: DraftTransaction, eventCodes: EventCodeOption[] = []): DraftRowStatus {
+export type ChildResolutionState = "NO_CHILDREN" | "AUTO_SELECT" | "MANUAL_REQUIRED" | "ALL_INACTIVE" | "RESOLVED" | "STALE";
+
+export function childrenOfParent(children: EventCodeChildOption[], eventCodeId?: string | null) {
+  if (!eventCodeId) return [];
+  return children.filter((child) => child.eventCodeId === eventCodeId);
+}
+
+export function getChildResolutionState(transaction: DraftTransaction, children: EventCodeChildOption[]): ChildResolutionState {
+  if (!transaction.eventCodeId) return "NO_CHILDREN";
+  const parentChildren = childrenOfParent(children, transaction.eventCodeId);
+  if (parentChildren.length === 0) return "NO_CHILDREN";
+  if (transaction.eventCodeChildId) {
+    const child = parentChildren.find((item) => item.id === transaction.eventCodeChildId);
+    if (!child) return "STALE";
+    if (!child.activeFlag) return "STALE";
+    return "RESOLVED";
+  }
+  const active = parentChildren.filter((child) => child.activeFlag);
+  if (active.length === 0) return "ALL_INACTIVE";
+  if (active.length === 1) return "AUTO_SELECT";
+  return "MANUAL_REQUIRED";
+}
+
+export function autoSelectChildId(transaction: DraftTransaction, children: EventCodeChildOption[]) {
+  if (getChildResolutionState(transaction, children) !== "AUTO_SELECT") return null;
+  const active = childrenOfParent(children, transaction.eventCodeId).filter((child) => child.activeFlag);
+  return active.length === 1 ? active[0].id : null;
+}
+
+export function childNeedsReview(transaction: DraftTransaction, children: EventCodeChildOption[]) {
+  const state = getChildResolutionState(transaction, children);
+  return state === "MANUAL_REQUIRED" || state === "ALL_INACTIVE" || state === "STALE"
+    || (state === "AUTO_SELECT" && !transaction.eventCodeChildId);
+}
+
+export function getDraftRowStatus(transaction: DraftTransaction, eventCodes: EventCodeOption[] = [], children: EventCodeChildOption[] = []): DraftRowStatus {
   if (!requiresEventClassification(transaction)) return "NOT_APPLICABLE";
   if (!transaction.eventCodeId) return "NEEDS_REVIEW";
   const event = getEventCode(eventCodes, transaction.eventCodeId);
   if (event?.eventType === "CAMPAIGN" && !transaction.eventCampaignId) return "NEEDS_REVIEW";
   if (event?.eventType === "TIME_BASED" && (!event.timeRule?.activeFlag
     || !paymentOnlyTimePreview(transaction.baseAmount ?? "", event.timeRule.unitAmount, event.timeRule.durationMonths))) return "NEEDS_REVIEW";
+  if (childNeedsReview(transaction, children)) return "NEEDS_REVIEW";
   if (transaction.suggestedEventCodeId && transaction.eventCodeId === transaction.suggestedEventCodeId) {
     return "MATCHED";
   }
@@ -69,12 +106,12 @@ export function getEventCodeLabel(eventCode: EventCodeOption | null) {
   return `${eventCode.code} - ${eventCode.eventName}`;
 }
 
-export function countNeedsReview(transactions: DraftTransaction[]) {
-  return transactions.filter((item) => getDraftRowStatus(item) === "NEEDS_REVIEW").length;
+export function countNeedsReview(transactions: DraftTransaction[], children: EventCodeChildOption[] = []) {
+  return transactions.filter((item) => getDraftRowStatus(item, [], children) === "NEEDS_REVIEW").length;
 }
 
-export function countResolvedTransactions(transactions: DraftTransaction[]) {
-  return transactions.filter((item) => getDraftRowStatus(item) !== "NEEDS_REVIEW").length;
+export function countResolvedTransactions(transactions: DraftTransaction[], children: EventCodeChildOption[] = []) {
+  return transactions.filter((item) => getDraftRowStatus(item, [], children) !== "NEEDS_REVIEW").length;
 }
 
 export function formatStatementPeriod(periodFrom: string | null, periodTo: string | null) {

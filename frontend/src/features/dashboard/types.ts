@@ -68,6 +68,13 @@ export interface DashboardSummary {
       eventName: string;
       transactionCount: number;
       totalAmount: string;
+      children: Array<{
+        eventCodeChildId: string;
+        childCode: string;
+        childName: string;
+        transactionCount: number;
+        totalAmount: string;
+      }>;
     }>;
   }>;
   memberSummary: {
@@ -101,6 +108,13 @@ export interface DashboardSummary {
       memberCount: number;
       transactionCount: number;
       amount: string;
+      children: Array<{
+        childCode: string;
+        childName: string;
+        memberCount: number;
+        transactionCount: number;
+        amount: string;
+      }>;
     }>;
   }>;
   registrationFollowUp: {
