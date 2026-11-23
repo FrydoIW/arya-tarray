@@ -74,7 +74,6 @@ export function ApprovalScreen() {
         total={workspace.summary.total}
         active={workspace.summary.active}
         approvers={workspace.summary.approvers}
-        approvalTarget={workspace.approvalTarget}
       />
 
 

@@ -117,8 +117,8 @@ export function EventCodeScreen() {
         totalCount={eventCodes.allItems.length}
         onAdd={addRow}
       />
-      <EventCampaignSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
       <EventCodeChildSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
+      <EventCampaignSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
       <ItemSaleInventorySection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
       <EventTimeRuleSection eventCodes={eventCodes.persistedItems} masterDirty={eventCodes.dirty} />
       <BulkUploadEventCodesModal

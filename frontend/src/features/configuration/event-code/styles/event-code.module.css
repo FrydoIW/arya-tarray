@@ -518,3 +518,63 @@
 .timeRuleBody { display: grid; gap: 16px; padding: 14px; }
 .timeRuleBody p { margin: 0; }
 .timeRuleFields { row-gap: 14px; column-gap: 12px; }
+
+.itemSaleList { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.itemSaleCard { border: 1px solid var(--border-color, #d9e0eb); border-radius: 12px; padding: 16px; background: #fff; display: grid; gap: 12px; }
+.itemSaleHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.itemSaleIdentity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.itemSaleIdentity strong { color: #20314d; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.itemSaleCode { display: inline-flex; align-items: center; gap: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 800; color: #245cce; background: #edf3ff; border-radius: 7px; padding: 4px 8px; }
+.itemSaleStatus { font-size: 10px; font-weight: 800; letter-spacing: .04em; border-radius: 7px; padding: 4px 8px; }
+.itemSaleStatusACTIVE { color: #1d7a4d; background: #e3f5ea; }
+.itemSaleStatusINACTIVE { color: #64748b; background: #eef1f5; }
+.itemSaleStatusUNCONFIGURED { color: #9b6518; background: #fdf3d8; }
+.itemSaleFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.itemSaleFacts > div { display: grid; gap: 4px; background: #f8fafc; border: 1px solid #edf1f6; border-radius: 9px; padding: 10px 12px; }
+.itemSaleFacts span { font-size: 11px; font-weight: 650; color: #64748b; }
+.itemSaleFacts strong { font-size: 14px; color: #20314d; }
+.itemSaleActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.itemSaleModalBody { display: grid; gap: 14px; padding: 16px; }
+.itemSaleField { display: grid; gap: 6px; font-size: 12px; font-weight: 650; color: #64748b; }
+.itemSaleField input, .itemSaleField textarea { width: 100%; min-height: 38px; border: 1px solid #d9e0eb; border-radius: 8px; padding: 8px 10px; color: #20314d; background: #fff; font: inherit; resize: vertical; }
+.itemSaleField input:focus, .itemSaleField textarea:focus { outline: 0; border-color: #9fc9ef; box-shadow: 0 0 0 3px rgba(47,128,237,.09); }
+.itemSaleModalFooter { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+.itemSaleEmpty { margin: 0; color: #64748b; font-size: 13px; }
+.itemSaleDeltaIn { color: #1d7a4d; font-weight: 700; }
+.itemSaleDeltaOut { color: #b23b3b; font-weight: 700; }
+
+@media (max-width: 640px) {
+  .itemSaleList { grid-template-columns: 1fr; }
+  .itemSaleFacts { grid-template-columns: 1fr; }
+}
+
+.childRuleSummary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; grid-column: 1 / -1; margin-top: 2px; }
+.childRuleSummary > div { display: grid; gap: 4px; background: #f8fafc; border: 1px solid #edf1f6; border-radius: 9px; padding: 9px 11px; }
+.childRuleSummary span { font-size: 11px; font-weight: 650; color: #64748b; }
+.childRuleSummary strong { font-size: 13px; color: #20314d; }
+.childRuleHint { grid-column: 1 / -1; color: #8b6d1f; font-size: 11px; font-weight: 650; }
+
+.timeArea { border: 1px solid #e5eaf2; border-radius: 12px; padding: 14px; display: grid; gap: 12px; background: #fcfdff; }
+.timeAreaHead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.timeAreaHead h3 { margin: 0; color: #1d2939; font-size: 14px; font-weight: 700; }
+.timeAreaHead p { margin: 4px 0 0; color: #667085; font-size: 12px; line-height: 1.5; max-width: 640px; }
+.timeChildEmpty { margin: 0; color: #64748b; font-size: 13px; }
+.timeChildList { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.timeChildCard { border: 1px solid #e5eaf2; border-radius: 11px; padding: 13px; background: #fff; display: grid; gap: 10px; }
+.timeChildCardModified { border-color: #f0c36a; background: #fffdf6; }
+.timeChildHead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.timeChildHead strong { color: #20314d; font-size: 13px; }
+.timeChildCode { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 800; color: #245cce; background: #edf3ff; border-radius: 6px; padding: 3px 7px; }
+.timeChildIncomplete { font-size: 9px; font-weight: 800; color: #9b6518; background: #fdf3d8; border-radius: 6px; padding: 2px 6px; }
+.timeChildFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.timeChildFacts > div { display: grid; gap: 4px; }
+.timeChildFacts span { font-size: 11px; font-weight: 650; color: #64748b; }
+.timeChildFacts strong { font-size: 13px; color: #20314d; }
+.timeChildFacts input { width: 100%; min-height: 34px; border: 1px solid #d9e0eb; border-radius: 8px; padding: 6px 9px; color: #20314d; background: #fff; font: inherit; }
+.timeChildFacts input:focus { outline: 0; border-color: #9fc9ef; box-shadow: 0 0 0 3px rgba(47,128,237,.09); }
+
+@media (max-width: 640px) {
+  .childRuleSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .timeChildList { grid-template-columns: 1fr; }
+  .timeChildFacts { grid-template-columns: 1fr; }
+}

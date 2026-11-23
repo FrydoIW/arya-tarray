@@ -5,7 +5,6 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatMoney } from "@/lib/format";
 import { invalidateWorkspaceCache } from "@/lib/workspace-cache";
 import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
@@ -175,7 +174,7 @@ export function EventCodeChildSection({ eventCodes, masterDirty }: { eventCodes:
   return <CollapsibleSection
     className={styles.sectionPanel}
     title="Event Code Children"
-    description="Manage the generic Child classification dimension for each Event Code. Children are transaction classification details - not Campaigns and not subscription items."
+    description="Kelola relasi Parent–Child, kode, nama, deskripsi, urutan, dan status. Untuk child TIME_BASED, harga, durasi, dan kapasitas subscription dikelola di Rupang Time Rules."
     summary={`${server.length} children`}
     defaultExpanded={false}
     actions={<div className={styles.campaignActions}>
@@ -202,11 +201,13 @@ export function EventCodeChildSection({ eventCodes, masterDirty }: { eventCodes:
           <label>Name<input value={item.childName} disabled={mode !== "EDIT" || busy || masterDirty} maxLength={150} onChange={(event) => change(item.id, "childName", event.target.value)} /></label>
           <label>Display Order<input type="number" min={0} max={9999} value={item.displayOrder} disabled={mode !== "EDIT" || busy || masterDirty} onChange={(event) => change(item.id, "displayOrder", Number(event.target.value) || 0)} /></label>
           <label>Status<select value={item.activeFlag ? "ACTIVE" : "INACTIVE"} disabled={mode !== "EDIT" || busy || masterDirty} onChange={(event) => change(item.id, "activeFlag", event.target.value === "ACTIVE")}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></label>
-          {parentOf(item)?.eventType === "TIME_BASED" ? <>
-            <label>Capacity (slots)<input type="number" min={1} max={1000000000} value={item.capacity ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} placeholder="e.g. 30" onChange={(event) => change(item.id, "capacity", event.target.value ? Number(event.target.value) : null)} /></label>
-            <label>Unit Amount (IDR)<MoneyInput value={item.unitAmount ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} placeholder="e.g. 100000" onValueChange={(value) => change(item.id, "unitAmount", value || null)} /></label>
-            <label>Duration (months)<input type="number" min={1} max={1200} value={item.durationMonths ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} placeholder="e.g. 1" onChange={(event) => change(item.id, "durationMonths", event.target.value ? Number(event.target.value) : null)} /></label>
-          </> : null}
+          {parentOf(item)?.eventType === "TIME_BASED" ? <div className={styles.childRuleSummary}>
+            <div><span>Harga</span><strong>{item.unitAmount != null ? formatMoney(item.unitAmount) : "—"}</strong></div>
+            <div><span>Durasi</span><strong>{item.durationMonths != null ? `${item.durationMonths} bulan` : "—"}</strong></div>
+            <div><span>Kapasitas</span><strong>{item.capacity ?? "—"}</strong></div>
+            <div><span>Terpakai / Tersedia</span><strong>{item.occupiedSlots ?? 0} / {item.availableSlots ?? "—"}</strong></div>
+            <small className={styles.childRuleHint}>Harga, durasi, dan kapasitas dikelola di Rupang Time Rules.</small>
+          </div> : null}
           <label className={styles.campaignRemark}>Description<input value={item.description ?? ""} disabled={mode !== "EDIT" || busy || masterDirty} maxLength={500} onChange={(event) => change(item.id, "description", event.target.value || null)} /></label>
         </div>
         <div className={styles.childFooter}>
