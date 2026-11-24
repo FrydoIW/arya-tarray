@@ -22,6 +22,9 @@ export type EventCodeChildOption = {
   childName: string;
   displayOrder: number;
   activeFlag: boolean;
+  capacity: number | null;
+  unitAmount: string | null;
+  durationMonths: number | null;
   itemSaleUnitPrice?: string | null;
   itemSaleStockOnHand?: number | null;
   itemSaleVersion?: number | null;
@@ -88,6 +91,7 @@ export type DraftTransaction = {
   eventCampaignId?: string | null;
   baseAmount?: string | null;
   remark?: string | null;
+  excluded: boolean;
   requiresClassification: boolean;
   itemSaleQuantity?: number | null;
   itemSale?: { id: string; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string; status: string; resolutionReason: string | null } | null;
@@ -105,10 +109,49 @@ export type StatementUploadWorkspace = {
   drafts: StatementDraftListItem[];
   statement: StatementDraft | null;
   transactions: DraftTransaction[];
+  duplicates: StatementDuplicate[];
+  duplicateSummary: { pendingReview: number; exactSkipped: number; resolvedDistinct: number; resolvedDuplicate: number };
   eventCodes: EventCodeOption[];
   eventCodeChildren: EventCodeChildOption[];
   campaigns: CampaignOption[];
   bankAccounts: BankAccountOption[];
+};
+
+export type DuplicateTransactionView = {
+  id: string;
+  rowNo: number | null;
+  transactionDate: string | null;
+  transactionType: string | null;
+  referenceNo: string | null;
+  senderName: string | null;
+  description: string | null;
+  originalAmount: string;
+  status: string;
+  statementId: string;
+  fileName: string;
+};
+
+export type StatementDuplicate = {
+  id: string;
+  matchType: "EXACT" | "POSSIBLE";
+  resolutionStatus: "CONFIRMED" | "PENDING_REVIEW" | "DISTINCT" | "DUPLICATE";
+  resolutionReason: string | null;
+  resolvedAt: string | null;
+  resolvedBy: { id: string; fullName: string } | null;
+  uploadFileName: string;
+  source: {
+    transactionNo: number;
+    worksheetRow: number | null;
+    sheetName: string | null;
+    transactionDate: string | null;
+    transactionType: string | null;
+    referenceNo: string | null;
+    senderName: string | null;
+    description: string | null;
+    originalAmount: string;
+  };
+  importedTransaction: DuplicateTransactionView | null;
+  matchedTransaction: DuplicateTransactionView;
 };
 
 export type UploadDuplicateDetail = {
@@ -125,6 +168,8 @@ export type UploadDuplicateDetail = {
   description: string | null;
   originalAmount: string;
   signatureHash: string;
+  matchType: "EXACT" | "POSSIBLE";
+  resolutionStatus: "CONFIRMED" | "PENDING_REVIEW";
 };
 
 export type UploadAttemptResult = {
@@ -132,6 +177,7 @@ export type UploadAttemptResult = {
   sourceTransactions: number;
   importedTransactions: number;
   duplicateTransactions: number;
+  possibleDuplicateTransactions: number;
   sourceTotalCredit: string;
   sourceTotalDebit: string;
   duplicates: UploadDuplicateDetail[];

@@ -9,9 +9,9 @@ function cents(value: { toString(): string } | null | undefined) {
 }
 
 export function timeBasedPrincipalAmount(transaction: { baseAmount: { toString(): string } | null; originalAmount: { toString(): string } }) {
-  // The suffix-classified base amount is the only TIME_BASED entitlement principal.
-  if (!transaction.baseAmount) throw new HttpError(400, "TIME_BASED base amount is required.");
-  return transaction.baseAmount;
+  // A suffix may assist classification, but it never reduces donor funds or
+  // entitlement principal. TIME_BASED rights are based on the bank amount.
+  return transaction.originalAmount;
 }
 
 export function resolveTimeBasedUnits(input: {

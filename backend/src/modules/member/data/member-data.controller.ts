@@ -64,6 +64,14 @@ export async function voidOpeningCoverage(req: Request, res: Response) {
   const { memberId, subscriptionId, coverageId } = schema.openingCoverageParamsSchema.parse(req.params);
   res.json(await service.voidOpeningCoverage(memberId, subscriptionId, coverageId, schema.voidOpeningCoverageSchema.parse(req.body).reason, req.auth!.userId));
 }
+export async function reviseOpeningCoverage(req: Request, res: Response) {
+  const { memberId, subscriptionId, coverageId } = schema.openingCoverageParamsSchema.parse(req.params);
+  res.json(await service.reviseOpeningCoverage(memberId, subscriptionId, coverageId, schema.reviseOpeningCoverageSchema.parse(req.body), req.auth!.userId));
+}
+export async function cancelSubscription(req: Request, res: Response) {
+  const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params);
+  res.json(await service.cancelSubscription(memberId, subscriptionId, schema.cancelSubscriptionSchema.parse(req.body).reason, req.auth!.userId));
+}
 export async function retryAllocation(req: Request, res: Response) {
   const { memberId, subscriptionId } = schema.subscriptionParamsSchema.parse(req.params);
   res.json(await service.retryAllocation(memberId, subscriptionId, schema.allocationSchema.parse(req.body).transactionId, req.auth!.userId));

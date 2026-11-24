@@ -18,6 +18,7 @@ import {
   loadRawStatementsForSummary,
   loadStatementUploadWorkspaceRecords,
   persistParsedStatement,
+  resolveStatementDuplicateAtomic,
   updateTransactionFinalEventAtomic,
   withdrawStatementAtomic
 } from "./statement-upload.repository.js";
@@ -64,6 +65,7 @@ function mapTransaction(transaction: CurrentTransaction) {
     eventCampaignId: transaction.eventCampaignId,
     baseAmount: decimalToString(transaction.baseAmount),
     remark: transaction.remark,
+    excluded: Boolean(transaction.reconciliationExcludedAt),
     itemSale: transaction.itemSalePurchase ? {
       id: transaction.itemSalePurchase.id,
       quantity: transaction.itemSalePurchase.quantity,
@@ -103,9 +105,10 @@ function mapSummary(rawStatements: RawSummaryRecords, childrenByParentId: Map<st
   let readyForSubmission = 0;
 
   for (const statement of rawStatements) {
-    totalTransactions += statement.transactions.length;
+    const activeTransactions = statement.transactions.filter(transaction => !transaction.reconciliationExcludedAt);
+    totalTransactions += activeTransactions.length;
     let statementNeedsReview = 0;
-    for (const transaction of statement.transactions) {
+    for (const transaction of activeTransactions) {
       if (storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))) {
         statementNeedsReview += 1;
       } else if (transactionNeedsChildReview(transaction, childrenByParentId)
@@ -114,7 +117,7 @@ function mapSummary(rawStatements: RawSummaryRecords, childrenByParentId: Map<st
       }
     }
     needsReview += statementNeedsReview;
-    if (statement.transactions.length > 0 && statementNeedsReview === 0) readyForSubmission += 1;
+    if (activeTransactions.length > 0 && statementNeedsReview === 0) readyForSubmission += 1;
   }
 
   return {
@@ -127,10 +130,61 @@ function mapSummary(rawStatements: RawSummaryRecords, childrenByParentId: Map<st
 
 function mapWorkspace(records: WorkspaceRecords, childrenByParentId: Map<string, ChildOption[]>) {
   const statement = records.currentStatement;
+  const duplicates = records.duplicates.map((row) => {
+    const imported = row.importedBankTransaction;
+    const matched = row.matchedBankTransaction;
+    return {
+      id: row.id,
+      matchType: row.matchType,
+      resolutionStatus: row.resolutionStatus,
+      resolutionReason: row.resolutionReason,
+      resolvedAt: row.resolvedAt,
+      resolvedBy: row.resolvedBy,
+      uploadFileName: row.uploadAttempt.fileName,
+      source: {
+        transactionNo: row.sourceTransactionNo,
+        worksheetRow: row.sourceWorksheetRow,
+        sheetName: row.sourceSheetName,
+        transactionDate: row.transactionDate,
+        transactionType: row.transactionType,
+        referenceNo: row.referenceNo,
+        senderName: row.senderName,
+        description: row.sourceDescription,
+        originalAmount: row.originalAmount.toString()
+      },
+      importedTransaction: imported ? {
+        id: imported.id,
+        rowNo: imported.rowNo,
+        transactionDate: imported.transactionDate,
+        transactionType: imported.transactionType,
+        referenceNo: imported.referenceNo,
+        senderName: imported.senderName,
+        description: imported.description,
+        originalAmount: imported.originalAmount.toString(),
+        status: imported.status,
+        statementId: imported.statementUploadId,
+        fileName: imported.statementUpload.fileName
+      } : null,
+      matchedTransaction: {
+        id: matched.id,
+        rowNo: matched.rowNo,
+        transactionDate: matched.transactionDate,
+        transactionType: matched.transactionType,
+        referenceNo: matched.referenceNo,
+        senderName: matched.senderName,
+        description: matched.description,
+        originalAmount: matched.originalAmount.toString(),
+        status: matched.status,
+        statementId: matched.statementUploadId,
+        fileName: matched.statementUpload.fileName
+      }
+    };
+  });
   return {
     summary: mapSummary(records.rawStatements, childrenByParentId),
     drafts: records.rawStatements.map((draft) => {
       const needsReview = draft.transactions.filter((transaction) => {
+        if (transaction.reconciliationExcludedAt) return false;
         if (storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))) return true;
         return transactionNeedsChildReview(transaction, childrenByParentId)
           || (transaction.eventCode?.eventType === "ITEM_SALE" && (!transaction.itemSalePurchase || transaction.itemSalePurchase.status === "REVIEW_REQUIRED"));
@@ -169,6 +223,13 @@ function mapWorkspace(records: WorkspaceRecords, childrenByParentId: Map<string,
         }
       : null,
     transactions: statement ? statement.transactions.map(mapTransaction) : [],
+    duplicates,
+    duplicateSummary: {
+      pendingReview: duplicates.filter(row => row.matchType === "POSSIBLE" && row.resolutionStatus === "PENDING_REVIEW").length,
+      exactSkipped: duplicates.filter(row => row.matchType === "EXACT").length,
+      resolvedDistinct: duplicates.filter(row => row.resolutionStatus === "DISTINCT").length,
+      resolvedDuplicate: duplicates.filter(row => row.resolutionStatus === "DUPLICATE").length
+    },
     eventCodes: records.activeEventCodes.map((eventCode) => ({
       id: eventCode.id,
       code: eventCode.code,
@@ -182,10 +243,13 @@ function mapWorkspace(records: WorkspaceRecords, childrenByParentId: Map<string,
       childCode: child.childCode,
       childName: child.childName,
       displayOrder: child.displayOrder,
-      activeFlag: child.activeFlag
-      ,itemSaleUnitPrice: child.itemSaleConfig?.unitPrice.toString() ?? null
-      ,itemSaleStockOnHand: child.itemSaleConfig?.stockOnHand ?? null
-      ,itemSaleVersion: child.itemSaleConfig?.version ?? null
+      activeFlag: child.activeFlag,
+      capacity: child.capacity,
+      unitAmount: child.unitAmount?.toString() ?? null,
+      durationMonths: child.durationMonths,
+      itemSaleUnitPrice: child.itemSaleConfig?.unitPrice.toString() ?? null,
+      itemSaleStockOnHand: child.itemSaleConfig?.stockOnHand ?? null,
+      itemSaleVersion: child.itemSaleConfig?.version ?? null
     })),
     campaigns: records.campaigns.map((campaign) => ({
       id: campaign.id,
@@ -344,6 +408,7 @@ export async function uploadStatement(input: {
       sourceTransactions: result.sourceTransactionCount,
       importedTransactions: result.importedTransactionCount,
       duplicateTransactions: result.duplicateTransactionCount,
+      possibleDuplicateTransactions: result.possibleDuplicateTransactionCount,
       sourceTotalCredit: result.sourceTotalCredit,
       sourceTotalDebit: result.sourceTotalDebit,
       duplicates: result.duplicates
@@ -382,6 +447,11 @@ export async function updateFinalEvent(
 export async function executeStatement(statementId: string, userId: string) {
   await executeStatementAtomic({ statementId, userId });
   return getStatementUploadWorkspace();
+}
+
+export async function resolveDuplicate(statementId: string, duplicateId: string, input: { decision: "DISTINCT" | "DUPLICATE"; reason: string }, userId: string) {
+  await resolveStatementDuplicateAtomic({ statementId, duplicateId, decision: input.decision, reason: input.reason, userId });
+  return getStatementUploadWorkspace(statementId);
 }
 
 export async function withdrawStatement(statementId: string, input: WithdrawStatementInput, userId: string) {

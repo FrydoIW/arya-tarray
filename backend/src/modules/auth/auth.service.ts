@@ -1,7 +1,10 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { createHash } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { HttpError } from "../../lib/http.js";
+import { prisma } from "../../lib/prisma.js";
 import type { LoginInput } from "./auth.schema.js";
 import { findUserByEmail, findUserById } from "./auth.repository.js";
 
@@ -41,8 +44,53 @@ function mapUser(user: UserWithRoles) {
   };
 }
 
-export async function login(input: LoginInput) {
+export class LoginRateLimitError extends HttpError {
+  constructor(public readonly retryAfterSeconds: number) {
+    super(429, "Terlalu banyak percobaan masuk. Silakan coba lagi nanti.");
+    this.name = "LoginRateLimitError";
+  }
+}
+
+function throttleKey(email: string, sourceIp: string) {
+  return createHash("sha256").update(JSON.stringify([email, sourceIp.trim().toLowerCase()])).digest("hex");
+}
+
+async function assertLoginAllowed(key: string, now: Date) {
+  const throttle = await prisma.loginThrottle.findUnique({ where: { throttleKey: key }, select: { blockedUntil: true } });
+  if (throttle?.blockedUntil && throttle.blockedUntil > now) {
+    throw new LoginRateLimitError(Math.max(1, Math.ceil((throttle.blockedUntil.getTime() - now.getTime()) / 1000)));
+  }
+}
+
+async function recordLoginFailure(key: string, now: Date) {
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      const result = await prisma.$transaction(async tx => {
+        await tx.$queryRaw(Prisma.sql`SELECT throttle_key FROM arya_login_throttle WHERE throttle_key = ${key} FOR UPDATE`);
+        const current = await tx.loginThrottle.findUnique({ where: { throttleKey: key } });
+        const expiredWindow = !current || now.getTime() - current.windowStart.getTime() >= env.loginRateLimitWindowMs;
+        const failureCount = expiredWindow ? 1 : current.failureCount + 1;
+        const blockedUntil = failureCount >= env.loginRateLimitMaxFailures ? new Date(now.getTime() + env.loginRateLimitCooldownMs) : null;
+        const row = await tx.loginThrottle.upsert({ where: { throttleKey: key }, create: {
+          throttleKey: key, windowStart: now, failureCount, blockedUntil
+        }, update: { windowStart: expiredWindow ? now : current!.windowStart, failureCount, blockedUntil } });
+        return row.blockedUntil;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      if (result && result > now) throw new LoginRateLimitError(Math.max(1, Math.ceil((result.getTime() - now.getTime()) / 1000)));
+      return;
+    } catch (error) {
+      if (error instanceof LoginRateLimitError) throw error;
+      const retryable = error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code);
+      if (!retryable || attempt === 4) throw error;
+    }
+  }
+}
+
+export async function login(input: LoginInput, sourceIp: string) {
   const email = input.email.trim().toLowerCase();
+  const key = throttleKey(email, sourceIp);
+  const now = new Date();
+  await assertLoginAllowed(key, now);
   const user = await findUserByEmail(email);
 
   if (
@@ -50,8 +98,11 @@ export async function login(input: LoginInput) {
     user.status !== "ACTIVE" ||
     !(await bcrypt.compare(input.password, user.passwordHash))
   ) {
+    await recordLoginFailure(key, now);
     throw new HttpError(401, "Email atau password tidak valid");
   }
+
+  await prisma.loginThrottle.deleteMany({ where: { throttleKey: key } });
 
   const token = jwt.sign({}, env.jwtSecret, {
     subject: user.id,

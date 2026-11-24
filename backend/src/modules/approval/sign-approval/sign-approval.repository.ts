@@ -390,7 +390,7 @@ export async function decideSignApprovalAtomic(input: {
                     transactionType: true,
                     originalAmount: true,
                     baseAmount: true,
-                    itemSalePurchase: { select: { id: true, status: true, eventCodeChildId: true, quantity: true, unitPriceSnapshot: true } },
+                    itemSalePurchase: { select: { id: true, status: true, eventCodeChildId: true, quantity: true, unitPriceSnapshot: true, walletAppliedAmount: true } },
                     memberIdentity: { select: { memberId: true, verificationStatus: true } }
                   }
                 }
@@ -410,6 +410,13 @@ export async function decideSignApprovalAtomic(input: {
     if (current.status !== "PENDING") throw new HttpError(409, ALREADY_DECIDED_MESSAGE);
     if (current.statementUpload.status !== "CHECK") {
       throw new HttpError(409, "This statement is no longer Pending Approval. Reload the approval queue.");
+    }
+    const unresolvedDuplicates = await tx.bankStatementUploadDuplicate.count({
+      where: { matchType: "POSSIBLE", resolutionStatus: "PENDING_REVIEW",
+        importedBankTransaction: { is: { statementUploadId: current.statementUploadId } } }
+    });
+    if (unresolvedDuplicates > 0) {
+      throw new HttpError(409, `${unresolvedDuplicates} POSSIBLE duplicate${unresolvedDuplicates === 1 ? " requires" : "s require"} an admin decision before approval.`);
     }
 
     const now = new Date();

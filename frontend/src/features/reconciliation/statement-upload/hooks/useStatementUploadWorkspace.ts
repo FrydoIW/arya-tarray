@@ -7,6 +7,7 @@ import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import {
   executeStatementDraft,
   getStatementUploadWorkspace,
+  resolveStatementDuplicate,
   uploadStatement,
   updateDraftTransactionFinalEvent,
   withdrawStatementDraft
@@ -19,6 +20,8 @@ const EMPTY_WORKSPACE: StatementUploadWorkspace = {
   drafts: [],
   statement: null,
   transactions: [],
+  duplicates: [],
+  duplicateSummary: { pendingReview: 0, exactSkipped: 0, resolvedDistinct: 0, resolvedDuplicate: 0 },
   eventCodes: [],
   eventCodeChildren: [],
   campaigns: [],
@@ -40,6 +43,7 @@ export function useStatementUploadWorkspace() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadAttemptResult | null>(null);
   const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
+  const [resolvingDuplicateId, setResolvingDuplicateId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -153,6 +157,7 @@ export function useStatementUploadWorkspace() {
   const canUpload = !loading && !busy;
   const canExecute = Boolean(
     canEditDraft && workspace.statement?.id && workspace.transactions.length > 0 && needsReview === 0
+      && workspace.duplicateSummary.pendingReview === 0
   );
 
   async function saveTransaction(
@@ -256,15 +261,37 @@ export function useStatementUploadWorkspace() {
         setPage(1);
       }
       setUploadResult(next.uploadResult);
-      const { importedTransactions, sourceTransactions, duplicateTransactions } = next.uploadResult;
+      const { importedTransactions, sourceTransactions, duplicateTransactions, possibleDuplicateTransactions } = next.uploadResult;
+      const review = possibleDuplicateTransactions > 0 ? ` ${possibleDuplicateTransactions} possible duplicate${possibleDuplicateTransactions === 1 ? "" : "s"} imported for review.` : "";
       setMessage(importedTransactions > 0
-        ? `${importedTransactions} of ${sourceTransactions} source transactions imported. ${duplicateTransactions} duplicate${duplicateTransactions === 1 ? "" : "s"} skipped.`
-        : `No new transactions were imported. ${duplicateTransactions} duplicate transaction${duplicateTransactions === 1 ? "" : "s"} were skipped.`);
+        ? `${importedTransactions} of ${sourceTransactions} source transactions imported. ${duplicateTransactions} exact duplicate${duplicateTransactions === 1 ? "" : "s"} skipped.${review}`
+        : `No new transactions were imported. ${duplicateTransactions} exact duplicate transaction${duplicateTransactions === 1 ? "" : "s"} were skipped.${review}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to upload and parse the statement file.");
     } finally {
       setUploading(false);
       setBusy(false);
+    }
+  }
+
+  async function resolveDuplicate(duplicateId: string, decision: "DISTINCT" | "DUPLICATE", reason: string) {
+    if (!workspace.statement || resolvingDuplicateId || busy) return;
+    setResolvingDuplicateId(duplicateId);
+    setError("");
+    setMessage("");
+    try {
+      const next = await resolveStatementDuplicate({ statementId: workspace.statement.id, duplicateId, decision, reason });
+      invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
+      invalidateWorkspaceCache("reconciliation/transaction-inquiry/workspace");
+      setWorkspaceCache(statementWorkspaceKey(next.statement?.id), next);
+      setWorkspace(next);
+      setMessage(decision === "DISTINCT"
+        ? "Duplicate review saved: the incoming transaction is kept as distinct."
+        : "Duplicate confirmed: the incoming transaction was excluded from the draft and the statement totals were reduced.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to resolve the duplicate.");
+    } finally {
+      setResolvingDuplicateId(null);
     }
   }
 
@@ -344,6 +371,7 @@ export function useStatementUploadWorkspace() {
     withdrawing,
     uploadResult,
     savingTransactionId,
+    resolvingDuplicateId,
     error,
     message,
     search: searchInput,
@@ -370,6 +398,7 @@ export function useStatementUploadWorkspace() {
     updateRemark,
     updateItemSaleQuantity,
     upload,
+    resolveDuplicate,
     execute,
     withdraw
   };

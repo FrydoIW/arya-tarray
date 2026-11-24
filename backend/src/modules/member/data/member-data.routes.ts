@@ -26,6 +26,8 @@ memberDataRouter.patch("/:memberId/subscriptions/:subscriptionId", requireMember
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/allocate", requireMemberMutationAccess, asyncHandler(controller.allocateSubscription));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage", requireMemberMutationAccess, asyncHandler(controller.openingCoverage));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage/:coverageId/void", requireMemberMutationAccess, asyncHandler(controller.voidOpeningCoverage));
+memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/opening-coverage/:coverageId/revise", requireMemberMutationAccess, asyncHandler(controller.reviseOpeningCoverage));
+memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/cancel", requireMemberMutationAccess, asyncHandler(controller.cancelSubscription));
 memberDataRouter.post("/:memberId/subscriptions/:subscriptionId/retry-allocation", requireMemberMutationAccess, asyncHandler(controller.retryAllocation));
 memberDataRouter.post("/:memberId/subscriptions/:sourceSubscriptionId/carry-transfers", requireMemberMutationAccess, asyncHandler(controller.createCarryTransfer));
 memberDataRouter.post("/:memberId/campaigns/:sourceCampaignId/carry-transfers", requireMemberMutationAccess, asyncHandler(controller.createCampaignWalletTransfer));

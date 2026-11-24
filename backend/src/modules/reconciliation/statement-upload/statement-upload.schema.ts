@@ -25,6 +25,15 @@ export const statementParamsSchema = z.object({
   statementId: z.string().uuid()
 });
 
+export const duplicateParamsSchema = statementParamsSchema.extend({
+  duplicateId: z.string().uuid()
+});
+
+export const resolveDuplicateSchema = z.object({
+  decision: z.enum(["DISTINCT", "DUPLICATE"]),
+  reason: z.string().trim().min(3, "A duplicate decision reason of at least 3 characters is required").max(1000)
+}).strict();
+
 export const withdrawStatementSchema = z.object({
   reason: z.string().trim().min(1, "Withdrawal reason is required").max(1000)
 });

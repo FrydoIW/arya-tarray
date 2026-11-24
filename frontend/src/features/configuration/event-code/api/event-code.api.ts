@@ -1,5 +1,5 @@
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import type { CampaignInput, ChildInput, EventCampaign, EventCode, EventCodeBulkPreview, EventCodeChild, EventCodeExecutePayload, EventCodeUser, EventTimeRule, EventType, ItemSaleConfigDetail, TimeRuleInput } from "../types";
+import type { CampaignInput, ChildInput, EventCampaign, EventCode, EventCodeBulkPreview, EventCodeChild, EventCodeExecutePayload, EventCodeUser, EventTimeRule, EventType, ItemSaleConfigDetail, ItemSaleWalletSummary, TimeRuleInput } from "../types";
 
 type EventCodeApiUser = {
   id: string;
@@ -87,6 +87,15 @@ export function updateItemSalePrice(childId: string, payload: { unitPrice: strin
 }
 export function adjustItemSaleStock(childId: string, payload: { movementType: "STOCK_IN" | "MANUAL_ADJUSTMENT"; quantityDelta: number; expectedVersion: number; reason: string; idempotencyKey: string }) {
   return apiFetch(`/configuration/event-codes/children/${childId}/item-sale/stock-adjustments`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function getItemSaleWallet() {
+  return apiFetch<ItemSaleWalletSummary>("/configuration/event-codes/item-sale/wallet");
+}
+export function allocateItemSaleWallet(payload: { sourceFundId: string; purchaseId: string; amount: string; reason: string; idempotencyKey: string }) {
+  return apiFetch("/configuration/event-codes/item-sale/wallet/allocations", { method: "POST", body: JSON.stringify(payload) });
+}
+export function reverseItemSaleWalletAllocation(allocationId: string, reason: string) {
+  return apiFetch(`/configuration/event-codes/item-sale/wallet/allocations/${allocationId}/reverse`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
 export async function getEventCodes() {

@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatMoney } from "@/lib/format";
 import { adjustItemSaleStock, configureItemSale, getEventCodeChildren, getItemSaleConfig, updateItemSalePrice } from "../api/event-code.api";
+import { ItemSaleWalletSection } from "./ItemSaleWalletSection";
 import type { EventCode, EventCodeChild, ItemSaleConfigDetail } from "../types";
 import styles from "../styles/event-code.module.css";
 
@@ -106,7 +107,8 @@ export function ItemSaleInventorySection({ eventCodes, masterDirty }: { eventCod
     ADJUST: "Sesuaikan Stok"
   };
 
-  return <CollapsibleSection className={styles.sectionPanel} title="Item Sale" description="Configure physical item price and append-only inventory movements. Inventory is separate from subscription capacity." summary={`${items.length} items`} defaultExpanded={false}>
+  return <>
+    <CollapsibleSection className={styles.sectionPanel} title="Item Sale" description="Configure physical item price and append-only inventory movements. Inventory is separate from subscription capacity." summary={`${items.length} items`} defaultExpanded={false}>
     <div className={styles.campaignBody}>
       {message ? <div className="ui-alert ui-alert-success">{message}</div> : null}
       {error ? <div className="ui-alert ui-alert-error">{error}</div> : null}
@@ -164,5 +166,7 @@ export function ItemSaleInventorySection({ eventCodes, masterDirty }: { eventCod
           </tr>)}</tbody></table></div>}
       </div>
     </Modal>
-  </CollapsibleSection>;
+  </CollapsibleSection>
+  <ItemSaleWalletSection />
+  </>;
 }

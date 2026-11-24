@@ -648,3 +648,19 @@
 .tableHeader { min-height: 66px; padding: 12px 14px; border-bottom: 1px solid #eef1f5; background: #fff; }
 .flowHeader h2, .sectionHeading h2, .tableHeader h2 { color: #1d2939; font-size: var(--font-size-section); font-weight: var(--font-weight-bold); }
 .flowHeader p, .sectionHeading p, .tableHeader p { color: #667085; font-size: var(--font-size-helper); line-height: var(--line-height-body); }
+
+.resultPanel { background: #fff; border: 1px solid #e4e9f0; border-radius: 11px; box-shadow: var(--shadow-xs); padding: 16px; display: grid; gap: 12px; }
+.resultHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.resultHead h2 { margin: 0; color: #1d2939; font-size: var(--font-size-section); font-weight: var(--font-weight-bold); }
+.resultHead p { margin: 4px 0 0; color: #667085; font-size: var(--font-size-helper); line-height: var(--line-height-body); }
+.resultHead > span { color: #b8780b; background: #fff8e9; border: 1px solid #f2dfb7; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.resultEmpty { margin: 0; color: #667085; font-size: var(--font-size-helper); }
+.duplicateActions { display: flex; gap: 6px; flex-wrap: wrap; }
+.duplicateCompare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.duplicateCompare > div { border: 1px solid #e4e9f0; border-radius: 9px; padding: 10px; display: grid; gap: 4px; }
+.duplicateCompare span { color: #667085; font-size: 12px; }
+.duplicateCompare small { color: #667085; }
+.modalBody { display: grid; gap: 12px; }
+.field { display: grid; gap: 6px; color: #344054; font-size: 13px; font-weight: 600; }
+.field textarea { width: 100%; border: 1px solid #d0d5dd; border-radius: 8px; padding: 9px 10px; font: inherit; resize: vertical; }
+.modalFooter { display: flex; justify-content: flex-end; gap: 8px; }

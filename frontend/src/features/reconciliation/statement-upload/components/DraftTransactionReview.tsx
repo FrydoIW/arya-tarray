@@ -249,8 +249,11 @@ export function DraftTransactionReview({
       render: (row) => {
         const event = getEventCode(eventCodes, row.eventCodeId);
         if (event?.eventType === "TIME_BASED") {
-          const rule = event.timeRule;
-          if (!rule?.activeFlag || !row.baseAmount) return <span className={styles.notApplicableText}>Rule needed</span>;
+          const child = eventCodeChildren.find(item => item.id === row.eventCodeChildId);
+          const rule = child
+            ? child.unitAmount && child.durationMonths ? { unitAmount: child.unitAmount, durationMonths: child.durationMonths, activeFlag: child.activeFlag } : null
+            : event.timeRule;
+          if (!rule?.activeFlag) return <span className={styles.notApplicableText}>Rule needed</span>;
           const preview = paymentOnlyTimePreview(row.originalAmount, rule.unitAmount, rule.durationMonths);
           return preview
             ? <span className={styles.entitlementCell}>

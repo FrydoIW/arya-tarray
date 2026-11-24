@@ -29,6 +29,10 @@ eventCodeRouter.get("/children/:childId/item-sale", asyncHandler(itemSaleControl
 eventCodeRouter.post("/children/:childId/item-sale/configure", asyncHandler(itemSaleController.configure));
 eventCodeRouter.patch("/children/:childId/item-sale/price", asyncHandler(itemSaleController.price));
 eventCodeRouter.post("/children/:childId/item-sale/stock-adjustments", asyncHandler(itemSaleController.stock));
+eventCodeRouter.get("/item-sale/wallet", asyncHandler(itemSaleController.wallet));
+eventCodeRouter.get("/item-sale/wallet/funds/:fundId", asyncHandler(itemSaleController.walletFund));
+eventCodeRouter.post("/item-sale/wallet/allocations", asyncHandler(itemSaleController.allocateWallet));
+eventCodeRouter.post("/item-sale/wallet/allocations/:allocationId/reverse", asyncHandler(itemSaleController.reverseWalletAllocation));
 eventCodeRouter.get("/template", asyncHandler(downloadEventCodeTemplateController));
 eventCodeRouter.post("/bulk-preview", eventCodeUpload.single("file"), asyncHandler(previewEventCodeBulkUploadController));
 eventCodeRouter.post("/execute", asyncHandler(executeEventCodeChangesController));

@@ -45,6 +45,12 @@ export function UploadResultReport({ result }: { result: UploadAttemptResult | n
       render: (row) => <span className={styles.amountCell}>{formatMoney(row.originalAmount)}</span>
     },
     {
+      key: "matchType",
+      header: "Match",
+      minWidth: "130px",
+      render: (row) => row.matchType === "POSSIBLE" ? "Possible · review" : "Exact · skipped"
+    },
+    {
       key: "matched",
       header: "Matched Statement",
       minWidth: "230px",
@@ -59,19 +65,21 @@ export function UploadResultReport({ result }: { result: UploadAttemptResult | n
       className={styles.tablePanel}
       title="Upload Result"
       description="Source workbook totals compared with the transactions actually imported."
-      summary={`${result.sourceTransactions} source · ${result.importedTransactions} imported · ${result.duplicateTransactions} skipped`}
+      summary={`${result.sourceTransactions} source · ${result.importedTransactions} imported · ${result.duplicateTransactions} exact skipped · ${result.possibleDuplicateTransactions} possible review`}
       defaultExpanded={false}
     >
       <div className={styles.uploadResultGrid}>
         <div><span>Source transactions</span><strong>{result.sourceTransactions.toLocaleString("id-ID")}</strong></div>
         <div><span>Imported</span><strong>{result.importedTransactions.toLocaleString("id-ID")}</strong></div>
         <div><span>Duplicates skipped</span><strong>{result.duplicateTransactions.toLocaleString("id-ID")}</strong></div>
+        <div><span>Possible duplicates imported</span><strong>{result.possibleDuplicateTransactions.toLocaleString("id-ID")}</strong></div>
+        <div><span>Distinct imported</span><strong>{Math.max(0, result.importedTransactions - result.possibleDuplicateTransactions).toLocaleString("id-ID")}</strong></div>
       </div>
       {result.duplicates.length > 0 ? (
         <DataTable
           rows={result.duplicates}
           columns={columns}
-          rowKey={(row) => row.matchedBankTransactionId}
+          rowKey={(row) => `${row.sourceTransactionNo}-${row.matchType}-${row.matchedBankTransactionId}`}
           minWidth="950px"
           ariaLabel="Skipped duplicate transactions"
         />

@@ -142,7 +142,7 @@ const paymentSelect = {
 type Payment = Prisma.BankTransactionGetPayload<{ select: typeof paymentSelect }>;
 function eligible(payment: Payment, sub: { memberId: string; eventCodeId: string; eventCodeChildId: string | null }) {
   return payment.status === "FINALIZED" && !payment.reconciliationExcludedAt && !!payment.transactionDate
-    && !!payment.baseAmount && cents(payment.baseAmount) > 0n && cents(payment.originalAmount) > 0n
+    && cents(payment.originalAmount) > 0n
     && payment.eventCode?.eventType === "TIME_BASED"
     && isCurrentTimeBasedAllocation({ subscriptionMemberId: sub.memberId, subscriptionEventCodeId: sub.eventCodeId,
       subscriptionEventCodeChildId: sub.eventCodeChildId, paymentMemberId: payment.memberIdentity?.memberId,
@@ -231,6 +231,7 @@ function hasResolvableCurrentTimeRule(payment: Payment) {
 export function resolveEffectiveTimeBasedRate(payment: {
   eventCodeId: string | null;
   eventCodeChildId: string | null;
+  originalAmount: { toString(): string };
   baseAmount: { toString(): string } | null;
   eventCode: { eventType: string; timeRule: { unitAmount: { toString(): string }; durationMonths: number; activeFlag: boolean } | null } | null;
   eventCodeChild: { id: string; eventCodeId: string; childCode: string; childName: string; activeFlag: boolean; capacity: number | null; unitAmount: { toString(): string } | null; durationMonths: number | null } | null;
@@ -242,11 +243,11 @@ export function resolveEffectiveTimeBasedRate(payment: {
     return { unitAmount: payment.eventCodeChild.unitAmount!.toString(), durationMonths: payment.eventCodeChild.durationMonths! };
   }
   return resolveTimeBasedUnits({ eventCode: payment.eventCode, rule: payment.eventCode?.timeRule ?? null,
-    transaction: { baseAmount: payment.baseAmount, originalAmount: { toString: () => "0" } }, requiresClassification: true });
+    transaction: payment, requiresClassification: true });
 }
 
 async function snapshot(tx: Tx, payment: Payment, recalculate: boolean): Promise<{ unitAmount: string; durationMonths: number }> {
-  if (!payment.baseAmount || !payment.eventCodeId) throw new HttpError(400, "TIME_BASED principal and Event Code are required");
+  if (cents(payment.originalAmount) <= 0n || !payment.eventCodeId) throw new HttpError(400, "TIME_BASED principal and Event Code are required");
   if (!recalculate) {
     const [entries, coverages] = await Promise.all([
       tx.memberEventBalanceLedger.findMany({ where: { bankTransactionId: payment.id, entryType: "PAYMENT" },
@@ -477,7 +478,7 @@ export async function synchronizeTimeBasedTransaction(tx: Tx, transactionId: str
   const memberId = payment.memberIdentity?.verificationStatus === "VERIFIED" ? payment.memberIdentity.memberId : null;
   const official = payment.status === "FINALIZED" && !payment.reconciliationExcludedAt
     && payment.eventCode?.eventType === "TIME_BASED" && !!payment.transactionDate
-    && !!payment.baseAmount && cents(payment.baseAmount) > 0n && cents(payment.originalAmount) > 0n;
+    && cents(payment.originalAmount) > 0n;
   let destination: string | null = null;
   let pending: "PENDING_MEMBER" | "PENDING_SUBSCRIPTION" | "PENDING_CAPACITY" | "AMBIGUOUS" | "NOT_TIME_BASED" = "NOT_TIME_BASED";
   const pinned = official ? [...activePayments, ...legacyCoverage].find(row =>

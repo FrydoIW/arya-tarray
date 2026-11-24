@@ -41,7 +41,7 @@ const transactionListSelect = {
   eventCode: { select: eventCodeSelect },
   eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true } },
   eventCampaign: { select: { id: true, campaignName: true, activeFlag: true, eventCodeId: true } },
-  itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, status: true, resolutionReason: true, confirmedAt: true, reversedAt: true } },
+  itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, walletAppliedAmount: true, status: true, resolutionReason: true, confirmedAt: true, reversedAt: true } },
   memberIdentity: {
     select: {
       id: true,
@@ -216,6 +216,15 @@ export async function loadTransactionInquiryDetailRecord(transactionId: string) 
           inventoryMovements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { createdBy: { select: { id: true, fullName: true } } } },
           confirmedBy: { select: { id: true, fullName: true } },
           reversedBy: { select: { id: true, fullName: true } }
+        }
+      },
+      itemSaleFund: {
+        include: {
+          entries: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { createdBy: { select: { id: true, fullName: true } } } },
+          allocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: {
+            purchase: { select: { id: true, status: true, quantity: true, totalAmount: true } },
+            createdBy: { select: { id: true, fullName: true } }, reversedBy: { select: { id: true, fullName: true } }
+          } }
         }
       },
       memberEventCoverages: { where: { coverageStatus: "ACTIVE", coverageSource: "TRANSACTION" }, select: { subscription: { select: { id: true, memberId: true, referenceNo: true, displayName: true } }, coverageFrom: true, coverageTo: true, unitAmountSnapshot: true, grantedUnits: true, durationMonthsSnapshot: true }, take: 1 },

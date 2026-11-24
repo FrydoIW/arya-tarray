@@ -87,11 +87,24 @@ export function TransactionDetailModal({ detail, open, canViewMemberData, canRet
           <DetailItem label="Unit price snapshot" value={formatMoney(transaction.itemSale.unitPrice)} />
           <DetailItem label="Sale total" value={formatMoney(transaction.itemSale.totalAmount)} />
           <DetailItem label="Bank payment" value={transaction.itemSale.paymentAmount ? formatMoney(transaction.itemSale.paymentAmount) : "—"} />
+          <DetailItem label="Wallet applied" value={formatMoney(transaction.itemSale.walletAppliedAmount)} />
           <DetailItem label="Purchase status" value={transaction.itemSale.status} />
           <DetailItem label="Resolution" value={transaction.itemSale.resolutionReason ?? "—"} wide />
           <DetailItem label="Confirmed" value={transaction.itemSale.confirmedAt ? `${formatDateTime(transaction.itemSale.confirmedAt)} · ${transaction.itemSale.confirmedBy?.fullName ?? "—"}` : "Pending"} />
           <DetailItem label="Reversed" value={transaction.itemSale.reversedAt ? `${formatDateTime(transaction.itemSale.reversedAt)} · ${transaction.itemSale.reversedBy?.fullName ?? "—"}` : "No"} />
         </div>{canRetryItemSale && ["DRAFT", "REVIEW_REQUIRED", "PENDING_BUYER", "PENDING_STOCK"].includes(transaction.itemSale.status) ? <Button disabled={retrying} onClick={() => onRetry(transaction.id)}>{retrying ? "Retrying…" : "Retry purchase confirmation"}</Button> : null}{transaction.itemSale.movements.length ? <div className={styles.historyList}>{transaction.itemSale.movements.map(movement => <div key={movement.id} className={styles.historyItem}><strong>{movement.movementType}: {movement.quantityDelta > 0 ? "+" : ""}{movement.quantityDelta}</strong><span>{movement.stockBefore} → {movement.stockAfter} · {movement.reason}</span><small>{formatDateTime(movement.createdAt)} · {movement.createdBy.fullName}</small></div>)}</div> : null}</section> : null}
+        {transaction.itemSaleWallet ? <section className={styles.detailSection}><h3>ITEM_SALE wallet / liability</h3><div className={styles.detailGrid}>
+          <DetailItem label="Fund status" value={transaction.itemSaleWallet.status} />
+          <DetailItem label="Ownership" value={transaction.itemSaleWallet.ownershipStatus} />
+          <DetailItem label="Original bank amount" value={formatMoney(transaction.itemSaleWallet.originalAmount)} />
+          <DetailItem label="Sale allocation" value={formatMoney(transaction.itemSaleWallet.allocatedSaleAmount)} />
+          <DetailItem label="Wallet allocated to purchases" value={formatMoney(transaction.itemSaleWallet.otherAllocatedAmount)} />
+          <DetailItem label="Unallocated wallet / liability" value={formatMoney(transaction.itemSaleWallet.unallocatedAmount)} />
+          <DetailItem label="Owner member" value={transaction.itemSaleWallet.ownerMemberId ?? "SUSPENSE — verify owner"} wide />
+        </div>
+          {transaction.itemSaleWallet.entries.length ? <div className={styles.historyList}>{transaction.itemSaleWallet.entries.map(entry => <div key={entry.id} className={styles.historyItem}><strong>{entry.entryType}: {formatMoney(entry.amountDelta)}</strong><span>Balance {formatMoney(entry.balanceAfter)} · {entry.reason}</span><small>{formatDateTime(entry.createdAt)} · {entry.createdBy.fullName}</small></div>)}</div> : null}
+          {transaction.itemSaleWallet.allocations.length ? <div className={styles.historyList}>{transaction.itemSaleWallet.allocations.map(allocation => <div key={allocation.id} className={styles.historyItem}><strong>Wallet allocation: {formatMoney(allocation.amount)} · {allocation.status}</strong><span>{allocation.reason}{allocation.purchase ? ` · purchase ${allocation.purchase.id}` : ""}</span><small>{formatDateTime(allocation.createdAt)} · {allocation.createdBy.fullName}{allocation.reversedAt ? ` · reversed ${formatDateTime(allocation.reversedAt)} by ${allocation.reversedBy?.fullName ?? "—"}` : ""}</small></div>)}</div> : null}
+        </section> : null}
         <section className={styles.detailSection}>
           <h3>Transaction History</h3>
           {detail.history.length === 0 ? <div className={styles.emptyHistory}>No manual changes have been recorded for this transaction.</div> : (

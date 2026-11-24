@@ -3,7 +3,7 @@ import { currentBusinessDayValue, currentBusinessMonthValue } from "../../../lib
 import { HttpError } from "../../../lib/http.js";
 import { resolvePeriod } from "../../../lib/period.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
-import { lockActiveTimeBasedProgram, manuallyAllocateTimeBasedPayment, rebuildTimeBasedSubscription, resolveEffectiveStartDate, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../time-based/member-time-based.service.js";
+import { lockActiveTimeBasedProgram, manuallyAllocateTimeBasedPayment, refreshSubscriptionStartDate, refreshSubscriptionValidity, resolveEffectiveStartDate, selectHistoricalCoverageEntitlement, selectHistoricalPaymentSnapshot, synchronizePendingTimeBasedForMember, synchronizeTimeBasedTransaction } from "../time-based/member-time-based.service.js";
 import { assertChildSlotAvailable } from "../time-based/time-based-child-domain.js";
 import { resolveTimeBasedUnits } from "../../reconciliation/time-based-classification.js";
 import { centsToDecimal, decimalStringToCents } from "../../../lib/money.js";
@@ -12,7 +12,7 @@ import { canonicalMemberDonationWhere } from "../member-donation.rules.js";
 import { deriveAge } from "./member-data.domain.js";
 import { aggregateCategories } from "./member-donation.domain.js";
 import * as repository from "./member-data.repository.js";
-import type { CampaignParticipationCreateInput, IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput, OpeningCoverageInput, SubscriptionCreateInput, SubscriptionUpdateInput } from "./member-data.schema.js";
+import type { CampaignParticipationCreateInput, IdentityHistoryQuery, IdentityMetadataInput, MemberDataWorkspaceQuery, MemberDonationQuery, MemberProfileInput, OpeningCoverageInput, ReviseOpeningCoverageInput, SubscriptionCreateInput, SubscriptionUpdateInput } from "./member-data.schema.js";
 
 type SubscriptionMetadataUpdateInput = SubscriptionUpdateInput & {
   /** Legacy callers may still provide lifecycle fields; normal API validation rejects them. */
@@ -483,6 +483,9 @@ export async function createSubscription(memberId: string, input: SubscriptionCr
           where: { id: existing.id },
           data: { activeFlag: true, referenceNo: input.referenceNo, displayName: input.displayName, remark: input.remark, updatedById: userId }
         });
+        await tx.memberEventSubscriptionAudit.create({ data: { subscriptionId: existing.id, action: "REENROLLED",
+          beforeData: { activeFlag: false }, afterData: { activeFlag: true }, reason: input.remark ?? "Authorized re-enrollment",
+          actionById: userId } });
       } else {
         await tx.memberEventSubscription.create({ data: {
           memberId, eventCodeId: input.eventCodeId, eventCodeChildId: child.id, referenceNo: input.referenceNo,
@@ -569,13 +572,19 @@ export async function allocateSubscription(memberId: string, subscriptionId: str
 }
 
 export async function addOpeningCoverageRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
-    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true } });
+    await tx.$queryRaw(Prisma.sql`SELECT member_event_subscription_id FROM arya_member_event_subscription
+      WHERE member_event_subscription_id = ${subscriptionId} FOR UPDATE`);
+    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true, eventCodeChildId: true } });
     if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
     const from = new Date(`${input.coverageFrom}T00:00:00.000Z`); const to = new Date(`${input.coverageTo}T00:00:00.000Z`);
-    const overlap = await tx.memberEventCoverage.findFirst({ where: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE", coverageFrom: { lte: to }, coverageTo: { gte: from } }, select: { id: true } });
-    if (overlap) throw new HttpError(409, "Opening coverage overlaps an existing active Opening period for this subscription.");
-    await tx.memberEventCoverage.create({ data: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE", coverageFrom: from, coverageTo: to, remark: input.remark, createdById: userId } });
-    await rebuildTimeBasedSubscription(tx, subscriptionId, userId, "Coverage chain rebuilt after opening coverage was recorded");
+    const overlap = await tx.memberEventCoverage.findFirst({ where: { subscriptionId, coverageStatus: "ACTIVE", coverageFrom: { lte: to }, coverageTo: { gte: from } }, select: { id: true, coverageSource: true } });
+    if (overlap) throw new HttpError(409, `Opening coverage overlaps active ${overlap.coverageSource} coverage for this subscription.`);
+    if (sub.eventCodeChildId && to >= new Date(`${currentBusinessDayValue()}T00:00:00.000Z`))
+      await assertChildSlotAvailable(tx, { childId: sub.eventCodeChildId, memberId, excludeSubscriptionId: sub.id });
+    const coverage = await tx.memberEventCoverage.create({ data: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE", coverageFrom: from, coverageTo: to, remark: input.remark, createdById: userId } });
+    await tx.memberEventSubscriptionAudit.create({ data: { subscriptionId, coverageId: coverage.id, action: "OPENING_CREATED",
+      afterData: { coverageFrom: input.coverageFrom, coverageTo: input.coverageTo, remark: input.remark }, reason: input.remark, actionById: userId } });
+    await Promise.all([refreshSubscriptionValidity(tx, subscriptionId), refreshSubscriptionStartDate(tx, subscriptionId)]);
 }
 
 export async function addOpeningCoverage(memberId: string, subscriptionId: string, input: OpeningCoverageInput, userId: string) {
@@ -590,12 +599,19 @@ export function assertSubscriptionCanDeactivate(amount: string) {
 
 export async function voidOpeningCoverageRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, coverageId: string, reason: string, userId: string) {
   if (reason.trim().length < 3 || reason.trim().length > 1000) throw new HttpError(400, "A reason of 3–1000 characters is required.");
+  await tx.$queryRaw(Prisma.sql`SELECT member_event_subscription_id FROM arya_member_event_subscription
+    WHERE member_event_subscription_id = ${subscriptionId} FOR UPDATE`);
+  const current = await tx.memberEventCoverage.findFirst({ where: { id: coverageId, subscriptionId, subscription: { memberId }, coverageSource: "OPENING", coverageStatus: "ACTIVE" } });
+  if (!current) throw new HttpError(409, "This active Opening coverage is no longer available. Reload the subscription.");
   const changed = await tx.memberEventCoverage.updateMany({
     where: { id: coverageId, subscriptionId, subscription: { memberId }, coverageSource: "OPENING", coverageStatus: "ACTIVE" },
     data: { coverageStatus: "VOIDED", voidedAt: new Date(), voidedById: userId, voidReason: reason.trim() }
   });
   if (changed.count !== 1) throw new HttpError(409, "This active Opening coverage is no longer available. Reload the subscription.");
-  await rebuildTimeBasedSubscription(tx, subscriptionId, userId, "Coverage chain rebuilt after Opening coverage was voided");
+  await tx.memberEventSubscriptionAudit.create({ data: { subscriptionId, coverageId, action: "OPENING_VOIDED",
+    beforeData: { coverageFrom: dateOnly(current.coverageFrom), coverageTo: dateOnly(current.coverageTo), remark: current.remark },
+    afterData: { coverageStatus: "VOIDED" }, reason: reason.trim(), actionById: userId } });
+  await Promise.all([refreshSubscriptionValidity(tx, subscriptionId), refreshSubscriptionStartDate(tx, subscriptionId)]);
 }
 
 export async function voidOpeningCoverage(memberId: string, subscriptionId: string, coverageId: string, reason: string, userId: string) {
@@ -603,11 +619,59 @@ export async function voidOpeningCoverage(memberId: string, subscriptionId: stri
   return getSponsorship(memberId);
 }
 
+export async function reviseOpeningCoverage(memberId: string, subscriptionId: string, coverageId: string, input: ReviseOpeningCoverageInput, userId: string) {
+  await memberTransaction(async tx => {
+    await tx.$queryRaw(Prisma.sql`SELECT member_event_subscription_id FROM arya_member_event_subscription
+      WHERE member_event_subscription_id = ${subscriptionId} FOR UPDATE`);
+    const [sub, current] = await Promise.all([
+      tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true, eventCodeChildId: true } }),
+      tx.memberEventCoverage.findFirst({ where: { id: coverageId, subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE" } })
+    ]);
+    if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
+    if (!current) throw new HttpError(409, "This active Opening coverage is no longer available. Reload the subscription.");
+    const from = new Date(`${input.coverageFrom}T00:00:00.000Z`); const to = new Date(`${input.coverageTo}T00:00:00.000Z`);
+    const overlap = await tx.memberEventCoverage.findFirst({ where: { subscriptionId, id: { not: coverageId }, coverageStatus: "ACTIVE",
+      coverageFrom: { lte: to }, coverageTo: { gte: from } }, select: { coverageSource: true } });
+    if (overlap) throw new HttpError(409, `Revised Opening coverage overlaps active ${overlap.coverageSource} coverage for this subscription.`);
+    if (sub.eventCodeChildId && to >= new Date(`${currentBusinessDayValue()}T00:00:00.000Z`))
+      await assertChildSlotAvailable(tx, { childId: sub.eventCodeChildId, memberId, excludeSubscriptionId: sub.id });
+    await tx.memberEventCoverage.update({ where: { id: coverageId }, data: { coverageStatus: "VOIDED", voidedAt: new Date(), voidedById: userId, voidReason: input.reason } });
+    const replacement = await tx.memberEventCoverage.create({ data: { subscriptionId, coverageSource: "OPENING", coverageStatus: "ACTIVE",
+      coverageFrom: from, coverageTo: to, remark: input.remark, createdById: userId } });
+    await tx.memberEventSubscriptionAudit.create({ data: { subscriptionId, coverageId: replacement.id, action: "OPENING_REVISED",
+      beforeData: { coverageId, coverageFrom: dateOnly(current.coverageFrom), coverageTo: dateOnly(current.coverageTo), remark: current.remark },
+      afterData: { coverageId: replacement.id, coverageFrom: input.coverageFrom, coverageTo: input.coverageTo, remark: input.remark },
+      reason: input.reason, actionById: userId } });
+    await Promise.all([refreshSubscriptionValidity(tx, subscriptionId), refreshSubscriptionStartDate(tx, subscriptionId)]);
+  });
+  return getSponsorship(memberId);
+}
+
+export async function cancelSubscription(memberId: string, subscriptionId: string, reason: string, userId: string) {
+  await memberTransaction(async tx => {
+    await tx.$queryRaw(Prisma.sql`SELECT member_event_subscription_id FROM arya_member_event_subscription
+      WHERE member_event_subscription_id = ${subscriptionId} FOR UPDATE`);
+    const sub = await tx.memberEventSubscription.findUnique({ where: { id: subscriptionId }, select: { id: true, memberId: true, activeFlag: true } });
+    if (!sub || sub.memberId !== memberId) throw new HttpError(404, "Sponsorship subscription not found");
+    if (!sub.activeFlag) throw new HttpError(409, "This subscription is already inactive.");
+    const [coverage, ledger, transfer] = await Promise.all([
+      tx.memberEventCoverage.findFirst({ where: { subscriptionId, coverageStatus: "ACTIVE" }, select: { id: true } }),
+      tx.memberEventBalanceLedger.findFirst({ where: { subscriptionId, entryStatus: "ACTIVE" }, select: { id: true } }),
+      tx.memberEventCarryTransfer.findFirst({ where: { status: "ACTIVE", OR: [{ sourceSubscriptionId: subscriptionId }, { destinationSubscriptionId: subscriptionId }] }, select: { id: true } })
+    ]);
+    if (coverage || ledger || transfer) throw new HttpError(409, "Only an unpaid pending subscription without coverage, balance, or transfer history can be cancelled.");
+    await tx.memberEventSubscription.update({ where: { id: subscriptionId }, data: { activeFlag: false, updatedById: userId } });
+    await tx.memberEventSubscriptionAudit.create({ data: { subscriptionId, action: "CANCELLED", beforeData: { activeFlag: true },
+      afterData: { activeFlag: false }, reason, actionById: userId } });
+  });
+  return getSponsorship(memberId);
+}
+
 export async function retryAllocationRecord(tx: Prisma.TransactionClient, memberId: string, subscriptionId: string, transactionId: string, userId: string) {
   const payment = await tx.bankTransaction.findUnique({ where: { id: transactionId },
-      select: { status: true, originalAmount: true, baseAmount: true, transactionDate: true, reconciliationExcludedAt: true, eventCodeId: true, eventCodeChildId: true, eventCode: { select: { eventType: true } },
+      select: { status: true, originalAmount: true, transactionDate: true, reconciliationExcludedAt: true, eventCodeId: true, eventCodeChildId: true, eventCode: { select: { eventType: true } },
       memberIdentity: { select: { memberId: true, verificationStatus: true } } } });
-  if (!payment || payment.status !== "FINALIZED" || !payment.transactionDate || !payment.baseAmount || !payment.baseAmount.gt(0) || !payment.originalAmount.gt(0)
+  if (!payment || payment.status !== "FINALIZED" || !payment.transactionDate || !payment.originalAmount.gt(0)
     || payment.reconciliationExcludedAt || payment.eventCode?.eventType !== "TIME_BASED"
     || payment.memberIdentity?.memberId !== memberId || payment.memberIdentity.verificationStatus !== "VERIFIED")
     throw new HttpError(400, "Only an official TIME_BASED payment resolved to this Member can be retried.");

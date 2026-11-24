@@ -21,6 +21,16 @@ export type ParsedStatementSheet = {
   periodFrom: Date;
   periodTo: Date;
   transactions: ParsedStatementTransaction[];
+  diagnostics: StatementRowDiagnostic[];
+};
+
+export type StatementRowDiagnostic = {
+  sheetName: string;
+  rowNo: number;
+  rawDate: string | null;
+  rawAmount: string | null;
+  rawType: string | null;
+  reason: string;
 };
 
 export type ParsedStatementWorkbook = {
@@ -85,28 +95,32 @@ function parseFullDate(raw: string | null) {
 }
 
 function parseDateCell(cell: ExcelJS.Cell, periodFrom: Date, periodTo: Date) {
+  let candidate: Date | null = null;
   if (cell.value instanceof Date) {
-    return utcDate(cell.value.getFullYear(), cell.value.getMonth() + 1, cell.value.getDate());
+    candidate = utcDate(cell.value.getUTCFullYear(), cell.value.getUTCMonth() + 1, cell.value.getUTCDate());
+  } else if (typeof cell.value === "number") {
+    candidate = excelSerialToDate(cell.value);
+  } else {
+    const raw = cellText(cell);
+    const full = parseFullDate(raw);
+    if (full) candidate = full;
+    else if (raw) {
+      const short = raw.match(/^(\d{1,2})\/(\d{1,2})$/);
+      if (short) {
+        const day = Number(short[1]);
+        const month = Number(short[2]);
+        const candidateYears = [...new Set([periodFrom.getUTCFullYear(), periodTo.getUTCFullYear()])];
+        for (const year of candidateYears) {
+          const value = validDate(year, month, day);
+          if (value && value >= periodFrom && value <= periodTo) {
+            candidate = value;
+            break;
+          }
+        }
+      }
+    }
   }
-  if (typeof cell.value === "number") return excelSerialToDate(cell.value);
-
-  const raw = cellText(cell);
-  const full = parseFullDate(raw);
-  if (full) return full;
-  if (!raw) return null;
-
-  const short = raw.match(/^(\d{1,2})\/(\d{1,2})$/);
-  if (!short) return null;
-  const day = Number(short[1]);
-  const month = Number(short[2]);
-  const candidateYears = [...new Set([periodFrom.getUTCFullYear(), periodTo.getUTCFullYear()])];
-
-  for (const year of candidateYears) {
-    const candidate = validDate(year, month, day);
-    if (candidate && candidate >= periodFrom && candidate <= periodTo) return candidate;
-  }
-
-  return validDate(periodFrom.getUTCFullYear(), month, day);
+  return candidate && candidate >= periodFrom && candidate <= periodTo ? candidate : null;
 }
 
 function parsePeriod(raw: string | null) {
@@ -141,7 +155,7 @@ function parseAmount(raw: string | null, transactionType: string | null) {
 }
 
 function hasBcaSignature(sheet: ExcelJS.Worksheet) {
-  const rowLimit = Math.min(sheet.actualRowCount, MAX_SIGNATURE_ROWS);
+  const rowLimit = Math.min(sheet.rowCount, MAX_SIGNATURE_ROWS);
   for (let rowNo = 1; rowNo <= rowLimit; rowNo += 1) {
     const row = sheet.getRow(rowNo);
     for (let col = 1; col <= MAX_METADATA_COLUMNS; col += 1) {
@@ -154,7 +168,7 @@ function hasBcaSignature(sheet: ExcelJS.Worksheet) {
 
 function findMetadataValue(sheet: ExcelJS.Worksheet, labels: string[]) {
   const targets = labels.map((label) => label.toLowerCase());
-  const rowLimit = Math.min(sheet.actualRowCount, MAX_METADATA_ROWS);
+  const rowLimit = Math.min(sheet.rowCount, MAX_METADATA_ROWS);
   for (let rowNo = 1; rowNo <= rowLimit; rowNo += 1) {
     const row = sheet.getRow(rowNo);
     for (let col = 1; col <= MAX_METADATA_COLUMNS; col += 1) {
@@ -170,7 +184,7 @@ function findMetadataValue(sheet: ExcelJS.Worksheet, labels: string[]) {
 }
 
 function findTransactionColumns(sheet: ExcelJS.Worksheet) {
-  const rowLimit = Math.min(sheet.actualRowCount, 30);
+  const rowLimit = Math.min(sheet.rowCount, 30);
   for (let rowNo = 1; rowNo <= rowLimit; rowNo += 1) {
     const row = sheet.getRow(rowNo);
     const cells = Array.from({ length: Math.min(sheet.actualColumnCount || 8, 8) }, (_, index) => ({
@@ -252,7 +266,6 @@ function parseReferenceFallback(
       break;
     }
   }
-  date ??= validDate(period.from.getUTCFullYear(), month, day);
   const direction = inferDirectionFromTransactionType(transactionType);
   if (!date || !direction) return null;
 
@@ -287,7 +300,7 @@ function parseTransactionStart(
   // when the row itself is a conservative, known BCA transaction header and the
   // immediately following lines carry a matching DDMM/reference + amount.
   if (!looksLikeBcaTransactionType(transactionType)) return null;
-  for (let offset = 1; offset <= 2 && rowNo + offset <= sheet.actualRowCount; offset += 1) {
+  for (let offset = 1; offset <= 2 && rowNo + offset <= sheet.rowCount; offset += 1) {
     const referenceLine = cellText(sheet.getRow(rowNo + offset).getCell(columns.descriptionCol));
     if (!referenceLine) continue;
     const fallback = parseReferenceFallback(referenceLine, transactionType, period);
@@ -295,6 +308,24 @@ function parseTransactionStart(
   }
 
   return null;
+}
+
+function transactionCandidateDiagnostic(
+  sheet: ExcelJS.Worksheet,
+  rowNo: number,
+  columns: { dateCol: number; descriptionCol: number; amountCol: number }
+): StatementRowDiagnostic | null {
+  const row = sheet.getRow(rowNo);
+  const dateCell = row.getCell(columns.dateCol);
+  const amountCell = row.getCell(columns.amountCol);
+  const rawDate = isMergedChildCell(dateCell) ? null : cellText(dateCell);
+  const rawAmount = isMergedChildCell(amountCell) ? null : cellText(amountCell);
+  const rawType = cellText(row.getCell(columns.descriptionCol));
+  const knownType = Boolean(rawType && looksLikeBcaTransactionType(rawType));
+  if (!knownType && !(rawDate && (rawAmount || rawType))) return null;
+  const missing = [!rawDate ? "date" : null, !rawAmount ? "amount/direction" : null, !rawType ? "transaction type" : null].filter(Boolean);
+  return { sheetName: sheet.name, rowNo, rawDate, rawAmount, rawType,
+    reason: missing.length ? `Incomplete transaction candidate: missing ${missing.join(", ")}.` : "Transaction date or amount is invalid or outside the statement period." };
 }
 
 function parseStatementSheet(sheet: ExcelJS.Worksheet): ParsedStatementSheet | null {
@@ -309,12 +340,15 @@ function parseStatementSheet(sheet: ExcelJS.Worksheet): ParsedStatementSheet | n
   if (!accountNo || !period || !columns) return null;
 
   const transactions: ParsedStatementTransaction[] = [];
+  const diagnostics: StatementRowDiagnostic[] = [];
   let rowNo = columns.headerRow + 1;
 
-  while (rowNo <= sheet.actualRowCount) {
+  while (rowNo <= sheet.rowCount) {
     const start = parseTransactionStart(sheet, rowNo, columns, period);
 
     if (!start) {
+      const diagnostic = transactionCandidateDiagnostic(sheet, rowNo, columns);
+      if (diagnostic) diagnostics.push(diagnostic);
       rowNo += 1;
       continue;
     }
@@ -323,9 +357,13 @@ function parseStatementSheet(sheet: ExcelJS.Worksheet): ParsedStatementSheet | n
 
     const continuationLines: string[] = [];
     let cursor = rowNo + 1;
-    while (cursor <= sheet.actualRowCount) {
+    while (cursor <= sheet.rowCount) {
       const nextRow = sheet.getRow(cursor);
       if (parseTransactionStart(sheet, cursor, columns, period)) break;
+      // A row that carries its own date and amount is not a description
+      // continuation, even when its transaction type is missing. Stop here so
+      // the outer scan reports it through the fail-closed diagnostics.
+      if (transactionCandidateDiagnostic(sheet, cursor, columns)) break;
 
       const continuation = cellText(nextRow.getCell(columns.descriptionCol));
       if (continuation) continuationLines.push(continuation);
@@ -356,7 +394,8 @@ function parseStatementSheet(sheet: ExcelJS.Worksheet): ParsedStatementSheet | n
     accountName,
     periodFrom: period.from,
     periodTo: period.to,
-    transactions
+    transactions,
+    diagnostics
   };
 }
 
@@ -418,6 +457,15 @@ export async function parseBcaStatementWorkbook(buffer: Buffer): Promise<ParsedS
 
   if (validSheets.length === 0) {
     throw new Error('No valid BCA statement sheet was found. Expected content signature "Informasi Rekening - Mutasi Rekening".');
+  }
+
+  const diagnostics = validSheets.flatMap((sheet) => sheet.diagnostics);
+  if (diagnostics.length > 0) {
+    const preview = diagnostics.slice(0, 20).map((item) =>
+      `${item.sheetName} row ${item.rowNo}: ${item.reason} [date=${item.rawDate ?? "—"}; amount=${item.rawAmount ?? "—"}; type=${item.rawType ?? "—"}]`
+    ).join("\n");
+    const suffix = diagnostics.length > 20 ? `\n…and ${diagnostics.length - 20} more invalid rows.` : "";
+    throw new Error(`Statement import stopped because ${diagnostics.length} transaction-like row(s) could not be parsed. No rows were imported.\n${preview}${suffix}`);
   }
 
   const normalizedAccounts = new Set(validSheets.map((sheet) => normalizeAccountNumber(sheet.accountNo)));

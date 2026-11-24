@@ -95,7 +95,7 @@ export async function loadEditIncomeDetailRecord(statementId: string) {
             eventCodeChild: { select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true, displayOrder: true,
               itemSaleConfig: { select: { unitPrice: true, stockOnHand: true, version: true } } } },
             eventCampaign: { select: { id: true, campaignName: true } },
-            itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, status: true, resolutionReason: true } },
+            itemSalePurchase: { select: { id: true, quantity: true, unitPriceSnapshot: true, totalAmount: true, paymentAmountSnapshot: true, walletAppliedAmount: true, status: true, resolutionReason: true } },
             ...timeBasedHistoryInclude
           },
           orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }]
@@ -207,7 +207,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
             transactionDate: true,
             remark: true,
             reconciliationExcludedAt: true
-            ,itemSalePurchase: { select: { quantity: true, unitPriceSnapshot: true, status: true } }
+            ,itemSalePurchase: { select: { quantity: true, unitPriceSnapshot: true, status: true, walletAppliedAmount: true } }
           }
         }
       }
@@ -305,9 +305,11 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
         const effectiveChild = effectiveChildId ? children.find((item) => item.id === effectiveChildId) ?? null : null;
         const itemSaleQuantity = requested.itemSaleQuantity ?? null;
         if (event?.eventType === "ITEM_SALE") {
+          if (requested.direction !== "INCOMING") throw new HttpError(400, "ITEM_SALE manual adjustment must be an incoming payment");
           if (!itemSaleQuantity || !effectiveChild?.itemSaleConfig) throw new HttpError(400, "ITEM_SALE manual adjustment requires a configured item and positive quantity");
-          if (!new Prisma.Decimal(requested.amount).equals(effectiveChild.itemSaleConfig.unitPrice.mul(itemSaleQuantity))) {
-            throw new HttpError(400, "ITEM_SALE amount must equal quantity × current unit price");
+          const total = effectiveChild.itemSaleConfig.unitPrice.mul(itemSaleQuantity);
+          if (new Prisma.Decimal(requested.amount).lessThan(total)) {
+            throw new HttpError(400, "ITEM_SALE bank amount cannot be lower than quantity × current unit price");
           }
         } else if (itemSaleQuantity !== null) throw new HttpError(400, "Item quantity is only valid for ITEM_SALE");
         proposalItems.push({
@@ -388,8 +390,10 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
         const unitPrice = current.itemSalePurchase && current.eventCodeChildId === effectiveChildId
           ? current.itemSalePurchase.unitPriceSnapshot
           : effectiveChild.itemSaleConfig.unitPrice;
-        if (!current.baseAmount?.equals(unitPrice.mul(itemSaleQuantity))) {
-          throw new HttpError(400, "ITEM_SALE bank base amount must equal quantity × applicable unit price");
+        const total = unitPrice.mul(itemSaleQuantity);
+        const payment = current.originalAmount.plus(current.itemSalePurchase?.walletAppliedAmount ?? new Prisma.Decimal(0));
+        if (!current.originalAmount.greaterThan(0) || payment.lessThan(total)) {
+          throw new HttpError(400, "ITEM_SALE original bank amount plus wallet funding cannot be lower than quantity × applicable unit price");
         }
       } else if (requested.itemSaleQuantity !== null && requested.itemSaleQuantity !== undefined) {
         throw new HttpError(400, "Item quantity is only valid for ITEM_SALE");

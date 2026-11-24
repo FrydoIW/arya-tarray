@@ -314,6 +314,7 @@ export async function getTransactionInquiryDetail(transactionId: string) {
         unitPrice: decimalToString(transaction.itemSalePurchase.unitPriceSnapshot),
         totalAmount: decimalToString(transaction.itemSalePurchase.totalAmount),
         paymentAmount: transaction.itemSalePurchase.paymentAmountSnapshot ? decimalToString(transaction.itemSalePurchase.paymentAmountSnapshot) : null,
+        walletAppliedAmount: decimalToString(transaction.itemSalePurchase.walletAppliedAmount),
         status: transaction.itemSalePurchase.status,
         resolutionReason: transaction.itemSalePurchase.resolutionReason,
         confirmedAt: transaction.itemSalePurchase.confirmedAt,
@@ -329,6 +330,26 @@ export async function getTransactionInquiryDetail(transactionId: string) {
           reason: movement.reason,
           createdAt: movement.createdAt,
           createdBy: movement.createdBy
+        }))
+      } : null,
+      itemSaleWallet: transaction.itemSaleFund ? {
+        id: transaction.itemSaleFund.id,
+        status: transaction.itemSaleFund.status,
+        ownershipStatus: transaction.itemSaleFund.ownershipStatus,
+        originalAmount: decimalToString(transaction.itemSaleFund.originalAmount),
+        allocatedSaleAmount: decimalToString(transaction.itemSaleFund.allocatedSaleAmount),
+        otherAllocatedAmount: decimalToString(transaction.itemSaleFund.otherAllocatedAmount),
+        unallocatedAmount: decimalToString(transaction.itemSaleFund.unallocatedAmount),
+        ownerMemberId: transaction.itemSaleFund.ownerMemberId,
+        entries: transaction.itemSaleFund.entries.map(entry => ({
+          id: entry.id, entryType: entry.entryType, amountDelta: decimalToString(entry.amountDelta),
+          balanceAfter: decimalToString(entry.balanceAfter), reason: entry.reason, createdAt: entry.createdAt, createdBy: entry.createdBy
+        })),
+        allocations: transaction.itemSaleFund.allocations.map(allocation => ({
+          id: allocation.id, amount: decimalToString(allocation.amount), status: allocation.status,
+          reason: allocation.reason, createdAt: allocation.createdAt, createdBy: allocation.createdBy,
+          reversedAt: allocation.reversedAt, reversedBy: allocation.reversedBy, reversalReason: allocation.reversalReason,
+          purchase: allocation.purchase ? { ...allocation.purchase, totalAmount: decimalToString(allocation.purchase.totalAmount) } : null
         }))
       } : null
     },

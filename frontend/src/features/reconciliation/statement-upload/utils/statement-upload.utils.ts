@@ -70,12 +70,18 @@ export function childNeedsReview(transaction: DraftTransaction, children: EventC
 }
 
 export function getDraftRowStatus(transaction: DraftTransaction, eventCodes: EventCodeOption[] = [], children: EventCodeChildOption[] = []): DraftRowStatus {
+  if (transaction.excluded) return "NOT_APPLICABLE";
   if (!requiresEventClassification(transaction)) return "NOT_APPLICABLE";
   if (!transaction.eventCodeId) return "NEEDS_REVIEW";
   const event = getEventCode(eventCodes, transaction.eventCodeId);
   if (event?.eventType === "CAMPAIGN" && !transaction.eventCampaignId) return "NEEDS_REVIEW";
-  if (event?.eventType === "TIME_BASED" && (!event.timeRule?.activeFlag
-    || !paymentOnlyTimePreview(transaction.baseAmount ?? "", event.timeRule.unitAmount, event.timeRule.durationMonths))) return "NEEDS_REVIEW";
+  if (event?.eventType === "TIME_BASED") {
+    const child = children.find(item => item.id === transaction.eventCodeChildId);
+    const rule = child
+      ? child.unitAmount && child.durationMonths ? { unitAmount: child.unitAmount, durationMonths: child.durationMonths, activeFlag: child.activeFlag } : null
+      : event.timeRule;
+    if (!rule?.activeFlag || !paymentOnlyTimePreview(transaction.originalAmount, rule.unitAmount, rule.durationMonths)) return "NEEDS_REVIEW";
+  }
   if (childNeedsReview(transaction, children)) return "NEEDS_REVIEW";
   if (event?.eventType === "ITEM_SALE") {
     const child = children.find(item => item.id === transaction.eventCodeChildId);

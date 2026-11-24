@@ -70,7 +70,7 @@ export function AddAdjustmentModal(props: AddAdjustmentModalProps) {
     if (direction === "INCOMING" && selectedEvent?.eventType === "ITEM_SALE") {
       const quantity = Number(itemSaleQuantity);
       if (!Number.isInteger(quantity) || quantity <= 0 || !selectedChild?.itemSaleUnitPrice) { setError("ITEM_SALE requires a configured item and positive whole quantity."); return; }
-      if (Number(amount) !== Number(selectedChild.itemSaleUnitPrice) * quantity) { setError("ITEM_SALE amount must equal quantity × unit price."); return; }
+      if (Number(amount) < Number(selectedChild.itemSaleUnitPrice) * quantity) { setError("ITEM_SALE amount cannot be lower than quantity × unit price. Surplus is allowed and becomes customer wallet."); return; }
     }
     if (!reason.trim()) {
       setError("Correction Reason is required.");

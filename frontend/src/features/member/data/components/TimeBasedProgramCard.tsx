@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, BookOpenText, CalendarDays, CalendarPlus, Landmark, Pencil, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BookOpenText, CalendarDays, CalendarPlus, Landmark, Pencil, Trash2, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatDate, formatMoney } from "@/lib/format";
 import { coverageSourceLabel, ledgerEntryKind, ledgerEntryLabel } from "../program-allocation.utils";
@@ -15,6 +15,8 @@ type CardProps = {
   onEdit: (subscription: SponsorshipSubscription) => void;
   onOpeningCoverage: (subscription: SponsorshipSubscription) => void;
   onVoidOpening: (subscription: SponsorshipSubscription, coverageId: string) => void;
+  onReviseOpening: (subscription: SponsorshipSubscription, coverage: SponsorshipSubscription["coverage"][number]) => void;
+  onCancel: (subscription: SponsorshipSubscription) => void;
 };
 
 function signedMoney(value: string) {
@@ -23,7 +25,7 @@ function signedMoney(value: string) {
   return `${negative ? "−" : "+"} ${formatMoney(absolute)}`;
 }
 
-export function TimeBasedProgramCard({ subscription: sub, canMutate, busy, onEdit, onOpeningCoverage, onVoidOpening }: CardProps) {
+export function TimeBasedProgramCard({ subscription: sub, canMutate, busy, onEdit, onOpeningCoverage, onVoidOpening, onReviseOpening, onCancel }: CardProps) {
   const [ledgerOpen, setLedgerOpen] = useState(false);
 
   return <article className={styles.programCard}>
@@ -41,6 +43,8 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, busy, onEdi
         onClick={() => setLedgerOpen(open => !open)}>{ledgerOpen ? "Hide Ledger" : "View Ledger"}</Button>
       <Button size="sm" variant="ghost" icon={<Pencil size={14} />} disabled={busy} onClick={() => onEdit(sub)}>Edit</Button>
       <Button size="sm" variant="ghost" icon={<CalendarPlus size={14} />} disabled={busy} onClick={() => onOpeningCoverage(sub)}>Opening coverage</Button>
+      {sub.activeFlag && sub.coverage.length === 0 && sub.balanceHistory.length === 0 && sub.transferIn === "0.00" && sub.transferOut === "0.00"
+        ? <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} disabled={busy} onClick={() => onCancel(sub)}>Cancel pending</Button> : null}
     </div> : null}
 
     <div className={styles.programBody}>
@@ -83,7 +87,8 @@ export function TimeBasedProgramCard({ subscription: sub, canMutate, busy, onEdi
             <small>{coverage.amountApplied ? formatMoney(coverage.amountApplied) : "Tanpa transaksi"} · {coverage.status}{coverage.voidReason ? ` · ${coverage.voidReason}` : ""}</small>
           </div>
           {canMutate && coverage.source === "OPENING" && coverage.status === "ACTIVE"
-            ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => onVoidOpening(sub, coverage.coverageId)}>Void opening</Button> : null}
+            ? <div><Button size="sm" variant="ghost" disabled={busy} onClick={() => onReviseOpening(sub, coverage)}>Revise</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => onVoidOpening(sub, coverage.coverageId)}>Void opening</Button></div> : null}
         </div>)}</div> : <p className={styles.emptySmall}>Belum ada coverage.</p>}
       </section>
 

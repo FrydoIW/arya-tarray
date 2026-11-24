@@ -10,6 +10,7 @@ import { DraftReviewSummary } from "./DraftReviewSummary";
 import { DraftTransactionReview } from "./DraftTransactionReview";
 import { DraftStatements } from "./DraftStatements";
 import { DraftWorkspace } from "./DraftWorkspace";
+import { DuplicateReviewPanel } from "./DuplicateReviewPanel";
 import { StatementUploadSummary } from "./StatementUploadSummary";
 import { UploadResultReport } from "./UploadResultReport";
 import { WithdrawDraftModal } from "./WithdrawDraftModal";
@@ -44,7 +45,7 @@ export function StatementUploadScreen() {
               onClick={() => {
                 if (workspace.canExecute) setExecuteOpen(true);
               }}
-              title={workspace.canExecute ? "Submit draft for approval" : "Resolve all required incoming transactions before Execute"}
+              title={workspace.canExecute ? "Submit draft for approval" : "Resolve required transactions and POSSIBLE duplicates before Execute"}
             >
               Execute
             </Button>
@@ -57,6 +58,13 @@ export function StatementUploadScreen() {
 
       <StatementUploadSummary summary={workspace.workspace.summary} />
       <UploadResultReport result={workspace.uploadResult} />
+      <DuplicateReviewPanel
+        duplicates={workspace.workspace.duplicates}
+        canResolve={workspace.canEditDraft}
+        busy={workspace.busy || Boolean(workspace.resolvingDuplicateId)}
+        resolvingId={workspace.resolvingDuplicateId}
+        onResolve={(duplicateId, decision, reason) => workspace.resolveDuplicate(duplicateId, decision, reason)}
+      />
       <DraftStatements
         rows={workspace.workspace.drafts}
         selectedStatementId={workspace.selectedStatementId}

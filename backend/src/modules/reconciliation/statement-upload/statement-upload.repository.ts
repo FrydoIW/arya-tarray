@@ -6,7 +6,7 @@ import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../recon
 import { discoverMemberIdentities } from "../../member/member-identity/member-identity.service.js";
 import { memberTransaction } from "../../member/member-identity/member-transaction.js";
 import { buildApprovalApproverSnapshot, LEGACY_APPROVAL_SNAPSHOT_MESSAGE } from "../../approval/sign-approval/approval-snapshot.domain.js";
-import { canonicalDuplicateSignature, matchDuplicateTransactions, signedAmountCents } from "./statement-upload.duplicate.js";
+import { canonicalDatabaseFingerprint, canonicalDuplicateSignature, matchDuplicateTransactions, signedAmountCents } from "./statement-upload.duplicate.js";
 import { centsToDecimalString } from "./statement-upload.classifier.js";
 import { assertCampaignClassification, selectSingleEligibleCampaign } from "../campaign-classification.js";
 import { resolveTimeBasedUnits } from "../time-based-classification.js";
@@ -46,6 +46,9 @@ const eventCodeChildSelect = {
   childName: true,
   activeFlag: true,
   displayOrder: true,
+  capacity: true,
+  unitAmount: true,
+  durationMonths: true,
   itemSaleConfig: { select: { unitPrice: true, stockOnHand: true, version: true } }
 } as const;
 
@@ -91,6 +94,7 @@ export function loadRawStatementsForSummary() {
         select: {
           transactionType: true,
           originalAmount: true,
+          reconciliationExcludedAt: true,
           eventCodeId: true,
           eventCodeChildId: true,
           eventCampaignId: true,
@@ -115,7 +119,7 @@ export function buildOverlapCandidateWhere(current: { id: string; bankAccountId:
 }
 
 export async function loadStatementUploadWorkspaceRecords(statementId?: string) {
-  const [bankAccounts, activeEventCodes, campaigns, eventCodeChildren, rawStatements, currentStatement] = await Promise.all([
+  const [bankAccounts, activeEventCodes, campaigns, eventCodeChildren, rawStatements, currentStatement, duplicates] = await Promise.all([
     prisma.bankAccount.findMany({
       where: { activeFlag: true },
       select: bankAccountSelect,
@@ -145,7 +149,34 @@ export async function loadStatementUploadWorkspaceRecords(statementId?: string) 
     loadRawStatementsForSummary(),
     statementId
       ? prisma.bankStatementUpload.findFirst({ where: { id: statementId, status: "RAW" }, include: statementInclude })
-      : Promise.resolve(null)
+      : Promise.resolve(null),
+    statementId
+      ? prisma.bankStatementUploadDuplicate.findMany({
+          where: { OR: [
+            { importedBankTransaction: { is: { statementUploadId: statementId } } },
+            { matchedStatementUploadId: statementId }
+          ] },
+          select: {
+            id: true, matchType: true, resolutionStatus: true, resolutionReason: true, resolvedAt: true,
+            sourceTransactionNo: true, sourceWorksheetRow: true, sourceSheetName: true, transactionDate: true,
+            transactionType: true, referenceNo: true, senderName: true, sourceDescription: true, originalAmount: true,
+            signatureHash: true, matchedStatementUploadId: true, matchedBankTransactionId: true, importedBankTransactionId: true,
+            matchedBankTransaction: { select: {
+              id: true, rowNo: true, transactionDate: true, transactionType: true, referenceNo: true, senderName: true,
+              description: true, originalAmount: true, status: true, statementUploadId: true,
+              statementUpload: { select: { fileName: true } }
+            } },
+            importedBankTransaction: { select: {
+              id: true, rowNo: true, transactionDate: true, transactionType: true, referenceNo: true, senderName: true,
+              description: true, originalAmount: true, status: true, statementUploadId: true,
+              statementUpload: { select: { fileName: true } }
+            } },
+            resolvedBy: { select: { id: true, fullName: true } },
+            uploadAttempt: { select: { fileName: true } }
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }]
+        })
+      : Promise.resolve([])
   ]);
 
   const overlappingStatements = currentStatement?.periodFrom && currentStatement.periodTo
@@ -161,7 +192,7 @@ export async function loadStatementUploadWorkspaceRecords(statementId?: string) 
       })
     : [];
 
-  return { bankAccounts, activeEventCodes, campaigns, eventCodeChildren, rawStatements, currentStatement, overlappingStatements };
+  return { bankAccounts, activeEventCodes, campaigns, eventCodeChildren, rawStatements, currentStatement, overlappingStatements, duplicates };
 }
 
 export function loadChildrenForParents(parentIds: string[]): Promise<ChildOption[]> {
@@ -219,6 +250,7 @@ export type PersistParsedStatementResult = {
   sourceTransactionCount: number;
   importedTransactionCount: number;
   duplicateTransactionCount: number;
+  possibleDuplicateTransactionCount: number;
   sourceTotalCredit: string;
   sourceTotalDebit: string;
   duplicates: Array<{
@@ -235,6 +267,8 @@ export type PersistParsedStatementResult = {
     description: string | null;
     originalAmount: string;
     signatureHash: string;
+    matchType: "EXACT" | "POSSIBLE";
+    resolutionStatus: "CONFIRMED" | "PENDING_REVIEW";
   }>;
 };
 
@@ -279,7 +313,7 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
           orderBy: { id: "asc" }
         }) : [];
 
-        const { duplicates, newRows } = matchDuplicateTransactions(input.transactions, existingEvidence);
+        const { exactDuplicates, possibleDuplicates, newRows } = matchDuplicateTransactions(input.transactions, existingEvidence);
 
         const attemptRecord = await tx.bankStatementUploadAttempt.create({
           data: {
@@ -289,13 +323,14 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
             sourceTotalCredit: new Prisma.Decimal(input.totalCredit),
             sourceTotalDebit: new Prisma.Decimal(input.totalDebit),
             importedTransactionCount: newRows.length,
-            duplicateTransactionCount: duplicates.length,
+            duplicateTransactionCount: exactDuplicates.length,
             uploadedById: input.uploadedById
           },
           select: { id: true }
         });
 
         let statement: { id: string } | null = null;
+        const importedBySourceNo = new Map<number, string>();
         if (newRows.length > 0) {
           let importedCreditCents = 0n;
           let importedDebitCents = 0n;
@@ -353,6 +388,7 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
               senderName: transaction.senderName,
               description: transaction.description,
               originalAmount: new Prisma.Decimal(transaction.originalAmount),
+              evidenceFingerprint: canonicalDatabaseFingerprint(input.bankAccountId, transaction),
               suffixCode: transaction.suffixCode,
               suggestedEventCodeId: transaction.suggestedEventCodeId,
               eventCodeId: transaction.eventCodeId,
@@ -370,6 +406,9 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
             }))
           });
 
+          const importedRows = await tx.bankTransaction.findMany({ where: { statementUploadId: createdStatement.id }, select: { id: true, rowNo: true } });
+          importedRows.forEach(row => { if (row.rowNo !== null) importedBySourceNo.set(row.rowNo, row.id); });
+
           await tx.bankAccount.updateMany({
             where: {
               id: input.bankAccountId,
@@ -384,12 +423,23 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
           });
         }
 
-        if (duplicates.length > 0) {
+        const duplicateEvidence = [
+          ...exactDuplicates.map(item => ({ ...item, matchType: "EXACT" as const, resolutionStatus: "CONFIRMED" as const })),
+          ...possibleDuplicates.map(item => ({ ...item, matchType: "POSSIBLE" as const, resolutionStatus: "PENDING_REVIEW" as const }))
+        ];
+        const resolveMatched = (matched: (typeof duplicateEvidence)[number]["matched"]) => matched.kind === "EXISTING"
+          ? { statementUploadId: matched.row.statementUploadId, bankTransactionId: matched.row.id }
+          : { statementUploadId: statement!.id, bankTransactionId: importedBySourceNo.get(matched.row.sourceTransactionNo)! };
+
+        if (duplicateEvidence.length > 0) {
           await tx.bankStatementUploadDuplicate.createMany({
-            data: duplicates.map(({ incoming, matched }) => ({
+            data: duplicateEvidence.map(({ incoming, matched, matchType, resolutionStatus }) => {
+              const target = resolveMatched(matched);
+              return {
               uploadAttemptId: attemptRecord.id,
-              matchedStatementUploadId: matched.statementUploadId,
-              matchedBankTransactionId: matched.id,
+              matchedStatementUploadId: target.statementUploadId,
+              matchedBankTransactionId: target.bankTransactionId,
+              importedBankTransactionId: matchType === "POSSIBLE" ? importedBySourceNo.get(incoming.sourceTransactionNo) ?? null : null,
               sourceTransactionNo: incoming.sourceTransactionNo,
               sourceWorksheetRow: incoming.sourceWorksheetRow,
               sourceSheetName: incoming.sourceSheetName,
@@ -399,8 +449,10 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
               senderName: incoming.senderName,
               sourceDescription: incoming.description,
               originalAmount: new Prisma.Decimal(incoming.originalAmount),
-              signatureHash: canonicalDuplicateSignature(incoming)
-            }))
+              signatureHash: canonicalDuplicateSignature(incoming),
+              matchType,
+              resolutionStatus
+            }; })
           });
         }
 
@@ -409,13 +461,16 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
           statementId: statement?.id ?? null,
           sourceTransactionCount: input.totalTransaction,
           importedTransactionCount: newRows.length,
-          duplicateTransactionCount: duplicates.length,
+          duplicateTransactionCount: exactDuplicates.length,
+          possibleDuplicateTransactionCount: possibleDuplicates.length,
           sourceTotalCredit: input.totalCredit,
           sourceTotalDebit: input.totalDebit,
-          duplicates: duplicates.map(({ incoming, matched }) => ({
-            matchedStatementUploadId: matched.statementUploadId,
-            matchedStatementFileName: fileNameByStatementId.get(matched.statementUploadId) ?? null,
-            matchedBankTransactionId: matched.id,
+          duplicates: duplicateEvidence.map(({ incoming, matched, matchType, resolutionStatus }) => {
+            const target = resolveMatched(matched);
+            return {
+            matchedStatementUploadId: target.statementUploadId,
+            matchedStatementFileName: matched.kind === "EXISTING" ? fileNameByStatementId.get(target.statementUploadId) ?? null : input.fileName,
+            matchedBankTransactionId: target.bankTransactionId,
             sourceTransactionNo: incoming.sourceTransactionNo,
             sourceWorksheetRow: incoming.sourceWorksheetRow,
             sourceSheetName: incoming.sourceSheetName,
@@ -425,8 +480,10 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
             senderName: incoming.senderName,
             description: incoming.description,
             originalAmount: incoming.originalAmount,
-            signatureHash: canonicalDuplicateSignature(incoming)
-          }))
+            signatureHash: canonicalDuplicateSignature(incoming),
+            matchType,
+            resolutionStatus
+          }; })
         };
         return statementResult;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -438,6 +495,117 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
   }
 
   throw new Error("Statement persistence retry limit reached");
+}
+
+export async function resolveStatementDuplicateAtomic(input: {
+  statementId: string;
+  duplicateId: string;
+  decision: "DISTINCT" | "DUPLICATE";
+  reason: string;
+  userId: string;
+}) {
+  const reason = input.reason.trim();
+  if (reason.length < 3) throw new HttpError(400, "A duplicate decision reason of at least 3 characters is required.");
+  return prisma.$transaction(async (tx) => {
+    const statementRows = await tx.$queryRaw<Array<{ statement_upload_id: string }>>`
+      SELECT statement_upload_id FROM arya_bank_statement_upload WHERE statement_upload_id = ${input.statementId} FOR UPDATE
+    `;
+    if (statementRows.length === 0) throw new HttpError(404, "Statement not found");
+    const statement = await tx.bankStatementUpload.findUniqueOrThrow({
+      where: { id: input.statementId },
+      select: { id: true, status: true, totalTransaction: true, totalCredit: true, totalDebit: true }
+    });
+    if (statement.status !== "RAW") throw new HttpError(409, "Duplicate decisions are only allowed while the statement is a Draft.");
+
+    const duplicateRows = await tx.$queryRaw<Array<{ duplicate_id: string }>>`
+      SELECT duplicate_id FROM arya_bank_statement_upload_duplicate WHERE duplicate_id = ${input.duplicateId} FOR UPDATE
+    `;
+    if (duplicateRows.length === 0) throw new HttpError(404, "Duplicate record not found");
+    const duplicate = await tx.bankStatementUploadDuplicate.findUniqueOrThrow({
+      where: { id: input.duplicateId },
+      include: {
+        importedBankTransaction: { select: { id: true, statementUploadId: true, originalAmount: true, reconciliationExcludedAt: true, itemSalePurchase: { select: { id: true } } } },
+        matchedBankTransaction: { select: { id: true, statementUploadId: true } }
+      }
+    });
+    const belongs = duplicate.importedBankTransaction?.statementUploadId === input.statementId
+      || duplicate.matchedStatementUploadId === input.statementId
+      || duplicate.matchedBankTransaction.statementUploadId === input.statementId;
+    if (!belongs) throw new HttpError(404, "Duplicate record does not belong to this statement");
+    if (duplicate.matchType !== "POSSIBLE") throw new HttpError(409, "Only POSSIBLE duplicates require a manual decision.");
+    if (duplicate.resolutionStatus !== "PENDING_REVIEW") {
+      if (duplicate.resolutionStatus === input.decision) return duplicate;
+      throw new HttpError(409, `This duplicate was already resolved as ${duplicate.resolutionStatus}. Reload the workspace.`);
+    }
+
+    const now = new Date();
+    if (input.decision === "DUPLICATE") {
+      const imported = duplicate.importedBankTransaction;
+      if (!imported || imported.statementUploadId !== input.statementId) {
+        throw new HttpError(409, "The incoming transaction for this duplicate is not part of the selected statement.");
+      }
+      if (imported.reconciliationExcludedAt) throw new HttpError(409, "The incoming transaction is already excluded.");
+      const amount = imported.originalAmount;
+      const nextCredit = amount.greaterThan(0) ? statement.totalCredit.minus(amount) : statement.totalCredit;
+      const nextDebit = amount.lessThan(0) ? statement.totalDebit.minus(amount.abs()) : statement.totalDebit;
+      if (nextCredit.lessThan(0) || nextDebit.lessThan(0)) {
+        throw new HttpError(409, "Duplicate exclusion would make the statement totals negative. Reload and verify the draft.");
+      }
+      await tx.bankTransaction.update({
+        where: { id: imported.id },
+        data: {
+          reconciliationExcludedAt: now,
+          reconciliationExcludedById: input.userId,
+          reconciliationExclusionReason: `Duplicate of ${duplicate.matchedBankTransactionId}: ${reason}`
+        }
+      });
+      await tx.bankTransactionHistory.create({ data: {
+        bankTransactionId: imported.id,
+        fieldName: "reconciliation_excluded_at",
+        oldValue: null,
+        newValue: now.toISOString(),
+        remark: `Duplicate resolution: ${reason}`,
+        changedAt: now,
+        changedById: input.userId
+      } });
+      if (imported.itemSalePurchase) {
+        await synchronizeItemSaleTransaction(tx, imported.id, input.userId, {
+          reason: `Duplicate resolved by admin: ${reason}`
+        });
+      }
+      await tx.bankStatementUpload.update({
+        where: { id: statement.id },
+        data: {
+          totalCredit: nextCredit,
+          totalDebit: nextDebit,
+          totalTransaction: Math.max(0, statement.totalTransaction - 1)
+        }
+      });
+    } else {
+      const imported = duplicate.importedBankTransaction;
+      if (imported) {
+        await tx.bankTransactionHistory.create({ data: {
+          bankTransactionId: imported.id,
+          fieldName: "duplicate_resolution",
+          oldValue: "PENDING_REVIEW",
+          newValue: "DISTINCT",
+          remark: `Admin kept as distinct: ${reason}`,
+          changedAt: now,
+          changedById: input.userId
+        } });
+      }
+    }
+
+    return tx.bankStatementUploadDuplicate.update({
+      where: { id: duplicate.id },
+      data: {
+        resolutionStatus: input.decision,
+        resolutionReason: reason,
+        resolvedAt: now,
+        resolvedById: input.userId
+      }
+    });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export function resolveRemarkUpdate(current: string | null, incoming: string | undefined) {
@@ -471,6 +639,9 @@ export async function updateTransactionFinalEventAtomic(input: {
     if (!current) throw new HttpError(404, "Bank transaction not found in the selected statement");
     if (current.statementUpload.status !== "RAW") {
       throw new HttpError(409, "This statement is no longer a Draft. Reload the Statement Upload workspace.");
+    }
+    if (current.reconciliationExcludedAt) {
+      throw new HttpError(409, "This transaction was excluded by duplicate resolution and cannot be classified again.");
     }
     if (!storedTransactionRequiresClassification(current) && input.eventCodeId) {
       throw new HttpError(400, "Final Event is not applicable to this bank transaction.");
@@ -618,6 +789,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
             transactionType: true,
             originalAmount: true,
             baseAmount: true,
+            reconciliationExcludedAt: true,
             eventCodeId: true,
             eventCodeChildId: true,
             eventCampaignId: true,
@@ -642,11 +814,25 @@ export async function executeStatementAtomic(input: { statementId: string; userI
     if (statement.status !== "RAW") {
       throw new HttpError(409, "This statement is no longer a Draft. Reload the Statement Upload workspace.");
     }
+    const unresolvedDuplicates = await tx.bankStatementUploadDuplicate.count({
+      where: {
+        matchType: "POSSIBLE",
+        resolutionStatus: "PENDING_REVIEW",
+        importedBankTransaction: { is: { statementUploadId: statement.id } }
+      }
+    });
+    if (unresolvedDuplicates > 0) {
+      throw new HttpError(400, `${unresolvedDuplicates} POSSIBLE duplicate${unresolvedDuplicates === 1 ? " requires" : "s require"} an admin decision before Execute.`);
+    }
+    const activeTransactions = statement.transactions.filter(transaction => !transaction.reconciliationExcludedAt);
+    if (activeTransactions.length === 0) {
+      throw new HttpError(400, "This statement has no transactions to submit for approval.");
+    }
     if (statement.transactions.length === 0) {
       throw new HttpError(400, "This statement has no transactions to submit for approval.");
     }
 
-    const unresolvedCount = statement.transactions.filter((transaction) =>
+    const unresolvedCount = activeTransactions.filter((transaction) =>
       storedTransactionRequiresClassification(transaction) && (!transaction.eventCodeId || (transaction.eventCode?.eventType === "CAMPAIGN" && !transaction.eventCampaignId))
     ).length;
 
@@ -657,7 +843,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
       );
     }
 
-    const childParentIds = [...new Set(statement.transactions.map((transaction) => transaction.eventCodeId).filter((value): value is string => Boolean(value)))];
+    const childParentIds = [...new Set(activeTransactions.map((transaction) => transaction.eventCodeId).filter((value): value is string => Boolean(value)))];
     const childRecords = childParentIds.length
       ? await tx.eventCodeChild.findMany({
           where: { eventCodeId: { in: childParentIds } },
@@ -671,7 +857,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
       childrenByParent.set(child.eventCodeId, group);
     }
 
-    const childBlocked = statement.transactions.filter((transaction) => {
+    const childBlocked = activeTransactions.filter((transaction) => {
       if (!storedTransactionRequiresClassification(transaction) || !transaction.eventCodeId) return false;
       return storedChildNeedsAttention({
         requiresClassification: true,
@@ -696,9 +882,9 @@ export async function executeStatementAtomic(input: { statementId: string; userI
       );
     }
 
-    await assertStatementItemSalesReady(tx, statement.transactions.map(transaction => transaction.id));
+    await assertStatementItemSalesReady(tx, activeTransactions.map(transaction => transaction.id));
 
-    for (const transaction of statement.transactions) {
+    for (const transaction of activeTransactions) {
       if (!storedTransactionRequiresClassification(transaction) || !transaction.eventCodeId) continue;
       assertCampaignClassification({
         eventCode: transaction.eventCode,
@@ -784,7 +970,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
       }
     });
 
-    const memberDiscovery = await discoverMemberIdentities(tx, statement.transactions, input.userId);
+    const memberDiscovery = await discoverMemberIdentities(tx, activeTransactions, input.userId);
     return { statementId: statement.id, approvalId, memberDiscovery };
   });
 }

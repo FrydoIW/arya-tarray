@@ -68,7 +68,7 @@ export type TransactionInquiryRow = {
   memberIdentity: TransactionInquiryMemberIdentity | null;
   member: TransactionInquiryMember | null;
   bankAccount: TransactionInquiryBankAccount;
-  itemSale: { purchaseId: string; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string | null; status: string; resolutionReason: string | null; confirmedAt: string | null; reversedAt: string | null } | null;
+  itemSale: { purchaseId: string; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string | null; walletAppliedAmount: string; status: string; resolutionReason: string | null; confirmedAt: string | null; reversedAt: string | null } | null;
 };
 
 export type TransactionInquiryWorkspace = {
@@ -147,7 +147,13 @@ export type TransactionInquiryDetail = {
     memberIdentity: TransactionInquiryMemberIdentity | null;
     member: TransactionInquiryMember | null;
     sponsorship: { unitAmount: string; durationMonths: number; grantedMonths: number; principalAmount: string; paymentCredited: string | null; paymentOnlyRemainder: string; carryBalanceAfterPayment: string | null; allocation: { referenceNo: string | null; displayName: string | null; coverageFrom: string | null; coverageTo: string | null } | null } | null;
-    itemSale: { purchaseId: string; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string | null; status: string; resolutionReason: string | null; confirmedAt: string | null; confirmedBy: { id: string; fullName: string } | null; reversedAt: string | null; reversedBy: { id: string; fullName: string } | null; movements: Array<{ id: string; movementType: string; quantityDelta: number; stockBefore: number; stockAfter: number; reason: string; createdAt: string; createdBy: { id: string; fullName: string } }> } | null;
+    itemSale: { purchaseId: string; quantity: number; unitPrice: string; totalAmount: string; paymentAmount: string | null; walletAppliedAmount: string; status: string; resolutionReason: string | null; confirmedAt: string | null; confirmedBy: { id: string; fullName: string } | null; reversedAt: string | null; reversedBy: { id: string; fullName: string } | null; movements: Array<{ id: string; movementType: string; quantityDelta: number; stockBefore: number; stockAfter: number; reason: string; createdAt: string; createdBy: { id: string; fullName: string } }> } | null;
+    itemSaleWallet: {
+      id: string; status: string; ownershipStatus: string; originalAmount: string; allocatedSaleAmount: string;
+      otherAllocatedAmount: string; unallocatedAmount: string; ownerMemberId: string | null;
+      entries: Array<{ id: string; entryType: string; amountDelta: string; balanceAfter: string; reason: string; createdAt: string; createdBy: { id: string; fullName: string } }>;
+      allocations: Array<{ id: string; amount: string; status: string; reason: string; createdAt: string; createdBy: { id: string; fullName: string }; reversedAt: string | null; reversedBy: { id: string; fullName: string } | null; reversalReason: string | null; purchase: { id: string; status: string; quantity: number; totalAmount: string } | null }>;
+    } | null;
   };
   history: Array<{
     id: string;

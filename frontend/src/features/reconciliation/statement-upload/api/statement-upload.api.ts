@@ -55,3 +55,10 @@ export function withdrawStatementDraft(input: { statementId: string; reason: str
     { method: "POST", body: JSON.stringify({ reason: input.reason }) }
   );
 }
+
+export function resolveStatementDuplicate(input: { statementId: string; duplicateId: string; decision: "DISTINCT" | "DUPLICATE"; reason: string }): Promise<StatementUploadWorkspace> {
+  return apiFetch<StatementUploadWorkspace>(
+    `/reconciliation/statement-upload/${encodeURIComponent(input.statementId)}/duplicates/${encodeURIComponent(input.duplicateId)}/resolve`,
+    { method: "POST", body: JSON.stringify({ decision: input.decision, reason: input.reason }) }
+  );
+}

@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import {
+  duplicateParamsSchema,
+  resolveDuplicateSchema,
   statementParamsSchema,
   transactionParamsSchema,
   updateFinalEventSchema,
@@ -10,6 +12,7 @@ import {
 import {
   executeStatement,
   getStatementUploadWorkspace,
+  resolveDuplicate,
   updateFinalEvent,
   uploadStatement,
   withdrawStatement
@@ -45,4 +48,10 @@ export async function withdrawStatementController(req: Request, res: Response) {
   const { statementId } = statementParamsSchema.parse(req.params);
   const input = withdrawStatementSchema.parse(req.body ?? {});
   res.json(await withdrawStatement(statementId, input, req.auth!.userId));
+}
+
+export async function resolveDuplicateController(req: Request, res: Response) {
+  const { statementId, duplicateId } = duplicateParamsSchema.parse(req.params);
+  const input = resolveDuplicateSchema.parse(req.body ?? {});
+  res.json(await resolveDuplicate(statementId, duplicateId, input, req.auth!.userId));
 }

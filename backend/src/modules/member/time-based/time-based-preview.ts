@@ -34,8 +34,8 @@ type PreviewPayment = {
 
 /** Read-only display of the same historical rate selection used by allocation. */
 export function timeBasedPaymentPreview(payment: PreviewPayment, recalculate = false) {
-  if (payment.eventCode?.eventType !== "TIME_BASED" || !payment.baseAmount) return null;
-  // Classification still requires baseAmount, but all wallet/remainder display
+  if (payment.eventCode?.eventType !== "TIME_BASED") return null;
+  // Classification still uses baseAmount, but all wallet/remainder display
   // follows the complete bank PAYMENT amount including its suffix rupiah.
   const principal = decimalStringToCents(payment.originalAmount.toString());
   if (principal <= 0n) return null;
@@ -62,8 +62,9 @@ export function timeBasedPaymentPreview(payment: PreviewPayment, recalculate = f
       && (row.subscription.eventCodeChildId ?? null) === (payment.eventCodeChildId ?? null)
       && decimalStringToCents(row.amountDelta.toString()) === amount);
     const fullPayment = paymentMatches(principal);
-    const legacyPayment = decimalStringToCents(payment.baseAmount.toString()) === principal ? null
-      : paymentMatches(decimalStringToCents(payment.baseAmount.toString()));
+    const legacyAmount = payment.baseAmount ? decimalStringToCents(payment.baseAmount.toString()) : null;
+    const legacyPayment = legacyAmount === null || legacyAmount === principal ? null
+      : paymentMatches(legacyAmount);
     const activePayment = !recalculate ? (fullPayment?.entryStatus === "ACTIVE" ? fullPayment
       : legacyPayment?.entryStatus === "ACTIVE" ? legacyPayment : undefined) : undefined;
     const matchingSnapshotPayment = historical

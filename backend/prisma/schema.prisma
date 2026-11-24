@@ -38,6 +38,7 @@ model Member {
   campaignWalletEntries  MemberEventCampaignWalletLedger[]
   campaignParticipations MemberEventCampaignParticipation[]
   itemSalePurchases      ItemSalePurchase[]                 @relation("ItemSalePurchaseBuyer")
+  itemSaleFunds          ItemSaleFund[]                     @relation("ItemSaleFundOwner")
 
   @@index([memberName], map: "idx_member_name")
   @@index([initialName], map: "idx_member_initial_name")
@@ -172,6 +173,13 @@ model User {
   reversedItemSalePurchases                ItemSalePurchase[]                 @relation("ItemSalePurchaseReversedBy")
   createdItemInventoryMovements            ItemSaleInventoryMovement[]        @relation("ItemSaleInventoryMovementCreatedBy")
   itemSaleAuditActions                     ItemSaleAudit[]                    @relation("ItemSaleAuditActionBy")
+  createdItemSaleFunds                     ItemSaleFund[]                     @relation("ItemSaleFundCreatedBy")
+  updatedItemSaleFunds                     ItemSaleFund[]                     @relation("ItemSaleFundUpdatedBy")
+  createdItemSaleFundEntries               ItemSaleFundLedger[]               @relation("ItemSaleFundLedgerCreatedBy")
+  createdItemSaleFundAllocations           ItemSaleFundAllocation[]            @relation("ItemSaleFundAllocationCreatedBy")
+  reversedItemSaleFundAllocations          ItemSaleFundAllocation[]            @relation("ItemSaleFundAllocationReversedBy")
+  subscriptionAuditActions                 MemberEventSubscriptionAudit[]     @relation("MemberEventSubscriptionAuditActionBy")
+  resolvedStatementDuplicates              BankStatementUploadDuplicate[]     @relation("StatementDuplicateResolvedBy")
   id                                       String                             @id @default(uuid()) @map("user_id") @db.Char(36)
   fullName                                 String                             @map("full_name") @db.VarChar(150)
   email                                    String                             @db.VarChar(150)
@@ -217,6 +225,19 @@ model User {
   createdRoleMenus                    RoleMenu[]                         @relation("RoleMenuCreatedBy")
 
   @@map("arya_user")
+}
+
+/// Database-backed login throttle. Keys are SHA-256 digests of normalized
+/// identity + trusted request IP; no email address, IP, or password is stored.
+model LoginThrottle {
+  throttleKey  String    @id @map("throttle_key") @db.Char(64)
+  windowStart  DateTime  @map("window_start") @db.DateTime(3)
+  failureCount Int       @default(0) @map("failure_count") @db.UnsignedInt
+  blockedUntil DateTime? @map("blocked_until") @db.DateTime(3)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([blockedUntil], map: "idx_login_throttle_blocked_until")
+  @@map("arya_login_throttle")
 }
 
 model UserRole {
@@ -385,6 +406,7 @@ model EventCodeChild {
   itemSaleInventoryMovements ItemSaleInventoryMovement[]
 
   @@unique([eventCodeId, childCode], map: "uk_event_code_child_parent_code")
+  @@unique([id, eventCodeId], map: "uk_event_code_child_id_parent")
   @@index([eventCodeId, activeFlag], map: "idx_event_code_child_parent_active")
   @@index([createdById], map: "idx_event_code_child_created_by")
   @@index([updatedById], map: "idx_event_code_child_updated_by")
@@ -444,6 +466,7 @@ model ItemSalePurchase {
   unitPriceSnapshot     Decimal   @map("unit_price_snapshot") @db.Decimal(20, 2)
   totalAmount           Decimal   @map("total_amount") @db.Decimal(20, 2)
   paymentAmountSnapshot Decimal?  @map("payment_amount_snapshot") @db.Decimal(20, 2)
+  walletAppliedAmount   Decimal   @default(0) @map("wallet_applied_amount") @db.Decimal(20, 2)
   status                String    @default("DRAFT") @db.VarChar(30)
   resolutionReason      String?   @map("resolution_reason") @db.VarChar(1000)
   version               Int       @default(1) @db.UnsignedInt
@@ -458,7 +481,7 @@ model ItemSalePurchase {
 
   bankTransaction    BankTransaction             @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_transaction")
   eventCode          EventCode                   @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_event")
-  eventCodeChild     EventCodeChild              @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_child")
+  eventCodeChild     EventCodeChild              @relation(fields: [eventCodeChildId, eventCodeId], references: [id, eventCodeId], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_child_parent")
   memberIdentity     MemberIdentity?             @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_identity")
   buyerMember        Member?                     @relation("ItemSalePurchaseBuyer", fields: [buyerMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_buyer")
   confirmedBy        User?                       @relation("ItemSalePurchaseConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_confirmed_by")
@@ -466,6 +489,9 @@ model ItemSalePurchase {
   createdBy          User                        @relation("ItemSalePurchaseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_created_by")
   updatedBy          User                        @relation("ItemSalePurchaseUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_purchase_updated_by")
   inventoryMovements ItemSaleInventoryMovement[]
+  fund               ItemSaleFund?
+  fundLedgerEntries  ItemSaleFundLedger[]
+  walletAllocations  ItemSaleFundAllocation[]
 
   @@index([status, updatedAt], map: "idx_item_sale_purchase_status_updated")
   @@index([eventCodeChildId, status], map: "idx_item_sale_purchase_child_status")
@@ -522,6 +548,97 @@ model ItemSaleAudit {
   @@map("arya_item_sale_audit")
 }
 
+/// One reconciled customer-fund position per ITEM_SALE bank transaction.
+/// The original bank amount is partitioned into sale allocation and remaining
+/// customer liability without changing the bank balance.
+model ItemSaleFund {
+  id                  String   @id @default(uuid()) @map("item_sale_fund_id") @db.Char(36)
+  bankTransactionId   String   @unique(map: "uk_item_sale_fund_transaction") @map("bank_transaction_id") @db.Char(36)
+  purchaseId          String?  @unique(map: "uk_item_sale_fund_purchase") @map("item_sale_purchase_id") @db.Char(36)
+  ownerMemberId       String?  @map("owner_member_id") @db.Char(36)
+  ownershipStatus     String   @default("SUSPENSE") @map("ownership_status") @db.VarChar(20)
+  originalAmount      Decimal  @map("original_amount") @db.Decimal(20, 2)
+  allocatedSaleAmount Decimal  @default(0) @map("allocated_sale_amount") @db.Decimal(20, 2)
+  otherAllocatedAmount Decimal @default(0) @map("other_allocated_amount") @db.Decimal(20, 2)
+  unallocatedAmount   Decimal  @map("unallocated_amount") @db.Decimal(20, 2)
+  status              String   @default("OPEN") @db.VarChar(20)
+  version             Int      @default(1) @db.UnsignedInt
+  createdAt           DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById         String   @map("created_by") @db.Char(36)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedById         String   @map("updated_by") @db.Char(36)
+
+  bankTransaction BankTransaction      @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_transaction")
+  purchase        ItemSalePurchase?    @relation(fields: [purchaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_purchase")
+  ownerMember     Member?              @relation("ItemSaleFundOwner", fields: [ownerMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_owner")
+  createdBy       User                 @relation("ItemSaleFundCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_created_by")
+  updatedBy       User                 @relation("ItemSaleFundUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_updated_by")
+  entries         ItemSaleFundLedger[]
+  allocations     ItemSaleFundAllocation[] @relation("ItemSaleFundAllocationSource")
+
+  @@index([ownerMemberId, status], map: "idx_item_sale_fund_owner_status")
+  @@index([ownershipStatus, status], map: "idx_item_sale_fund_ownership_status")
+  @@map("arya_item_sale_fund")
+}
+
+/// Authorized movement of unallocated ITEM_SALE customer liability from one
+/// bank receipt to a pending purchase of the same verified buyer. The source
+/// fund keeps the allocation in otherAllocatedAmount; the destination purchase
+/// records walletAppliedAmount. Reversals restore both sides without touching
+/// the bank transaction.
+model ItemSaleFundAllocation {
+  id                String    @id @default(uuid()) @map("item_sale_fund_allocation_id") @db.Char(36)
+  sourceFundId      String    @map("source_item_sale_fund_id") @db.Char(36)
+  purchaseId        String    @map("item_sale_purchase_id") @db.Char(36)
+  amount            Decimal   @db.Decimal(20, 2)
+  status            String    @default("ACTIVE") @db.VarChar(20)
+  idempotencyKey    String    @unique(map: "uk_item_sale_fund_allocation_idempotency") @map("idempotency_key") @db.VarChar(191)
+  reason            String    @db.VarChar(1000)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  createdById       String    @map("created_by") @db.Char(36)
+  reversedAt        DateTime? @map("reversed_at") @db.DateTime(3)
+  reversedById      String?   @map("reversed_by") @db.Char(36)
+  reversalReason    String?   @map("reversal_reason") @db.VarChar(1000)
+
+  sourceFund  ItemSaleFund       @relation("ItemSaleFundAllocationSource", fields: [sourceFundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_allocation_source")
+  purchase    ItemSalePurchase  @relation(fields: [purchaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_allocation_purchase")
+  createdBy   User              @relation("ItemSaleFundAllocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_allocation_created_by")
+  reversedBy  User?             @relation("ItemSaleFundAllocationReversedBy", fields: [reversedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_allocation_reversed_by")
+
+  @@index([sourceFundId, status], map: "idx_item_sale_fund_allocation_source_status")
+  @@index([purchaseId, status], map: "idx_item_sale_fund_allocation_purchase_status")
+  @@index([createdById], map: "idx_item_sale_fund_allocation_created_by")
+  @@index([reversedById], map: "idx_item_sale_fund_allocation_reversed_by")
+  @@map("arya_item_sale_fund_allocation")
+}
+
+/// Append-only money movements inside an ITEM_SALE fund position. Positive
+/// deltas increase customer liability; negative deltas allocate it to a sale.
+model ItemSaleFundLedger {
+  id                String   @id @default(uuid()) @map("item_sale_fund_ledger_id") @db.Char(36)
+  fundId            String   @map("item_sale_fund_id") @db.Char(36)
+  purchaseId        String?  @map("item_sale_purchase_id") @db.Char(36)
+  entryType         String   @map("entry_type") @db.VarChar(30)
+  amountDelta       Decimal  @map("amount_delta") @db.Decimal(20, 2)
+  balanceAfter      Decimal  @map("balance_after") @db.Decimal(20, 2)
+  idempotencyKey    String   @unique(map: "uk_item_sale_fund_ledger_idempotency") @map("idempotency_key") @db.VarChar(191)
+  reversalOfEntryId String?  @unique(map: "uk_item_sale_fund_ledger_reversal") @map("reversal_of_entry_id") @db.Char(36)
+  reason            String   @db.VarChar(1000)
+  createdAt         DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  createdById       String   @map("created_by") @db.Char(36)
+
+  fund          ItemSaleFund        @relation(fields: [fundId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_ledger_fund")
+  purchase      ItemSalePurchase?   @relation(fields: [purchaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_ledger_purchase")
+  reversalOf    ItemSaleFundLedger? @relation("ItemSaleFundLedgerReversal", fields: [reversalOfEntryId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_ledger_reversal")
+  reversalEntry ItemSaleFundLedger? @relation("ItemSaleFundLedgerReversal")
+  createdBy     User                @relation("ItemSaleFundLedgerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_item_sale_fund_ledger_created_by")
+
+  @@index([fundId, createdAt], map: "idx_item_sale_fund_ledger_fund_created")
+  @@index([purchaseId], map: "idx_item_sale_fund_ledger_purchase")
+  @@index([createdById], map: "idx_item_sale_fund_ledger_created_by")
+  @@map("arya_item_sale_fund_ledger")
+}
+
 model MemberEventSubscription {
   id               String    @id @default(uuid()) @map("member_event_subscription_id") @db.Char(36)
   memberId         String    @map("member_id") @db.Char(36)
@@ -538,15 +655,16 @@ model MemberEventSubscription {
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
   updatedById      String?   @map("updated_by") @db.Char(36)
 
-  member            Member                     @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_member")
-  eventCode         EventCode                  @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code")
-  eventCodeChild    EventCodeChild?            @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code_child")
-  createdBy         User?                      @relation("MemberEventSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_created_by")
-  updatedBy         User?                      @relation("MemberEventSubscriptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_updated_by")
+  member            Member                         @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_member")
+  eventCode         EventCode                      @relation(fields: [eventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code")
+  eventCodeChild    EventCodeChild?                @relation(fields: [eventCodeChildId, eventCodeId], references: [id, eventCodeId], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_event_code_child_parent")
+  createdBy         User?                          @relation("MemberEventSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_created_by")
+  updatedBy         User?                          @relation("MemberEventSubscriptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_sub_updated_by")
   coverages         MemberEventCoverage[]
   balanceLedger     MemberEventBalanceLedger[]
-  carryTransfersOut MemberEventCarryTransfer[] @relation("MemberEventCarryTransferSourceSubscription")
-  carryTransfersIn  MemberEventCarryTransfer[] @relation("MemberEventCarryTransferDestinationSubscription")
+  auditHistory      MemberEventSubscriptionAudit[]
+  carryTransfersOut MemberEventCarryTransfer[]     @relation("MemberEventCarryTransferSourceSubscription")
+  carryTransfersIn  MemberEventCarryTransfer[]     @relation("MemberEventCarryTransferDestinationSubscription")
 
   @@unique([memberId, eventCodeChildId], map: "uk_member_event_sub_member_child")
   @@index([memberId, eventCodeId, activeFlag], map: "idx_member_event_sub_member_event")
@@ -557,6 +675,28 @@ model MemberEventSubscription {
   @@index([createdById], map: "idx_member_event_sub_created_by")
   @@index([updatedById], map: "idx_member_event_sub_updated_by")
   @@map("arya_member_event_subscription")
+}
+
+/// Immutable audit trail for reservation, cancellation and Opening Coverage
+/// corrections. Financial source rows remain unchanged.
+model MemberEventSubscriptionAudit {
+  id             String   @id @default(uuid()) @map("member_event_subscription_audit_id") @db.Char(36)
+  subscriptionId String   @map("member_event_subscription_id") @db.Char(36)
+  coverageId     String?  @map("member_event_coverage_id") @db.Char(36)
+  action         String   @db.VarChar(40)
+  beforeData     Json?    @map("before_data")
+  afterData      Json?    @map("after_data")
+  reason         String   @db.VarChar(1000)
+  actionAt       DateTime @default(now()) @map("action_at") @db.DateTime(3)
+  actionById     String   @map("action_by") @db.Char(36)
+
+  subscription MemberEventSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_subscription_audit_subscription")
+  actionBy     User                    @relation("MemberEventSubscriptionAuditActionBy", fields: [actionById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_member_event_subscription_audit_action_by")
+
+  @@index([subscriptionId, actionAt], map: "idx_member_event_subscription_audit_subscription")
+  @@index([coverageId], map: "idx_member_event_subscription_audit_coverage")
+  @@index([actionById], map: "idx_member_event_subscription_audit_action_by")
+  @@map("arya_member_event_subscription_audit")
 }
 
 model MemberEventCoverage {
@@ -857,30 +997,41 @@ model BankStatementUploadAttempt {
 }
 
 model BankStatementUploadDuplicate {
-  id                       String    @id @default(uuid()) @map("duplicate_id") @db.Char(36)
-  uploadAttemptId          String    @map("upload_attempt_id") @db.Char(36)
-  matchedStatementUploadId String    @map("matched_statement_upload_id") @db.Char(36)
-  matchedBankTransactionId String    @map("matched_bank_transaction_id") @db.Char(36)
-  sourceTransactionNo      Int       @map("source_transaction_no")
-  sourceWorksheetRow       Int?      @map("source_worksheet_row")
-  sourceSheetName          String?   @map("source_sheet_name") @db.VarChar(150)
-  transactionDate          DateTime? @map("transaction_date") @db.Date
-  transactionType          String?   @map("transaction_type") @db.VarChar(20)
-  referenceNo              String?   @map("reference_no") @db.VarChar(150)
-  senderName               String?   @map("sender_name") @db.VarChar(255)
-  sourceDescription        String?   @map("source_description") @db.Text
-  originalAmount           Decimal   @map("original_amount") @db.Decimal(20, 2)
-  signatureHash            String    @map("signature_hash") @db.Char(64)
-  createdAt                DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  id                        String    @id @default(uuid()) @map("duplicate_id") @db.Char(36)
+  uploadAttemptId           String    @map("upload_attempt_id") @db.Char(36)
+  matchedStatementUploadId  String    @map("matched_statement_upload_id") @db.Char(36)
+  matchedBankTransactionId  String    @map("matched_bank_transaction_id") @db.Char(36)
+  sourceTransactionNo       Int       @map("source_transaction_no")
+  sourceWorksheetRow        Int?      @map("source_worksheet_row")
+  sourceSheetName           String?   @map("source_sheet_name") @db.VarChar(150)
+  transactionDate           DateTime? @map("transaction_date") @db.Date
+  transactionType           String?   @map("transaction_type") @db.VarChar(20)
+  referenceNo               String?   @map("reference_no") @db.VarChar(150)
+  senderName                String?   @map("sender_name") @db.VarChar(255)
+  sourceDescription         String?   @map("source_description") @db.Text
+  originalAmount            Decimal   @map("original_amount") @db.Decimal(20, 2)
+  signatureHash             String    @map("signature_hash") @db.Char(64)
+  matchType                 String    @default("EXACT") @map("match_type") @db.VarChar(20)
+  importedBankTransactionId String?   @map("imported_bank_transaction_id") @db.Char(36)
+  resolutionStatus          String    @default("CONFIRMED") @map("resolution_status") @db.VarChar(20)
+  resolvedAt                DateTime? @map("resolved_at") @db.DateTime(3)
+  resolvedById              String?   @map("resolved_by") @db.Char(36)
+  resolutionReason          String?   @map("resolution_reason") @db.VarChar(1000)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.DateTime(3)
 
-  uploadAttempt          BankStatementUploadAttempt @relation(fields: [uploadAttemptId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_attempt")
-  matchedStatementUpload BankStatementUpload        @relation(fields: [matchedStatementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_matched_statement")
-  matchedBankTransaction BankTransaction            @relation(fields: [matchedBankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_matched_transaction")
+  uploadAttempt           BankStatementUploadAttempt @relation(fields: [uploadAttemptId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_attempt")
+  matchedStatementUpload  BankStatementUpload        @relation(fields: [matchedStatementUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_matched_statement")
+  matchedBankTransaction  BankTransaction            @relation(fields: [matchedBankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_matched_transaction")
+  importedBankTransaction BankTransaction?           @relation("StatementDuplicateImportedTransaction", fields: [importedBankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_imported_transaction")
+  resolvedBy              User?                      @relation("StatementDuplicateResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_statement_duplicate_resolved_by")
 
   @@index([uploadAttemptId], map: "idx_bank_statement_duplicate_attempt")
   @@index([matchedStatementUploadId], map: "idx_bank_statement_duplicate_matched_statement")
   @@index([matchedBankTransactionId], map: "idx_bank_statement_duplicate_matched_transaction")
   @@index([signatureHash], map: "idx_bank_statement_duplicate_signature")
+  @@index([matchType, resolutionStatus], map: "idx_bank_statement_duplicate_match_resolution")
+  @@index([importedBankTransactionId], map: "idx_bank_statement_duplicate_imported")
+  @@index([resolvedById], map: "idx_bank_statement_duplicate_resolved_by")
   @@map("arya_bank_statement_upload_duplicate")
 }
 
@@ -911,24 +1062,27 @@ model BankTransaction {
   reconciliationExcludedAt      DateTime?       @map("reconciliation_excluded_at") @db.DateTime(0)
   reconciliationExcludedById    String?         @map("reconciliation_excluded_by") @db.Char(36)
   reconciliationExclusionReason String?         @map("reconciliation_exclusion_reason") @db.VarChar(1000)
+  evidenceFingerprint           String?         @map("evidence_fingerprint") @db.Char(64)
   createdAt                     DateTime        @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt                     DateTime        @updatedAt @map("updated_at") @db.DateTime(0)
 
-  statementUpload                  BankStatementUpload               @relation(fields: [statementUploadId], references: [id])
-  suggestedEventCode               EventCode?                        @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
-  eventCode                        EventCode?                        @relation("FinalEventCode", fields: [eventCodeId], references: [id])
-  eventCodeChild                   EventCodeChild?                   @relation(fields: [eventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_code_child")
-  eventCampaign                    EventCampaign?                    @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_campaign")
-  manualAddedBy                    User?                             @relation("BankTransactionManualAddedBy", fields: [manualAddedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_manual_added_by")
-  reconciliationExcludedBy         User?                             @relation("BankTransactionExcludedBy", fields: [reconciliationExcludedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_excluded_by")
-  history                          BankTransactionHistory[]
-  correctionItems                  ReconciliationCorrectionItem[]
-  memberEventCoverages             MemberEventCoverage[]
-  memberEventBalanceLedger         MemberEventBalanceLedger[]
-  memberEventCampaignAllocations   MemberEventCampaignAllocation[]   @relation("MemberEventCampaignAllocationTransaction")
-  memberEventCampaignWalletEntries MemberEventCampaignWalletLedger[] @relation("MemberEventCampaignWalletTransaction")
-  matchedStatementUploadDuplicates BankStatementUploadDuplicate[]
-  itemSalePurchase                 ItemSalePurchase?
+  statementUpload                   BankStatementUpload               @relation(fields: [statementUploadId], references: [id])
+  suggestedEventCode                EventCode?                        @relation("SuggestedEventCode", fields: [suggestedEventCodeId], references: [id])
+  eventCode                         EventCode?                        @relation("FinalEventCode", fields: [eventCodeId], references: [id])
+  eventCodeChild                    EventCodeChild?                   @relation(fields: [eventCodeChildId, eventCodeId], references: [id, eventCodeId], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_code_child_parent")
+  eventCampaign                     EventCampaign?                    @relation(fields: [eventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_event_campaign")
+  manualAddedBy                     User?                             @relation("BankTransactionManualAddedBy", fields: [manualAddedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_manual_added_by")
+  reconciliationExcludedBy          User?                             @relation("BankTransactionExcludedBy", fields: [reconciliationExcludedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bank_transaction_excluded_by")
+  history                           BankTransactionHistory[]
+  correctionItems                   ReconciliationCorrectionItem[]
+  memberEventCoverages              MemberEventCoverage[]
+  memberEventBalanceLedger          MemberEventBalanceLedger[]
+  memberEventCampaignAllocations    MemberEventCampaignAllocation[]   @relation("MemberEventCampaignAllocationTransaction")
+  memberEventCampaignWalletEntries  MemberEventCampaignWalletLedger[] @relation("MemberEventCampaignWalletTransaction")
+  matchedStatementUploadDuplicates  BankStatementUploadDuplicate[]
+  importedStatementUploadDuplicates BankStatementUploadDuplicate[]    @relation("StatementDuplicateImportedTransaction")
+  itemSalePurchase                  ItemSalePurchase?
+  itemSaleFund                      ItemSaleFund?
 
   @@index([memberIdentityId], map: "idx_bank_transaction_member_identity")
   @@index([eventCampaignId], map: "idx_bank_transaction_event_campaign")
@@ -936,6 +1090,7 @@ model BankTransaction {
   @@index([manualAddedById], map: "idx_bank_transaction_manual_added_by")
   @@index([reconciliationExcludedAt], map: "idx_bank_transaction_reconciliation_excluded")
   @@index([reconciliationExcludedById], map: "idx_bank_transaction_excluded_by")
+  @@index([evidenceFingerprint], map: "idx_bank_transaction_evidence_fingerprint")
   @@map("arya_bank_transaction")
 }
 
@@ -1044,8 +1199,8 @@ model ReconciliationCorrectionItem {
   bankTransaction        BankTransaction?                 @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_transaction")
   beforeEventCode        EventCode?                       @relation("CorrectionBeforeEventCode", fields: [beforeEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event")
   proposedEventCode      EventCode?                       @relation("CorrectionProposedEventCode", fields: [proposedEventCodeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event")
-  beforeEventCodeChild   EventCodeChild?                  @relation("CorrectionBeforeEventCodeChild", fields: [beforeEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event_child")
-  proposedEventCodeChild EventCodeChild?                  @relation("CorrectionProposedEventCodeChild", fields: [proposedEventCodeChildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event_child")
+  beforeEventCodeChild   EventCodeChild?                  @relation("CorrectionBeforeEventCodeChild", fields: [beforeEventCodeChildId, beforeEventCodeId], references: [id, eventCodeId], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_event_child_parent")
+  proposedEventCodeChild EventCodeChild?                  @relation("CorrectionProposedEventCodeChild", fields: [proposedEventCodeChildId, proposedEventCodeId], references: [id, eventCodeId], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_event_child_parent")
   beforeEventCampaign    EventCampaign?                   @relation("CorrectionBeforeEventCampaign", fields: [beforeEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_before_campaign")
   proposedEventCampaign  EventCampaign?                   @relation("CorrectionProposedEventCampaign", fields: [proposedEventCampaignId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_correction_item_proposed_campaign")
 

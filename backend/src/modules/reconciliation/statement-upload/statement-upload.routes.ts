@@ -4,6 +4,7 @@ import { createMemoryUpload } from "../../../middleware/upload.js";
 import {
   executeStatementController,
   getStatementUploadWorkspaceController,
+  resolveDuplicateController,
   updateFinalEventController,
   uploadStatementController,
   withdrawStatementController
@@ -20,3 +21,4 @@ statementUploadRouter.patch(
 );
 statementUploadRouter.post("/:statementId/execute", asyncHandler(executeStatementController));
 statementUploadRouter.post("/:statementId/withdraw", asyncHandler(withdrawStatementController));
+statementUploadRouter.post("/:statementId/duplicates/:duplicateId/resolve", asyncHandler(resolveDuplicateController));

@@ -84,11 +84,13 @@ export const subscriptionParamsSchema = z.object({ memberId: z.string().uuid(), 
 export const allocationSchema = z.object({ transactionId: z.string().uuid() });
 export const openingCoverageParamsSchema = subscriptionParamsSchema.extend({ coverageId: z.string().uuid() });
 export const voidOpeningCoverageSchema = z.object({ reason: correctionReason });
+export const cancelSubscriptionSchema = z.object({ reason: correctionReason }).strict();
 export const openingCoverageSchema = z.object({
   coverageFrom: z.string().refine(isValidPeriodDate, "Coverage start must use YYYY-MM-DD format"),
   coverageTo: z.string().refine(isValidPeriodDate, "Coverage end must use YYYY-MM-DD format"),
   remark: z.string().trim().min(3, "Opening coverage remark is required").max(1000)
 }).refine(value => value.coverageFrom <= value.coverageTo, { path: ["coverageTo"], message: "Coverage end must not precede start" });
+export const reviseOpeningCoverageSchema = openingCoverageSchema.and(z.object({ reason: correctionReason }).strict());
 
 export const carryTransferParamsSchema = z.object({ memberId: z.string().uuid(), sourceSubscriptionId: z.string().uuid() });
 export const campaignWalletTransferParamsSchema = z.object({ memberId: z.string().uuid(), sourceCampaignId: z.string().uuid() });
@@ -123,3 +125,4 @@ export type SubscriptionCreateInput = z.infer<typeof subscriptionCreateSchema>;
 export type CampaignParticipationCreateInput = z.infer<typeof campaignParticipationCreateSchema>;
 export type SubscriptionUpdateInput = z.infer<typeof subscriptionUpdateSchema>;
 export type OpeningCoverageInput = z.infer<typeof openingCoverageSchema>;
+export type ReviseOpeningCoverageInput = z.infer<typeof reviseOpeningCoverageSchema>;

@@ -97,6 +97,37 @@ export type ItemSaleConfigDetail = {
   itemSaleInventoryMovements: Array<{ id: string; movementType: string; quantityDelta: number; stockBefore: number; stockAfter: number; sourceReference: string; reversalOfMovementId: string | null; reason: string; createdAt: string; createdBy: EventCodeUser }>;
 };
 
+export type ItemSaleWalletFund = {
+  id: string;
+  status: string;
+  ownershipStatus: string;
+  originalAmount: string;
+  allocatedSaleAmount: string;
+  otherAllocatedAmount: string;
+  unallocatedAmount: string;
+  ownerMember: { id: string; memberCode: string; memberName: string } | null;
+  purchase: { id: string; quantity: number; totalAmount: string; paymentAmountSnapshot: string | null; walletAppliedAmount: string; status: string; eventCodeChild: { id: string; childCode: string; childName: string } | null } | null;
+  bankTransaction: { id: string; transactionDate: string | null; referenceNo: string | null; senderName: string | null; description: string | null; originalAmount: string; statementUpload: { id: string; fileName: string } };
+  entries: Array<{ id: string; entryType: string; amountDelta: string; balanceAfter: string; reason: string; createdAt: string; createdBy: EventCodeUser }>;
+  allocations: Array<{ id: string; amount: string; status: string; reason: string; createdAt: string; createdBy: EventCodeUser; reversedAt: string | null; reversedBy: EventCodeUser | null; reversalReason: string | null; purchase: { id: string; status: string; quantity: number; totalAmount: string } | null }>;
+};
+
+export type ItemSaleWalletSummary = {
+  summary: {
+    totalOriginal: string; totalSaleAllocated: string; totalUnallocated: string; totalOtherAllocated: string;
+    suspenseUnallocated: string; memberUnallocated: string; pendingCount: number; pendingStockCount: number; pendingBuyerCount: number;
+  };
+  funds: ItemSaleWalletFund[];
+  members: Array<{ memberId: string; memberCode: string; memberName: string; walletBalance: string; suspense: boolean }>;
+  pendingPurchases: Array<{
+    purchaseId: string; buyerMember: { id: string; memberCode: string; memberName: string } | null;
+    status: string; quantity: number; unitPrice: string; totalAmount: string; bankAmount: string; walletAppliedAmount: string;
+    shortfall: string; reason: string | null;
+    sourceBankTransaction: { id: string; referenceNo: string | null; date: string | null };
+    item: { id: string; childCode: string; childName: string } | null; stockOnHand: number | null; buyerVerified: boolean;
+  }>;
+};
+
 export type EventCodeExecutePayload = {
   creates: EventCodeInput[];
   updates: Array<{

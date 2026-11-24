@@ -17,7 +17,7 @@ import { TransferCarryModal } from "./TransferCarryModal";
 import { TransferHistoryPanel } from "./TransferHistoryPanel";
 import styles from "../styles/program-allocation.module.css";
 
-type FormMode = "create" | "edit" | "opening" | "void-opening" | null;
+type FormMode = "create" | "edit" | "opening" | "revise-opening" | "void-opening" | "cancel" | null;
 const emptySubscription: SubscriptionInput = { eventCodeId: "", eventCodeChildId: "", referenceNo: null, displayName: null, remark: null };
 
 function campaignPeriodLabel(startDate: string | null, endDate: string | null) {
@@ -261,6 +261,8 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
           {data.subscriptions.map(sub => <TimeBasedProgramCard key={sub.subscriptionId} subscription={sub} canMutate={canMutate} busy={busy}
             onEdit={editSubscription}
             onOpeningCoverage={subSource => { setSubscriptionId(subSource.subscriptionId); setOpening({ coverageFrom: "", coverageTo: "", remark: "" }); setFormError(""); setMode("opening"); }}
+            onReviseOpening={(subSource, coverage) => { setSubscriptionId(subSource.subscriptionId); setCoverageId(coverage.coverageId); setOpening({ coverageFrom: coverage.coverageFrom, coverageTo: coverage.coverageTo, remark: coverage.remark ?? "Revise opening coverage" }); setFormError(""); setMode("revise-opening"); }}
+            onCancel={subSource => { setSubscriptionId(subSource.subscriptionId); setVoidReason(""); setFormError(""); setMode("cancel"); }}
             onVoidOpening={(subSource, targetCoverageId) => { setSubscriptionId(subSource.subscriptionId); setCoverageId(targetCoverageId); setVoidReason(""); setFormError(""); setMode("void-opening"); }} />)}
         </div> : <div className={styles.compactEmpty}>
           <span aria-hidden="true"><CalendarPlus size={18} /></span>
@@ -377,9 +379,11 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
       </form>
     </Modal>
 
-    <Modal open={mode === "opening"} title="Tambah opening coverage" description="Untuk coverage lama yang tidak memiliki BankTransaction."
+    <Modal open={mode === "opening" || mode === "revise-opening"} title={mode === "revise-opening" ? "Revise opening coverage" : "Tambah opening coverage"} description="Untuk coverage lama yang tidak memiliki BankTransaction."
       onClose={() => !busy && setMode(null)}>
-      <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); void performSponsorship(() => api.addOpeningCoverage(memberId, subscriptionId, opening), "Opening coverage ditambahkan.", setFormError); }}>
+      <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); void performSponsorship(() => mode === "revise-opening"
+        ? api.reviseOpeningCoverage(memberId, subscriptionId, coverageId, opening, opening.remark)
+        : api.addOpeningCoverage(memberId, subscriptionId, opening), mode === "revise-opening" ? "Opening coverage direvisi." : "Opening coverage ditambahkan.", setFormError); }}>
         {formError ? <div className="ui-alert ui-alert-error" role="alert">{formError}</div> : null}
         <div className={styles.formGrid}>
           <label className={styles.field}>Coverage from<input required type="date" value={opening.coverageFrom} onChange={event => setOpening(value => ({ ...value, coverageFrom: event.target.value }))} /></label>
@@ -387,12 +391,12 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         </div>
         <label className={styles.field}>Reason<textarea required minLength={3} maxLength={1000} rows={3} value={opening.remark} onChange={event => setOpening(value => ({ ...value, remark: event.target.value }))} /></label>
         <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Cancel</Button>
-          <Button type="submit" disabled={busy}>Tambah coverage</Button></div>
+          <Button type="submit" disabled={busy}>{mode === "revise-opening" ? "Simpan revisi" : "Tambah coverage"}</Button></div>
       </form>
     </Modal>
 
     <Modal open={mode === "void-opening"} title="Void opening coverage?"
-      description="Opening tetap tersimpan di audit. Coverage pembayaran dan valid until akan direbuild; lalu tambahkan opening koreksi." onClose={() => !busy && setMode(null)}>
+      description="Opening tetap tersimpan di audit. Riwayat pembayaran tidak diubah." onClose={() => !busy && setMode(null)}>
       <form className={styles.modalBody} onSubmit={event => {
         event.preventDefault();
         if (voidReason.trim().length >= 3) void performSponsorship(() => api.voidOpeningCoverage(memberId, subscriptionId, coverageId, voidReason.trim()), "Opening coverage di-void.", setFormError);
@@ -401,6 +405,16 @@ export function ProgramAllocation({ memberId, memberActive, canMutate }: { membe
         <label className={styles.field}>Reason<textarea required minLength={3} maxLength={1000} rows={3} disabled={busy} value={voidReason} onChange={event => setVoidReason(event.target.value)} /></label>
         <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Cancel</Button>
           <Button type="submit" variant="danger" disabled={busy || voidReason.trim().length < 3}>{busy ? "Memproses…" : "Void opening"}</Button></div>
+      </form>
+    </Modal>
+
+    <Modal open={mode === "cancel"} title="Cancel pending subscription?" description="Hanya enrollment tanpa coverage, saldo, pembayaran, atau transfer yang dapat dibatalkan."
+      onClose={() => !busy && setMode(null)}>
+      <form className={styles.modalBody} onSubmit={event => { event.preventDefault(); if (voidReason.trim().length >= 3) void performSponsorship(() => api.cancelSubscription(memberId, subscriptionId, voidReason.trim()), "Pending subscription dibatalkan.", setFormError); }}>
+        {formError ? <div className="ui-alert ui-alert-error" role="alert">{formError}</div> : null}
+        <label className={styles.field}>Reason<textarea required minLength={3} maxLength={1000} rows={3} disabled={busy} value={voidReason} onChange={event => setVoidReason(event.target.value)} /></label>
+        <div className={styles.footer}><Button type="button" variant="secondary" disabled={busy} onClick={() => setMode(null)}>Back</Button>
+          <Button type="submit" variant="danger" disabled={busy || voidReason.trim().length < 3}>{busy ? "Memproses…" : "Cancel subscription"}</Button></div>
       </form>
     </Modal>
   </div>;
