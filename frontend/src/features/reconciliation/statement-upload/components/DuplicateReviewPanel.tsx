@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Info } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { formatMoney } from "@/lib/format";
@@ -19,15 +20,22 @@ export function DuplicateReviewPanel({ duplicates, canResolve, busy, resolvingId
   onResolve: (duplicateId: string, decision: "DISTINCT" | "DUPLICATE", reason: string) => Promise<void> | void;
 }) {
   const [decision, setDecision] = useState<{ duplicate: StatementDuplicate; decision: "DISTINCT" | "DUPLICATE"; reason: string } | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const pending = duplicates.filter(row => row.matchType === "POSSIBLE" && row.resolutionStatus === "PENDING_REVIEW");
   const history = duplicates.filter(row => !(row.matchType === "POSSIBLE" && row.resolutionStatus === "PENDING_REVIEW"));
+  const compact = pending.length === 0;
 
-  return <section className={styles.resultPanel}>
-    <div className={styles.resultHead}>
-      <div><h2>Duplicate review</h2><p>Reference numbers are not treated as unique bank IDs. Compare sender, description, source row, and amount before deciding.</p></div>
-      <span>{pending.length} pending</span>
+  return <section className={`${styles.resultPanel} ${compact ? styles.resultPanelCompact : ""}`}>
+    <div className={`${styles.resultHead} ${compact ? styles.resultHeadCompact : ""}`}>
+      <div className={styles.resultTitle}>
+        <h2>Duplicate review</h2>
+        {compact
+          ? <span className={styles.resultInfo} title="Reference numbers are not unique bank IDs. Compare sender, description, source row, and amount before deciding." aria-label="Duplicate review information"><Info size={14} /></span>
+          : <p>Reference numbers are not treated as unique bank IDs. Compare sender, description, source row, and amount before deciding.</p>}
+      </div>
+      <span className={styles.resultBadge}>{pending.length} pending</span>
     </div>
-    {pending.length === 0 ? <p className={styles.resultEmpty}>No POSSIBLE duplicate requires a decision.</p> : <div className="ui-table-wrap"><table className="ui-table">
+    {!compact ? <div className="ui-table-wrap"><table className="ui-table">
       <thead><tr><th>Incoming source</th><th>Existing / matched transaction</th><th>Amount</th><th>Location</th><th>Action</th></tr></thead>
       <tbody>{pending.map(row => <tr key={row.id}>
         <td>
@@ -48,8 +56,8 @@ export function DuplicateReviewPanel({ duplicates, canResolve, busy, resolvingId
           <Button type="button" size="sm" variant="danger" disabled={!canResolve || busy || resolvingId === row.id} onClick={() => setDecision({ duplicate: row, decision: "DUPLICATE", reason: "" })}>Confirm duplicate</Button>
         </div></td>
       </tr>)}</tbody>
-    </table></div>}
-    {history.length > 0 ? <div className="ui-table-wrap"><table className="ui-table">
+    </table></div> : null}
+    {history.length > 0 && !compact ? <div className="ui-table-wrap"><table className="ui-table">
       <thead><tr><th>Result</th><th>Source</th><th>Matched</th><th>Amount</th><th>Reason / actor</th></tr></thead>
       <tbody>{history.map(row => <tr key={row.id}>
         <td>{row.matchType === "EXACT" ? "EXACT skipped" : row.resolutionStatus}</td>
@@ -59,6 +67,21 @@ export function DuplicateReviewPanel({ duplicates, canResolve, busy, resolvingId
         <td>{row.resolutionReason ?? "—"}{row.resolvedBy ? <small>{row.resolvedBy.fullName} · {row.resolvedAt ? new Date(row.resolvedAt).toLocaleString("en-GB") : "—"}</small> : null}</td>
       </tr>)}</tbody>
     </table></div> : null}
+    {history.length > 0 && compact ? <>
+      <button type="button" className={styles.resultHistoryToggle} onClick={() => setShowHistory(value => !value)}>
+        {showHistory ? "Hide resolved history" : `View resolved history (${history.length})`}
+      </button>
+      {showHistory ? <div className="ui-table-wrap"><table className="ui-table">
+        <thead><tr><th>Result</th><th>Source</th><th>Matched</th><th>Amount</th><th>Reason / actor</th></tr></thead>
+        <tbody>{history.map(row => <tr key={row.id}>
+          <td>{row.matchType === "EXACT" ? "EXACT skipped" : row.resolutionStatus}</td>
+          <td>{row.source.referenceNo ?? "—"}<small>row {row.source.worksheetRow ?? row.source.transactionNo}</small></td>
+          <td>{row.matchedTransaction.referenceNo ?? "—"}<small>{row.matchedTransaction.fileName}</small></td>
+          <td>{formatMoney(row.source.originalAmount)}</td>
+          <td>{row.resolutionReason ?? "—"}{row.resolvedBy ? <small>{row.resolvedBy.fullName} · {row.resolvedAt ? new Date(row.resolvedAt).toLocaleString("en-GB") : "—"}</small> : null}</td>
+        </tr>)}</tbody>
+      </table></div> : null}
+    </> : null}
 
     <Modal open={decision !== null} title={decision?.decision === "DUPLICATE" ? "Confirm duplicate" : "Keep as distinct transaction"}
       description={decision?.decision === "DUPLICATE"

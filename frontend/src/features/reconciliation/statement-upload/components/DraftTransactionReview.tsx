@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, CircleMinus, RotateCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
@@ -48,7 +48,7 @@ type Props = {
   onReload: () => void;
   onFinalEventChange: (transactionId: string, eventCodeId: string | null, eventCodeChildId?: string | null, eventCampaignId?: string | null) => void;
   onRemarkChange: (transactionId: string, remark: string | null) => void;
-  onItemSaleQuantityChange: (transactionId: string, quantity: number | null) => void;
+  onItemSaleQuantityChange: (transactionId: string, quantity: number | null) => Promise<boolean> | void;
 };
 
 function childLabel(child: EventCodeChildOption | null) {
@@ -88,6 +88,138 @@ function RemarkCell({ row, disabled, onCommit }: { row: DraftTransaction; disabl
       onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
     />
   );
+}
+
+function ItemSaleQuantityCell({
+  row,
+  child,
+  disabled,
+  onSave
+}: {
+  row: DraftTransaction;
+  child: EventCodeChildOption;
+  disabled: boolean;
+  onSave: (quantity: number) => Promise<boolean> | void;
+}) {
+  const serverQuantity = row.itemSaleQuantity ?? row.itemSale?.quantity ?? null;
+  const [value, setValue] = useState(serverQuantity == null ? "" : String(serverQuantity));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const focused = useRef(false);
+  const timer = useRef<number | null>(null);
+  const inFlight = useRef(false);
+  const latestSaved = useRef<number | null>(serverQuantity);
+  const queued = useRef<number | null>(null);
+  const attempted = useRef<number | null>(null);
+
+  function clearTimer() {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }
+
+  useEffect(() => {
+    if (!focused.current && !error && attempted.current === null) {
+      setValue(serverQuantity == null ? "" : String(serverQuantity));
+      latestSaved.current = serverQuantity;
+    }
+  }, [serverQuantity, error]);
+
+  useEffect(() => () => clearTimer(), []);
+
+  function parseQuantity(raw: string) {
+    if (!/^\d+$/.test(raw.trim())) return null;
+    const parsed = Number(raw);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  async function persist(quantity: number): Promise<boolean> {
+    if (quantity === latestSaved.current) return true;
+    if (inFlight.current) {
+      queued.current = quantity;
+      return false;
+    }
+    inFlight.current = true;
+    setSaving(true);
+    setError("");
+    let saved = false;
+    try {
+      const result = await onSave(quantity);
+      saved = result !== false;
+      if (saved) {
+        latestSaved.current = quantity;
+        attempted.current = null;
+      } else setError("Quantity could not be saved. Retry.");
+    } catch {
+      setError("Quantity could not be saved. Retry.");
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+      const next = queued.current;
+      queued.current = null;
+      if (next !== null && next !== latestSaved.current) void persist(next);
+    }
+    return saved;
+  }
+
+  function schedule(raw: string) {
+    setValue(raw);
+    setError("");
+    clearTimer();
+    const parsed = parseQuantity(raw);
+    if (parsed === null) return;
+    attempted.current = parsed;
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      void persist(parsed);
+    }, 500);
+  }
+
+  function commit() {
+    clearTimer();
+    const parsed = parseQuantity(value);
+    if (parsed === null) {
+      setError(value.trim() ? "Enter a positive whole number." : "Quantity is required.");
+      return;
+    }
+    void persist(parsed);
+  }
+
+  function retry() {
+    const parsed = parseQuantity(value);
+    if (parsed !== null) void persist(parsed);
+  }
+
+  const quantity = parseQuantity(value);
+  const total = quantity ? String(Number(child.itemSaleUnitPrice) * quantity) : null;
+
+  return <div className={styles.itemSaleCell}>
+    <div className={styles.itemSalePrimary}>
+      <input
+        className={`ui-table-input ${styles.itemSaleQuantityInput}`}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        step={1}
+        value={value}
+        disabled={disabled}
+        aria-label={`Item quantity row ${row.rowNo}`}
+        onChange={event => schedule(event.target.value)}
+        onFocus={() => { focused.current = true; }}
+        onBlur={() => { focused.current = false; commit(); }}
+        onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}
+      />
+      <span className={styles.itemSalePrice}>{formatMoney(child.itemSaleUnitPrice!)}<small>/ unit</small></span>
+    </div>
+    <div className={styles.itemSaleMeta}>
+      <span>Stock {child.itemSaleStockOnHand ?? 0}</span>
+      <span>{total ? `Total ${formatMoney(total)}` : "Quantity required"}</span>
+      {row.itemSale?.status ? <span className={styles.itemSaleStatus}>{row.itemSale.status}</span> : null}
+      {saving ? <span className={styles.itemSaleSaving}>Saving…</span> : null}
+    </div>
+    {error ? <div className={styles.itemSaleError} role="alert"><span>{error}</span><button type="button" onClick={retry} disabled={disabled || saving}>Retry</button></div> : null}
+  </div>;
 }
 
 export function DraftTransactionReview({
@@ -229,17 +361,12 @@ export function DraftTransactionReview({
       render: (row) => {
         const event = getEventCode(eventCodes, row.eventCodeId);
         if (event?.eventType !== "ITEM_SALE") return <span className={styles.notApplicableText}>—</span>;
+        if (!row.eventCodeChildId) return <span className={styles.noMatch}>Select Child first</span>;
         const child = eventCodeChildren.find(item => item.id === row.eventCodeChildId);
-        if (!child?.itemSaleUnitPrice) return <span className={styles.noMatch}>Item not configured</span>;
-        const quantity = row.itemSaleQuantity ?? row.itemSale?.quantity ?? null;
-        return <div className={styles.entitlementCell}>
-          <input className="ui-table-input" type="number" min={1} step={1} value={quantity ?? ""} disabled={disabled}
-            aria-label={`Item quantity row ${row.rowNo}`}
-            onChange={event => onItemSaleQuantityChange(row.id, event.target.value ? Number(event.target.value) : null)} />
-          <small>{formatMoney(child.itemSaleUnitPrice)} each · stock {child.itemSaleStockOnHand ?? 0}</small>
-          <strong>{quantity ? `Total ${formatMoney(String(Number(child.itemSaleUnitPrice) * quantity))}` : "Quantity required"}</strong>
-          {row.itemSale?.status ? <small>{row.itemSale.status}{row.itemSale.resolutionReason ? ` · ${row.itemSale.resolutionReason}` : ""}</small> : null}
-        </div>;
+        if (!child) return <span className={styles.noMatch}>Child configuration not found</span>;
+        if (!child.itemSaleUnitPrice) return <span className={styles.noMatch} title={`Item config is missing for ${child.childCode}`}>Item config missing for {child.childCode}</span>;
+        return <ItemSaleQuantityCell row={row} child={child as EventCodeChildOption} disabled={disabled}
+          onSave={(quantity) => onItemSaleQuantityChange(row.id, quantity)} />;
       }
     },
     {

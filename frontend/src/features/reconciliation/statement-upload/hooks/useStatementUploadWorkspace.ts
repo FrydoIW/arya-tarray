@@ -164,14 +164,29 @@ export function useStatementUploadWorkspace() {
     transactionId: string,
     payload: { eventCodeId: string | null; eventCodeChildId: string | null; eventCampaignId: string | null; remark?: string | null; itemSaleQuantity?: number | null },
     successMessage: string
-  ) {
-    if (!canEditDraft || savingTransactionId) return;
+  ): Promise<boolean> {
+    if (!canEditDraft || savingTransactionId) return false;
+    const statementId = workspace.statement?.id;
+    if (!statementId) return false;
+    const previousWorkspace = workspace;
+    const optimisticTransactions = workspace.transactions.map((transaction) =>
+      transaction.id === transactionId
+        ? {
+            ...transaction,
+            eventCodeId: payload.eventCodeId,
+            eventCodeChildId: payload.eventCodeChildId,
+            eventCampaignId: payload.eventCampaignId,
+            ...(payload.itemSaleQuantity !== undefined ? { itemSaleQuantity: payload.itemSaleQuantity } : {})
+          }
+        : transaction
+    );
+    const optimisticWorkspace = { ...workspace, transactions: optimisticTransactions };
     setSavingTransactionId(transactionId);
     setError("");
     setMessage("");
+    setWorkspace(optimisticWorkspace);
+    setWorkspaceCache(statementWorkspaceKey(statementId), optimisticWorkspace);
     try {
-      const statementId = workspace.statement?.id;
-      if (!statementId) return;
       const result = await updateDraftTransactionFinalEvent({ statementId, transactionId, ...payload });
       const transactions = workspace.transactions.map((transaction) =>
         transaction.id === result.transaction.id ? result.transaction : transaction
@@ -189,8 +204,12 @@ export function useStatementUploadWorkspace() {
       setWorkspaceCache(statementWorkspaceKey(statementId), nextWorkspace);
       setWorkspace(nextWorkspace);
       setMessage(successMessage);
+      return true;
     } catch (caught) {
+      setWorkspace(previousWorkspace);
+      setWorkspaceCache(statementWorkspaceKey(statementId), previousWorkspace);
       setError(caught instanceof Error ? caught.message : "Failed to update the draft transaction.");
+      return false;
     } finally {
       setSavingTransactionId(null);
     }
@@ -227,8 +246,8 @@ export function useStatementUploadWorkspace() {
 
   async function updateItemSaleQuantity(transactionId: string, itemSaleQuantity: number | null) {
     const transaction = workspace.transactions.find((item) => item.id === transactionId);
-    if (!transaction) return;
-    await saveTransaction(transactionId, {
+    if (!transaction) return false;
+    return saveTransaction(transactionId, {
       eventCodeId: transaction.eventCodeId ?? null,
       eventCodeChildId: transaction.eventCodeChildId ?? null,
       eventCampaignId: transaction.eventCampaignId ?? null,

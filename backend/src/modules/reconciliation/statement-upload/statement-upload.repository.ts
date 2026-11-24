@@ -762,8 +762,26 @@ export async function updateTransactionFinalEventAtomic(input: {
       }
     });
 
-    await stageRawItemSalePurchase(tx, { transactionId: updated.id, quantity: effectiveItemSaleQuantity, userId: input.userId,
-      reason: input.remark?.trim() || "Statement Upload ITEM_SALE classification" });
+    if (updated.eventCode?.eventType === "ITEM_SALE") {
+      // Selecting a Child before entering quantity must persist the
+      // classification. A purchase can only be staged once both Child and a
+      // positive quantity exist.
+      if (updated.eventCodeChildId && effectiveItemSaleQuantity !== null && effectiveItemSaleQuantity > 0) {
+        await stageRawItemSalePurchase(tx, {
+          transactionId: updated.id,
+          quantity: effectiveItemSaleQuantity,
+          userId: input.userId,
+          reason: input.remark?.trim() || "Statement Upload ITEM_SALE classification"
+        });
+      }
+    } else {
+      await stageRawItemSalePurchase(tx, {
+        transactionId: updated.id,
+        quantity: null,
+        userId: input.userId,
+        reason: input.remark?.trim() || "Statement Upload ITEM_SALE classification"
+      });
+    }
     return tx.bankTransaction.findUniqueOrThrow({ where: { id: updated.id }, include: {
       statementUpload: { select: { id: true, status: true } }, suggestedEventCode: { select: eventCodeSelect }, eventCode: { select: eventCodeSelect },
       eventCodeChild: { select: eventCodeChildSelect }, eventCampaign: { select: { id: true, campaignName: true } },

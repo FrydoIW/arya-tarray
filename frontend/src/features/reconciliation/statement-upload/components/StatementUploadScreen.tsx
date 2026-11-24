@@ -92,7 +92,7 @@ export function StatementUploadScreen() {
         page={workspace.page}
         pageSize={workspace.pageSize}
         loading={workspace.loading}
-        disabled={!workspace.canEditDraft || workspace.busy || Boolean(workspace.savingTransactionId)}
+        disabled={!workspace.canEditDraft || workspace.busy}
         selectedStatementId={workspace.selectedStatementId}
         onSearchChange={workspace.setSearch}
         onStatusFilterChange={workspace.setStatusFilter}
@@ -102,7 +102,7 @@ export function StatementUploadScreen() {
         onReload={() => void workspace.refresh()}
         onFinalEventChange={(transactionId, eventCodeId, eventCodeChildId, eventCampaignId) => void workspace.updateFinalEvent(transactionId, eventCodeId, eventCodeChildId ?? null, eventCampaignId ?? null)}
         onRemarkChange={(transactionId, remark) => void workspace.updateRemark(transactionId, remark)}
-        onItemSaleQuantityChange={(transactionId, quantity) => void workspace.updateItemSaleQuantity(transactionId, quantity)}
+        onItemSaleQuantityChange={(transactionId, quantity) => workspace.updateItemSaleQuantity(transactionId, quantity)}
       />
       <DraftReviewSummary
         resolved={workspace.resolvedTransactions}

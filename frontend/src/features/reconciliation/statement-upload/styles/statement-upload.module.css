@@ -664,3 +664,22 @@
 .field { display: grid; gap: 6px; color: #344054; font-size: 13px; font-weight: 600; }
 .field textarea { width: 100%; border: 1px solid #d0d5dd; border-radius: 8px; padding: 9px 10px; font: inherit; resize: vertical; }
 .modalFooter { display: flex; justify-content: flex-end; gap: 8px; }
+
+.resultPanelCompact { padding: 10px 14px; gap: 8px; }
+.resultHeadCompact { align-items: center; }
+.resultHeadCompact h2 { font-size: 14px; }
+.resultTitle { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.resultInfo { display: inline-flex; align-items: center; justify-content: center; color: #7b879c; cursor: help; }
+.resultBadge { color: #b8780b; background: #fff8e9; border: 1px solid #f2dfb7; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.resultHistoryToggle { justify-self: start; padding: 0; color: #315f9f; background: transparent; border: 0; font: inherit; font-size: 11px; font-weight: 650; text-decoration: underline; cursor: pointer; }
+
+.itemSaleCell { min-width: 185px; display: grid; align-content: center; gap: 4px; }
+.itemSalePrimary { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.itemSaleQuantityInput { width: 72px !important; min-width: 72px; height: 34px !important; padding: 0 7px !important; text-align: right; font-variant-numeric: tabular-nums; }
+.itemSalePrice { min-width: 0; display: inline-flex; align-items: baseline; gap: 3px; color: #34415d; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.itemSalePrice small { color: #8a94a6; font-size: 9.5px; font-weight: 500; }
+.itemSaleMeta { min-height: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; color: #667085; font-size: 10.5px; line-height: 1.2; white-space: nowrap; }
+.itemSaleStatus { padding: 1px 5px; color: #b8780b; background: #fff8e9; border: 1px solid #f2dfb7; border-radius: 4px; font-size: 9.5px; font-weight: 700; }
+.itemSaleSaving { color: #7b879c; font-size: 9.5px; }
+.itemSaleError { display: flex; align-items: center; gap: 6px; color: #b42318; font-size: 10px; line-height: 1.2; }
+.itemSaleError button { padding: 0; color: #315f9f; background: transparent; border: 0; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
