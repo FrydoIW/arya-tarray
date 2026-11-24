@@ -55,12 +55,12 @@ ALTER TABLE `arya_reconciliation_correction_item` DROP FOREIGN KEY `fk_correctio
 ALTER TABLE `arya_reconciliation_correction_item` DROP FOREIGN KEY `fk_correction_item_proposed_event_child`;
 
 -- AlterTable
-ALTER TABLE `arya_bank_statement_upload_duplicate` ADD COLUMN `imported_bank_transaction_id` CHAR(36) NULL,
+ALTER TABLE `arya_bank_statement_upload_duplicate` ADD COLUMN `imported_bank_transaction_id` CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
     ADD COLUMN `match_type` VARCHAR(20) NOT NULL DEFAULT 'EXACT',
     ADD COLUMN `resolution_reason` VARCHAR(1000) NULL,
     ADD COLUMN `resolution_status` VARCHAR(20) NOT NULL DEFAULT 'CONFIRMED',
     ADD COLUMN `resolved_at` DATETIME(3) NULL,
-    ADD COLUMN `resolved_by` CHAR(36) NULL;
+    ADD COLUMN `resolved_by` CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL;
 
 -- AlterTable
 ALTER TABLE `arya_bank_transaction` ADD COLUMN `evidence_fingerprint` CHAR(64) NULL;
