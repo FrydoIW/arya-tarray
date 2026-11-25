@@ -8,6 +8,7 @@ export type Candidate = {
   bankName: string | null; accountNumber: string | null; accountType: string | null;
   verificationStatus: IdentityStatus; firstSeenAt: string; lastSeenAt: string; remark: string | null;
   transactionCount: number; observedAmount: string; member: MemberOption | null;
+  evidence?: Array<{ id: string; referenceNo: string | null; transactionDate: string | null; amount: string; fileName: string }>;
 };
 export type Workspace = {
   summary: { unverified: number; verified: number; ignored: number };

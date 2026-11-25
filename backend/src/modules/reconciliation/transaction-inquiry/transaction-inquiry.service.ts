@@ -472,7 +472,8 @@ export async function generateTransactionInquiryReport(input: TransactionInquiry
           ? "Outgoing"
           : transaction.eventCode ? `${transaction.eventCode.code} - ${transaction.eventCode.eventName}${child ? ` / ${child}` : ""}` : "N/A",
         campaign: transaction.eventCampaign?.campaignName ?? "—",
-        member: member ? `${member.memberCode} - ${member.memberName}${member.activeFlag ? "" : " (Inactive)"}` : "Belum Terhubung",
+        memberCode: member?.memberCode,
+        member: member ? `${member.memberName}${member.activeFlag ? "" : " (Inactive)"}` : "Belum Terhubung",
         status: statusLabel(transaction.status)
       };
     }),

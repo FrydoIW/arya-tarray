@@ -4,6 +4,7 @@ import { prisma } from "../../../lib/prisma.js";
 import { HttpError } from "../../../lib/http.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
 import { recordMemberIdentityHistory } from "../member-identity/member-identity-history.js";
+import { assertIdentityEvidenceCanBeVerified } from "../member-identity/member-identity.repository.js";
 import { synchronizePendingTimeBasedForMember } from "../time-based/member-time-based.service.js";
 import { synchronizePendingCampaignContributionsForMember } from "../campaign/member-campaign-wallet.service.js";
 import { synchronizePendingItemSalesForMember } from "../../item-sale/item-sale.service.js";
@@ -29,7 +30,10 @@ export async function workspaceRecords(query: WorkspaceQuery) {
       where, skip: (page - 1) * query.pageSize, take: query.pageSize,
       orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
       select: { id: true, accountName: true, initialName: true, bankName: true, accountNumber: true,
-        accountType: true, verificationStatus: true, firstSeenAt: true, lastSeenAt: true, remark: true, member: { select: memberSelect } }
+        accountType: true, verificationStatus: true, firstSeenAt: true, lastSeenAt: true, remark: true, member: { select: memberSelect },
+        transactions: { take: 5, orderBy: [{ transactionDate: "desc" }, { id: "asc" }],
+          select: { id: true, referenceNo: true, transactionDate: true, originalAmount: true, statementUpload: { select: { fileName: true } } } }
+      }
     });
     const aggregates = rows.length ? await tx.bankTransaction.groupBy({
       by: ["memberIdentityId"], where: { memberIdentityId: { in: rows.map(row => row.id) } },
@@ -51,6 +55,7 @@ async function requireCandidate(tx: Prisma.TransactionClient, identityId: string
   const identity = await tx.memberIdentity.findUnique({ where: { id: identityId }, select: { memberId: true, verificationStatus: true } });
   if (!identity) throw new HttpError(404, "Identitas tidak ditemukan.");
   if (identity.memberId || identity.verificationStatus !== "UNVERIFIED") throw new HttpError(409, "Identitas sudah diproses. Reload daftar registrasi.");
+  await assertIdentityEvidenceCanBeVerified(tx, identityId);
 }
 async function createMember(tx: Prisma.TransactionClient, input: MemberInput, userId: string, source: string) {
   const id = randomUUID();

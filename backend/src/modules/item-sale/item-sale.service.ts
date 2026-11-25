@@ -70,6 +70,11 @@ export async function synchronizeItemSaleFund(tx: Tx, transactionId: string, use
 
   const ownershipChanged = fund.ownerMemberId !== ownerMemberId || fund.ownershipStatus !== ownershipStatus;
   if (ownershipChanged) {
+    const conflict = await tx.itemSaleFundAllocation.findFirst({ where: {
+      sourceFundId: fund.id, status: "ACTIVE",
+      ...(ownerMemberId ? { purchase: { is: { OR: [{ buyerMemberId: null }, { buyerMemberId: { not: ownerMemberId } }] } } } : {})
+    }, select: { id: true } });
+    if (conflict) throw new HttpError(409, "Resolve active ITEM_SALE wallet allocations before changing the wallet owner.");
     await tx.itemSaleFundLedger.create({ data: {
       fundId: fund.id, purchaseId: row.itemSalePurchase?.id ?? fund.purchaseId, entryType: "OWNERSHIP_UPDATE",
       amountDelta: 0, balanceAfter: fund.unallocatedAmount,
@@ -115,12 +120,19 @@ export async function synchronizeItemSaleFund(tx: Tx, transactionId: string, use
  * A partial release reduces the active allocation amount; a full release marks
  * it REVERSED. Every source fund gets an append-only WALLET_RELEASE entry.
  */
-async function releasePurchaseWalletAllocations(tx: Tx, purchaseId: string, userId: string, reason: string, requestedAmount?: Prisma.Decimal) {
-  const purchase = await tx.itemSalePurchase.findUnique({ where: { id: purchaseId }, select: { id: true, walletAppliedAmount: true, version: true } });
+async function releasePurchaseWalletAllocations(tx: Tx, purchaseId: string, userId: string, reason: string, requestedAmount?: Prisma.Decimal, exactAllocationId?: string) {
+  await tx.$queryRaw`SELECT item_sale_purchase_id FROM arya_item_sale_purchase WHERE item_sale_purchase_id = ${purchaseId} FOR UPDATE`;
+  const purchase = await tx.itemSalePurchase.findUnique({ where: { id: purchaseId }, select: { id: true, walletAppliedAmount: true, buyerMemberId: true, status: true } });
   if (!purchase) throw new HttpError(404, "Item purchase not found");
-  let remaining = requestedAmount?.lessThan(purchase.walletAppliedAmount) ? requestedAmount : purchase.walletAppliedAmount;
+  if (exactAllocationId && purchase.status === "CONFIRMED") throw new HttpError(409, "Reverse the confirmed purchase before reversing its wallet funding.");
+  if (exactAllocationId && (!requestedAmount?.greaterThan(0) || requestedAmount.greaterThan(purchase.walletAppliedAmount))) {
+    throw new HttpError(409, "Wallet allocation amount does not match the purchase funding.");
+  }
+  let remaining = requestedAmount ?? purchase.walletAppliedAmount;
   if (remaining.lessThanOrEqualTo(0)) return new Prisma.Decimal(0);
-  const allocations = await tx.itemSaleFundAllocation.findMany({ where: { purchaseId, status: "ACTIVE" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
+  const allocations = await tx.itemSaleFundAllocation.findMany({ where: {
+    purchaseId, status: "ACTIVE", ...(exactAllocationId ? { id: exactAllocationId } : {})
+  }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
   let released = new Prisma.Decimal(0);
   for (const allocation of allocations) {
     if (!remaining.greaterThan(0)) break;
@@ -131,6 +143,10 @@ async function releasePurchaseWalletAllocations(tx: Tx, purchaseId: string, user
     if (fundRows.length === 0) throw new HttpError(409, "Wallet source fund is no longer available");
     const fund = await tx.itemSaleFund.findUniqueOrThrow({ where: { id: allocation.sourceFundId } });
     if (fund.status === "REVERSED") throw new HttpError(409, "A reversed wallet source cannot be restored");
+    if (exactAllocationId && (!allocation.amount.equals(remaining) || !fund.ownerMemberId ||
+      fund.ownershipStatus !== "ATTRIBUTED" || fund.ownerMemberId !== purchase.buyerMemberId)) {
+      throw new HttpError(409, "Wallet allocation no longer matches its purchase, amount, or verified owner.");
+    }
     const unallocated = fund.unallocatedAmount.plus(take);
     const otherAllocated = fund.otherAllocatedAmount.minus(take);
     if (otherAllocated.lessThan(0)) throw new HttpError(409, "Wallet allocation ledger is inconsistent");
@@ -145,15 +161,15 @@ async function releasePurchaseWalletAllocations(tx: Tx, purchaseId: string, user
     } });
     const nextAmount = allocation.amount.minus(take);
     await tx.itemSaleFundAllocation.update({ where: { id: allocation.id }, data: {
-      amount: nextAmount,
       status: nextAmount.equals(0) ? "REVERSED" : "ACTIVE",
-      ...(nextAmount.equals(0) ? { reversedAt: new Date(), reversedById: userId, reversalReason: reason } : {})
+      ...(nextAmount.equals(0) ? { reversedAt: new Date(), reversedById: userId, reversalReason: reason } : { amount: nextAmount })
     } });
     await audit(tx, { entityType: "FUND", entityId: fund.id, action: "WALLET_ALLOCATION_RELEASED",
       before: { amount: allocation.amount.toString(), allocationId: allocation.id }, after: { amount: nextAmount.toString() }, reason, userId });
     released = released.plus(take);
     remaining = remaining.minus(take);
   }
+  if (!remaining.equals(0)) throw new HttpError(409, "Active wallet allocation evidence could not cover the requested release.");
   const walletApplied = purchase.walletAppliedAmount.minus(released);
   if (walletApplied.lessThan(0)) throw new HttpError(409, "Wallet release exceeds the purchase funding");
   await tx.itemSalePurchase.update({ where: { id: purchase.id }, data: { walletAppliedAmount: walletApplied, version: { increment: 1 }, updatedById: userId } });
@@ -274,7 +290,7 @@ export function reverseItemSaleWalletAllocation(input: { allocationId: string; r
     if (allocation.status === "REVERSED") return allocation;
     if (allocation.status !== "ACTIVE") throw new HttpError(409, "This wallet allocation cannot be reversed");
     if (allocation.purchase.status === "CONFIRMED") throw new HttpError(409, "Reverse the confirmed purchase before reversing its wallet funding");
-    await releasePurchaseWalletAllocations(tx, allocation.purchaseId, input.userId, input.reason.trim(), allocation.amount);
+    await releasePurchaseWalletAllocations(tx, allocation.purchaseId, input.userId, input.reason.trim(), allocation.amount, allocation.id);
     return tx.itemSaleFundAllocation.findUniqueOrThrow({ where: { id: allocation.id } });
   });
 }
@@ -510,21 +526,28 @@ export async function assertStatementItemSalesReady(tx: Tx, transactionIds: stri
   if (invalid) throw new HttpError(400, "Every ITEM_SALE transaction requires an active configured item and explicit positive quantity before Execute.");
 }
 
-async function reverseConfirmedPurchase(tx: Tx, purchase: Prisma.ItemSalePurchaseGetPayload<{}>, userId: string, reason: string) {
-  const sale = await tx.itemSaleInventoryMovement.findFirst({ where: { purchaseId: purchase.id, movementType: "SALE", reversalMovement: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
-  if (!sale) throw new HttpError(409, "Confirmed purchase has no reversible SALE movement. No inventory change was applied.");
-  const existing = await tx.itemSaleInventoryMovement.findUnique({ where: { reversalOfMovementId: sale.id } });
-  if (existing) return existing;
-  const config = await tx.itemSaleConfig.findUnique({ where: { eventCodeChildId: sale.eventCodeChildId } });
-  if (!config) throw new HttpError(409, "Historical item configuration is missing. No inventory reversal was applied.");
-  const quantity = -sale.quantityDelta;
-  const updated = await tx.itemSaleConfig.updateMany({ where: { eventCodeChildId: config.eventCodeChildId, version: config.version }, data: {
-    stockOnHand: { increment: quantity }, version: { increment: 1 }, updatedById: userId
-  } });
-  if (updated.count !== 1) throw new HttpError(409, "Item stock changed while reversing this sale. Retry the approval action.");
-  return tx.itemSaleInventoryMovement.create({ data: { id: randomUUID(), eventCodeChildId: sale.eventCodeChildId, purchaseId: purchase.id,
-    movementType: "SALE_REVERSAL", quantityDelta: quantity, stockBefore: config.stockOnHand, stockAfter: config.stockOnHand + quantity,
-    sourceReference: purchase.bankTransactionId, idempotencyKey: `SALE_REVERSAL:${sale.id}`, reversalOfMovementId: sale.id, reason, createdById: userId } });
+export function assertConfirmedItemSaleUnchanged(
+  purchase: { status: string; eventCodeChildId: string; quantity: number } | null | undefined,
+  target: { childId: string | null; quantity: number | null } | null
+) {
+  if (purchase?.status === "CONFIRMED" &&
+    (!target || target.childId !== purchase.eventCodeChildId || target.quantity !== purchase.quantity)) {
+    throw new HttpError(409, "Confirmed ITEM_SALE cannot be reversed or changed without a verified physical return through an authorized workflow.");
+  }
+}
+
+export async function assertIdentityHasNoActiveItemSaleFunding(tx: Tx, identityId: string) {
+  // Runs inside the same serializable transaction as the identity update.
+  // The allocation transaction also reads both endpoints before writing.
+  const allocation = await tx.itemSaleFundAllocation.findFirst({ where: {
+    status: "ACTIVE",
+    OR: [
+      { sourceFund: { bankTransaction: { memberIdentityId: identityId } } },
+      { purchase: { memberIdentityId: identityId } },
+      { purchase: { bankTransaction: { memberIdentityId: identityId } } }
+    ]
+  }, select: { id: true } });
+  if (allocation) throw new HttpError(409, "Resolve active incoming and outgoing ITEM_SALE wallet allocations before moving or unlinking this identity.");
 }
 
 export async function synchronizeItemSaleTransaction(tx: Tx, transactionId: string, userId: string, options: { quantity?: number | null; reason?: string; strict?: boolean } = {}) {
@@ -543,14 +566,13 @@ export async function synchronizeItemSaleTransaction(tx: Tx, transactionId: stri
   const targetSale = row.status === "FINALIZED" && !row.reconciliationExcludedAt && row.originalAmount.greaterThan(0) && row.eventCode?.eventType === "ITEM_SALE";
   if (!targetSale) {
     if (!current) return withFund(null);
+    assertConfirmedItemSaleUnchanged(current, null);
     if (current.walletAppliedAmount.greaterThan(0)) {
       await releasePurchaseWalletAllocations(tx, current.id, userId, `Purchase reversed: ${reason}`);
     }
-    if (current.status === "CONFIRMED") await reverseConfirmedPurchase(tx, current, userId, reason);
     if (current.status !== "REVERSED" && current.status !== "VOIDED") {
-      const nextStatus = current.status === "CONFIRMED" ? "REVERSED" : "VOIDED";
+      const nextStatus = "VOIDED";
       const next = await tx.itemSalePurchase.update({ where: { id: current.id }, data: { status: nextStatus, resolutionReason: reason,
-        reversedAt: current.status === "CONFIRMED" ? new Date() : null, reversedById: current.status === "CONFIRMED" ? userId : null,
         version: { increment: 1 }, updatedById: userId } });
       await audit(tx, { entityType: "PURCHASE", entityId: current.id, action: nextStatus, before: purchaseJson(current), after: purchaseJson(next), reason, userId });
       return withFund(next);
@@ -566,17 +588,27 @@ export async function synchronizeItemSaleTransaction(tx: Tx, transactionId: stri
     if (options.strict) throw new HttpError(409, "ITEM_SALE quantity is missing or invalid");
     return withFund(current);
   }
-  const changing = Boolean(current?.status === "CONFIRMED" && (current.eventCodeChildId !== row.eventCodeChildId || current.quantity !== desiredQuantity));
-  const price = current && !changing && current.eventCodeChildId === row.eventCodeChildId ? current.unitPriceSnapshot : row.eventCodeChild.itemSaleConfig.unitPrice;
+  assertConfirmedItemSaleUnchanged(current, { childId: row.eventCodeChildId, quantity: desiredQuantity });
+  const buyerMemberId = row.memberIdentity?.verificationStatus === "VERIFIED" ? row.memberIdentity.memberId : null;
+  if (current && current.buyerMemberId !== buyerMemberId) {
+    const conflict = await tx.itemSaleFundAllocation.findFirst({ where: {
+      purchaseId: current.id, status: "ACTIVE",
+      ...(buyerMemberId ? { sourceFund: { is: { OR: [
+        { ownerMemberId: null }, { ownerMemberId: { not: buyerMemberId } }, { ownershipStatus: { not: "ATTRIBUTED" } }
+      ] } } } : {})
+    }, select: { id: true } });
+    if (conflict) throw new HttpError(409, "Resolve active ITEM_SALE wallet funding before changing the purchase buyer.");
+  }
+  const price = current?.eventCodeChildId === row.eventCodeChildId ? current.unitPriceSnapshot : row.eventCodeChild.itemSaleConfig.unitPrice;
   const total = price.mul(desiredQuantity);
   if (current && current.walletAppliedAmount.greaterThan(0)) {
     await reconcilePurchaseWalletApplication(tx, current.id, total, row.originalAmount, userId, reason);
     current = await tx.itemSalePurchase.findUniqueOrThrow({ where: { id: current.id } });
   }
-  const buyerMemberId = row.memberIdentity?.verificationStatus === "VERIFIED" ? row.memberIdentity.memberId : null;
   const walletApplied = current?.walletAppliedAmount ?? new Prisma.Decimal(0);
   const paymentMatches = row.originalAmount.plus(walletApplied).greaterThanOrEqualTo(total);
-  if (current?.status === "CONFIRMED" && !changing) {
+  if (current?.status === "CONFIRMED") {
+    if (!paymentMatches) throw new HttpError(409, "Confirmed ITEM_SALE purchase no longer has full funding.");
     if (current.buyerMemberId !== buyerMemberId || current.memberIdentityId !== row.memberIdentityId) {
       const next = await tx.itemSalePurchase.update({ where: { id: current.id }, data: { buyerMemberId, memberIdentityId: row.memberIdentityId, version: { increment: 1 }, updatedById: userId } });
       return withFund(next);
@@ -595,7 +627,6 @@ export async function synchronizeItemSaleTransaction(tx: Tx, transactionId: stri
       createdById: userId, updatedById: userId } });
   }
   if (!paymentMatches || !buyerMemberId) {
-    if (current.status === "CONFIRMED") await reverseConfirmedPurchase(tx, current, userId, reason);
     const status = paymentMatches ? "PENDING_BUYER" : "REVIEW_REQUIRED";
     const next = await tx.itemSalePurchase.update({ where: { id: current.id }, data: { eventCodeId: row.eventCodeId, eventCodeChildId: row.eventCodeChildId,
       memberIdentityId: row.memberIdentityId, buyerMemberId, quantity: desiredQuantity, unitPriceSnapshot: price, totalAmount: total,
@@ -603,7 +634,6 @@ export async function synchronizeItemSaleTransaction(tx: Tx, transactionId: stri
       version: { increment: 1 }, updatedById: userId } });
     return withFund(next);
   }
-  if (current.status === "CONFIRMED") await reverseConfirmedPurchase(tx, current, userId, reason);
   const config = await tx.itemSaleConfig.findUniqueOrThrow({ where: { eventCodeChildId: row.eventCodeChildId } });
   const stock = await tx.itemSaleConfig.updateMany({ where: { eventCodeChildId: config.eventCodeChildId, version: config.version, stockOnHand: { gte: desiredQuantity } }, data: {
     stockOnHand: { decrement: desiredQuantity }, version: { increment: 1 }, updatedById: userId
@@ -622,13 +652,17 @@ export async function synchronizeItemSaleTransaction(tx: Tx, transactionId: stri
     memberIdentityId: row.memberIdentityId, buyerMemberId, quantity: desiredQuantity, unitPriceSnapshot: price, totalAmount: total,
     paymentAmountSnapshot: row.originalAmount, status: "CONFIRMED", resolutionReason: null, confirmedAt: new Date(), confirmedById: userId,
     reversedAt: null, reversedById: null, version: { increment: 1 }, updatedById: userId } });
-  await audit(tx, { entityType: "PURCHASE", entityId: current.id, action: changing ? "CORRECTED_AND_CONFIRMED" : "CONFIRMED",
+  await audit(tx, { entityType: "PURCHASE", entityId: current.id, action: "CONFIRMED",
     before: purchaseJson(current), after: purchaseJson(next), reason, userId });
   return withFund(next);
 }
 
 export async function assertCorrectionItemSaleValid(tx: Tx, items: Array<{ action: string; bankTransactionId: string | null; proposedEventCodeId: string | null; proposedEventCodeChildId: string | null; proposedItemSaleQuantity: number | null; manualOriginalAmount: Prisma.Decimal | null; bankTransaction: { id: string; baseAmount?: Prisma.Decimal | null; originalAmount: Prisma.Decimal; itemSalePurchase?: { id: string; status: string; eventCodeChildId: string; quantity: number; unitPriceSnapshot: Prisma.Decimal; walletAppliedAmount?: Prisma.Decimal } | null } | null }>) {
   for (const item of items) {
+    const purchase = item.bankTransaction?.itemSalePurchase;
+    assertConfirmedItemSaleUnchanged(purchase, item.action === "EXCLUDED" ? null : {
+      childId: item.proposedEventCodeChildId, quantity: item.proposedItemSaleQuantity
+    });
     if (item.action === "EXCLUDED") continue;
     const eventId = item.proposedEventCodeId;
     const event = eventId ? await tx.eventCode.findUnique({ where: { id: eventId }, select: { eventType: true } }) : null;
@@ -636,7 +670,6 @@ export async function assertCorrectionItemSaleValid(tx: Tx, items: Array<{ actio
     if (!item.proposedEventCodeChildId || !item.proposedItemSaleQuantity || item.proposedItemSaleQuantity <= 0) throw new HttpError(409, "ITEM_SALE correction requires an item and positive quantity");
     const child = await tx.eventCodeChild.findUnique({ where: { id: item.proposedEventCodeChildId }, select: { id: true, eventCodeId: true, activeFlag: true, itemSaleConfig: true } });
     if (!child || child.eventCodeId !== eventId || !child.activeFlag || !child.itemSaleConfig) throw new HttpError(409, "Proposed ITEM_SALE item is inactive, belongs to another parent, or is not configured");
-    const purchase = item.bankTransaction?.itemSalePurchase;
     const applicableUnitPrice = purchase?.eventCodeChildId === child.id
       ? purchase.unitPriceSnapshot
       : child.itemSaleConfig.unitPrice;
@@ -646,8 +679,7 @@ export async function assertCorrectionItemSaleValid(tx: Tx, items: Array<{ actio
       : item.bankTransaction?.originalAmount.plus(purchase?.walletAppliedAmount ?? new Prisma.Decimal(0));
     if (item.action === "ADDED" && (!payment || !payment.greaterThan(0))) throw new HttpError(409, "A manual ITEM_SALE addition must be a positive incoming amount");
     if (!payment?.greaterThanOrEqualTo(total)) throw new HttpError(409, "Proposed ITEM_SALE quantity x applicable unit price cannot exceed the original bank amount plus wallet funding");
-    const returned = purchase?.status === "CONFIRMED" && purchase.eventCodeChildId === child.id ? purchase.quantity : 0;
-    if (child.itemSaleConfig.stockOnHand + returned < item.proposedItemSaleQuantity) throw new HttpError(409, "Proposed ITEM_SALE item has insufficient stock");
+    if (purchase?.status !== "CONFIRMED" && child.itemSaleConfig.stockOnHand < item.proposedItemSaleQuantity) throw new HttpError(409, "Proposed ITEM_SALE item has insufficient stock");
   }
 }
 

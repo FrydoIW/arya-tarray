@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isAbortError } from "@/lib/api";
+import { ApiRequestError, isAbortError } from "@/lib/api";
 import { getWorkspaceCache, invalidateWorkspaceCache, readWorkspace, setWorkspaceCache, workspaceCacheKey } from "@/lib/workspace-cache";
 import { invalidateMonitoringWorkspaces } from "@/lib/monitoring-cache";
 import {
@@ -28,6 +28,15 @@ const EMPTY_WORKSPACE: StatementUploadWorkspace = {
   bankAccounts: []
 };
 const STATEMENT_WORKSPACE_PREFIX = "reconciliation/statement-upload/workspace";
+const WORKSPACE_TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+function workspaceError(error: unknown, fallback: string) {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return "Statement Upload workspace did not respond. Use Reload to try again.";
+  }
+  return error instanceof Error ? error.message : fallback;
+}
 
 function statementWorkspaceKey(statementId?: string) {
   return workspaceCacheKey(STATEMENT_WORKSPACE_PREFIX, statementId ? { statementId } : undefined);
@@ -38,8 +47,9 @@ export function useStatementUploadWorkspace() {
   const [workspace, setWorkspace] = useState<StatementUploadWorkspace>(initialWorkspace);
   const selectedStatementId = useRef<string | undefined>(undefined);
   const [loading, setLoading] = useState(initialWorkspace === EMPTY_WORKSPACE);
-  const [busy, setBusy] = useState(false);
+  const [actionBusy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const busy = actionBusy || uploading;
   const [withdrawing, setWithdrawing] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadAttemptResult | null>(null);
   const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
@@ -53,6 +63,7 @@ export function useStatementUploadWorkspace() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const workspaceRequestRef = useRef<AbortController | null>(null);
+  const uploadRequestRef = useRef<AbortController | null>(null);
 
   const loadWorkspace = useCallback(async (statementId?: string, force = false, consumerSignal?: AbortSignal) => {
     const ownedController = consumerSignal ? null : new AbortController();
@@ -62,7 +73,9 @@ export function useStatementUploadWorkspace() {
     }
     const signal = consumerSignal ?? ownedController!.signal;
     const key = statementWorkspaceKey(statementId);
-    const read = readWorkspace(key, (signal) => getStatementUploadWorkspace(statementId, signal), { force });
+    const read = readWorkspace(key, (signal) => getStatementUploadWorkspace(
+      statementId, AbortSignal.any([signal, AbortSignal.timeout(WORKSPACE_TIMEOUT_MS)])
+    ), { force });
     if (read.cached) {
       selectedStatementId.current = read.cached.statement?.id;
       setWorkspace(read.cached);
@@ -87,32 +100,54 @@ export function useStatementUploadWorkspace() {
     }
   }, []);
 
+  const loadDraftOrList = useCallback(async (statementId?: string, force = false) => {
+    try {
+      await loadWorkspace(statementId, force);
+    } catch (error) {
+      if (!statementId || !(error instanceof ApiRequestError) || error.status !== 404) throw error;
+      invalidateWorkspaceCache(statementWorkspaceKey(statementId));
+      selectedStatementId.current = undefined;
+      setWorkspace(current => ({ ...current, statement: null, transactions: [], duplicates: [],
+        duplicateSummary: EMPTY_WORKSPACE.duplicateSummary,
+        drafts: current.drafts.filter(draft => draft.id !== statementId) }));
+      await loadWorkspace(undefined, true);
+      setMessage("The selected draft is no longer available. The draft list has been refreshed.");
+    }
+  }, [loadWorkspace]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      await loadWorkspace(selectedStatementId.current, true);
+      await loadDraftOrList(selectedStatementId.current, true);
     } catch (caught) {
-      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Statement Upload workspace.");
+      if (!isAbortError(caught)) setError(workspaceError(caught, "Failed to load Statement Upload workspace."));
     } finally {
       setLoading(false);
     }
-  }, [loadWorkspace]);
+  }, [loadDraftOrList]);
 
   useEffect(() => {
     const controller = new AbortController();
+    const cancelUpload = () => uploadRequestRef.current?.abort();
+    window.addEventListener("pagehide", cancelUpload);
     void (async () => {
       setLoading(!getWorkspaceCache<StatementUploadWorkspace>(statementWorkspaceKey()));
       try {
         await loadWorkspace(undefined, false, controller.signal);
       } catch (caught) {
-        if (!controller.signal.aborted && !isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to load Statement Upload workspace.");
+        if (!controller.signal.aborted && !isAbortError(caught)) setError(workspaceError(caught, "Failed to load Statement Upload workspace."));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => { controller.abort(); workspaceRequestRef.current?.abort(); };
+    return () => {
+      window.removeEventListener("pagehide", cancelUpload);
+      controller.abort();
+      workspaceRequestRef.current?.abort();
+      cancelUpload();
+    };
   }, [loadWorkspace]);
 
   useEffect(() => {
@@ -256,14 +291,32 @@ export function useStatementUploadWorkspace() {
   }
 
   async function upload(file: File, bankAccountId: string) {
-    if (!canUpload || !bankAccountId) return;
-    setBusy(true);
+    if (!canUpload || !bankAccountId || uploadRequestRef.current) return;
+    const controller = new AbortController();
+    const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+    const signal = AbortSignal.any([controller.signal, timeout]);
+    const finish = () => {
+      if (uploadRequestRef.current !== controller) return;
+      uploadRequestRef.current = null;
+      setUploading(false);
+    };
+    const onAbort = () => {
+      if (uploadRequestRef.current !== controller) return;
+      if (timeout.aborted && !controller.signal.aborted) {
+        setError("Upload timed out. Use Reload to check whether a draft was created before trying again.");
+      }
+      // Release the UI even if the transport has not settled its promise yet.
+      finish();
+    };
+    uploadRequestRef.current = controller;
+    signal.addEventListener("abort", onAbort, { once: true });
     setUploading(true);
     setError("");
     setMessage("");
     setUploadResult(null);
     try {
-      const next = await uploadStatement({ file, bankAccountId });
+      const next = await uploadStatement({ file, bankAccountId }, signal);
+      if (signal.aborted || uploadRequestRef.current !== controller) return;
       invalidateWorkspaceCache(STATEMENT_WORKSPACE_PREFIX);
       invalidateMonitoringWorkspaces(["timeBased", "campaign"]);
       invalidateWorkspaceCache("member/registration/workspace");
@@ -286,10 +339,15 @@ export function useStatementUploadWorkspace() {
         ? `${importedTransactions} of ${sourceTransactions} source transactions imported. ${duplicateTransactions} exact duplicate${duplicateTransactions === 1 ? "" : "s"} skipped.${review}`
         : `No new transactions were imported. ${duplicateTransactions} exact duplicate transaction${duplicateTransactions === 1 ? "" : "s"} were skipped.${review}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to upload and parse the statement file.");
+      if (signal.aborted || uploadRequestRef.current !== controller) return;
+      if (caught instanceof TypeError) {
+        setError("The upload connection was interrupted. Use Reload to check for a new draft before trying again.");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Failed to upload and parse the statement file.");
+      }
     } finally {
-      setUploading(false);
-      setBusy(false);
+      signal.removeEventListener("abort", onAbort);
+      finish();
     }
   }
 
@@ -369,14 +427,14 @@ export function useStatementUploadWorkspace() {
     setError("");
     setMessage("");
     try {
-      await loadWorkspace(statementId);
+      await loadDraftOrList(statementId, true);
       setSearchInput("");
       setSearch("");
       setStatusFilter("ALL");
       setEventCodeFilter("ALL");
       setPage(1);
     } catch (caught) {
-      if (!isAbortError(caught)) setError(caught instanceof Error ? caught.message : "Failed to open statement draft.");
+      if (!isAbortError(caught)) setError(workspaceError(caught, "Failed to open statement draft."));
     } finally {
       setLoading(false);
     }

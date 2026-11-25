@@ -65,13 +65,6 @@ export function StatementUploadScreen() {
         resolvingId={workspace.resolvingDuplicateId}
         onResolve={(duplicateId, decision, reason) => workspace.resolveDuplicate(duplicateId, decision, reason)}
       />
-      <DraftStatements
-        rows={workspace.workspace.drafts}
-        selectedStatementId={workspace.selectedStatementId}
-        loading={workspace.loading}
-        busy={workspace.busy}
-        onOpen={(statementId) => void workspace.selectDraft(statementId)}
-      />
       <DraftWorkspace
         statement={workspace.workspace.statement}
         bankAccounts={workspace.workspace.bankAccounts}
@@ -80,6 +73,13 @@ export function StatementUploadScreen() {
         withdrawDisabled={!workspace.canEditDraft || workspace.busy}
         onFileSelected={(file, bankAccountId) => void workspace.upload(file, bankAccountId)}
         onWithdraw={() => setWithdrawOpen(true)}
+      />
+      <DraftStatements
+        rows={workspace.workspace.drafts}
+        selectedStatementId={workspace.selectedStatementId}
+        loading={workspace.loading}
+        busy={workspace.busy}
+        onOpen={(statementId) => void workspace.selectDraft(statementId)}
       />
       <DraftTransactionReview
         rows={workspace.filteredTransactions}

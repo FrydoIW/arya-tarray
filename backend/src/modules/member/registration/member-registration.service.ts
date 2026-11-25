@@ -11,8 +11,11 @@ export async function getWorkspace(query: WorkspaceQuery) {
   const count = (status: string) => records.counts.find(row => row.verificationStatus === status)?._count._all ?? 0;
   return {
     summary: { unverified: count("UNVERIFIED"), verified: count("VERIFIED"), ignored: count("IGNORED") },
-    rows: records.rows.map(({ id, member, ...row }) => ({
+    rows: records.rows.map(({ id, member, transactions, ...row }) => ({
       ...row, memberIdentityId: id, member: member ? memberSummary(member) : null,
+      evidence: transactions.map(({ originalAmount, statementUpload, ...transaction }) => ({
+        ...transaction, amount: originalAmount.toString(), fileName: statementUpload.fileName
+      })),
       transactionCount: aggregateById.get(id)?._count._all ?? 0,
       observedAmount: aggregateById.get(id)?._sum.originalAmount?.toString() ?? "0.00"
     })),

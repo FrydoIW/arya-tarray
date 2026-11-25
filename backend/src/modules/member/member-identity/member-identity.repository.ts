@@ -1,6 +1,15 @@
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type { observedIdentity } from "./member-identity.utils.js";
+import { HttpError } from "../../../lib/http.js";
+
+export async function assertIdentityEvidenceCanBeVerified(tx: Prisma.TransactionClient, identityId: string) {
+  const identity = await tx.memberIdentity.findUniqueOrThrow({ where: { id: identityId },
+    select: { identityKey: true, _count: { select: { transactions: true } } } });
+  if (identity.identityKey.startsWith("NAME|") && identity._count.transactions > 1) {
+    throw new HttpError(409, "Identitas historis ini berisi beberapa transaksi yang dikelompokkan menurut nama. Verifikasi kepemilikan setiap transaksi sebelum menautkannya.");
+  }
+}
 
 export type IdentityObservation = NonNullable<ReturnType<typeof observedIdentity>> & {
   firstSeenAt: Date; lastSeenAt: Date; statementId: string; transactionIds: string[];

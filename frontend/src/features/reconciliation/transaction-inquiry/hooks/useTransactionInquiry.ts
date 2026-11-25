@@ -24,7 +24,7 @@ import { getCurrentDayValue, getCurrentMonthValue } from "../utils/transaction-i
 const CURRENT_MONTH = getCurrentMonthValue();
 const CURRENT_DAY = getCurrentDayValue();
 const EMPTY_WORKSPACE: TransactionInquiryWorkspace = {
-  filters: { periodMode: "MONTH", month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL", bankAccountId: null, finalEventId: null, eventCodeChildId: null, eventCampaignId: null, memberId: null, memberLinkStatus: "ALL" },
+  filters: { periodMode: "MONTH", month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "FINALIZED", bankAccountId: null, finalEventId: null, eventCodeChildId: null, eventCampaignId: null, memberId: null, memberLinkStatus: "ALL" },
   summary: { totalTransactions: 0, totalCredit: "0.00", totalDebit: "0.00", completeTransactions: 0, incomingTransactions: 0, outgoingTransactions: 0 },
   bankAccounts: [],
   eventOptions: [],
@@ -42,7 +42,7 @@ export function useTransactionInquiry() {
   const [date, setDate] = useState(CURRENT_DAY);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<TransactionInquiryStatus>("ALL");
+  const [status, setStatus] = useState<TransactionInquiryStatus>("FINALIZED");
   const [bankAccountId, setBankAccountId] = useState("ALL");
   const [finalEventId, setFinalEventId] = useState("ALL");
   const [eventCodeChildId, setEventCodeChildId] = useState("ALL");
@@ -56,7 +56,7 @@ export function useTransactionInquiry() {
   const [memberOptionsRequested, setMemberOptionsRequested] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const initialQuery = { periodMode: "MONTH" as const, month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "ALL" as const, bankAccountId: "ALL", finalEventId: "ALL", eventCodeChildId: "ALL", eventCampaignId: "ALL", memberId: "ALL", memberLinkStatus: "ALL" as const, page: 1, pageSize: 25 };
+  const initialQuery = { periodMode: "MONTH" as const, month: CURRENT_MONTH, date: CURRENT_DAY, search: "", status: "FINALIZED" as const, bankAccountId: "ALL", finalEventId: "ALL", eventCodeChildId: "ALL", eventCampaignId: "ALL", memberId: "ALL", memberLinkStatus: "ALL" as const, page: 1, pageSize: 25 };
   const initialKey = workspaceCacheKey(INQUIRY_WORKSPACE_PREFIX, initialQuery);
   const initialWorkspace = getWorkspaceCache<TransactionInquiryWorkspace>(initialKey)?.value ?? EMPTY_WORKSPACE;
   const [workspace, setWorkspace] = useState<TransactionInquiryWorkspace>(initialWorkspace);

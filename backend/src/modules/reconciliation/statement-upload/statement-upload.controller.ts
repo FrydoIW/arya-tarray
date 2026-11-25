@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { HttpError, SanitizedInternalError } from "../../../lib/http.js";
 import {
   duplicateParamsSchema,
   resolveDuplicateSchema,
@@ -18,18 +19,25 @@ import {
   withdrawStatement
 } from "./statement-upload.service.js";
 
+async function withStatementDiagnostic<T>(operation: string, message: string, work: () => Promise<T>) {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new SanitizedInternalError(message, `statement-upload.${operation}`, error);
+  }
+}
+
 export async function getStatementUploadWorkspaceController(req: Request, res: Response) {
   const { statementId } = workspaceQuerySchema.parse(req.query);
-  res.json(await getStatementUploadWorkspace(statementId));
+  res.json(await withStatementDiagnostic("workspace", "Unable to load the Statement Upload workspace. Use Reload to try again.",
+    () => getStatementUploadWorkspace(statementId)));
 }
 
 export async function uploadStatementController(req: Request, res: Response) {
   const { bankAccountId } = uploadStatementBodySchema.parse(req.body);
-  const result = await uploadStatement({
-    file: req.file,
-    bankAccountId,
-    userId: req.auth!.userId
-  });
+  const result = await withStatementDiagnostic("upload", "Unable to confirm the upload. Use Reload to check the draft list before trying again.",
+    () => uploadStatement({ file: req.file, bankAccountId, userId: req.auth!.userId }));
   res.status(result.uploadResult.importedTransactions > 0 ? 201 : 200).json(result);
 }
 

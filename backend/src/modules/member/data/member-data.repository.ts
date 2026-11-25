@@ -2,7 +2,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma.js";
 import { HttpError } from "../../../lib/http.js";
 import { memberTransaction } from "../member-identity/member-transaction.js";
-import { synchronizeItemSaleTransaction, synchronizePendingItemSalesForMember } from "../../item-sale/item-sale.service.js";
+import { assertIdentityHasNoActiveItemSaleFunding, synchronizeItemSaleTransaction, synchronizePendingItemSalesForMember } from "../../item-sale/item-sale.service.js";
+import { assertIdentityEvidenceCanBeVerified } from "../member-identity/member-identity.repository.js";
 import { recordMemberIdentityHistory } from "../member-identity/member-identity-history.js";
 import type { IdentityMetadataInput, MemberDataWorkspaceQuery, MemberProfileInput } from "./member-data.schema.js";
 import { detachedIdentityData, verifiedIdentityData } from "./member-data.domain.js";
@@ -360,6 +361,7 @@ export function attachIdentity(memberId: string, identityId: string, userId: str
     await requireActiveMember(tx, memberId);
     const identity = await identityState(tx, identityId);
     if (identity.memberId || identity.verificationStatus !== "UNVERIFIED") throw new HttpError(409, "Identitas sudah diproses. Muat ulang data donatur.");
+    await assertIdentityEvidenceCanBeVerified(tx, identityId);
     const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId: null, verificationStatus: "UNVERIFIED" },
@@ -382,6 +384,7 @@ export function moveIdentity(sourceMemberId: string, identityId: string, destina
     await requireActiveMember(tx, destinationMemberId);
     const identity = await identityState(tx, identityId);
     if (identity.memberId !== sourceMemberId || identity.verificationStatus !== "VERIFIED") throw new HttpError(409, "Identitas bukan lagi milik donatur ini. Muat ulang data.");
+    await assertIdentityHasNoActiveItemSaleFunding(tx, identityId);
     const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId: sourceMemberId, verificationStatus: "VERIFIED" },
@@ -399,7 +402,7 @@ export function moveIdentity(sourceMemberId: string, identityId: string, destina
     await synchronizePendingTimeBasedForMember(tx, sourceMemberId, userId);
     await synchronizePendingTimeBasedForMember(tx, destinationMemberId, userId);
     await synchronizePendingCampaignContributionsForMember(tx, destinationMemberId, userId);
-    const itemSaleTransactions = await tx.bankTransaction.findMany({ where: { memberIdentityId: identityId, itemSalePurchase: { isNot: null } }, select: { id: true } });
+    const itemSaleTransactions = await tx.bankTransaction.findMany({ where: { memberIdentityId: identityId, OR: [{ itemSalePurchase: { isNot: null } }, { itemSaleFund: { isNot: null } }] }, select: { id: true } });
     for (const transaction of itemSaleTransactions) await synchronizeItemSaleTransaction(tx, transaction.id, userId, { reason: `Buyer identity moved: ${reason}` });
     await synchronizePendingItemSalesForMember(tx, destinationMemberId, userId);
   });
@@ -409,6 +412,7 @@ export function detachIdentity(memberId: string, identityId: string, reason: str
   return memberTransaction(async tx => {
     const identity = await identityState(tx, identityId);
     if (identity.memberId !== memberId || identity.verificationStatus !== "VERIFIED") throw new HttpError(409, "Identitas bukan lagi milik donatur ini. Muat ulang data.");
+    await assertIdentityHasNoActiveItemSaleFunding(tx, identityId);
     const now = new Date();
     const result = await tx.memberIdentity.updateMany({
       where: { id: identityId, memberId, verificationStatus: "VERIFIED" },
@@ -423,7 +427,7 @@ export function detachIdentity(memberId: string, identityId: string, reason: str
     // Detached identities no longer authoritatively own Campaign economics.
     await reconcileCampaignContributionsForIdentity(tx, identityId, userId);
     await synchronizePendingTimeBasedForMember(tx, memberId, userId);
-    const itemSaleTransactions = await tx.bankTransaction.findMany({ where: { memberIdentityId: identityId, itemSalePurchase: { isNot: null } }, select: { id: true } });
+    const itemSaleTransactions = await tx.bankTransaction.findMany({ where: { memberIdentityId: identityId, OR: [{ itemSalePurchase: { isNot: null } }, { itemSaleFund: { isNot: null } }] }, select: { id: true } });
     for (const transaction of itemSaleTransactions) await synchronizeItemSaleTransaction(tx, transaction.id, userId, { reason: `Buyer identity detached: ${reason}` });
   });
 }

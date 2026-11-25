@@ -13,13 +13,14 @@ export function getStatementUploadWorkspace(statementId?: string, signal?: Abort
   return apiFetch<StatementUploadWorkspace>(`/reconciliation/statement-upload/workspace${query}`, { signal });
 }
 
-export function uploadStatement(input: UploadStatementInput): Promise<StatementUploadResponse> {
+export function uploadStatement(input: UploadStatementInput, signal?: AbortSignal): Promise<StatementUploadResponse> {
   const body = new FormData();
   body.append("file", input.file);
   body.append("bankAccountId", input.bankAccountId);
   return apiFetch<StatementUploadResponse>("/reconciliation/statement-upload/upload", {
     method: "POST",
-    body
+    body,
+    signal
   });
 }
 

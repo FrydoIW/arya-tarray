@@ -14,6 +14,7 @@ type PdfReportTransaction = {
   finalEvent: string;
   campaign: string;
   member: string;
+  memberCode?: string;
   status: string;
 };
 
@@ -223,9 +224,9 @@ const DETAIL_COLUMNS = [
   { start: 254, width: 64, header: "Reference" },
   { start: 318, width: 38, header: "Type" },
   { start: 356, width: 74, header: "Amount (IDR)" },
-  { start: 430, width: 90, header: "Member" },
-  { start: 520, width: 114, header: "Final Event" },
-  { start: 634, width: 104, header: "Program" },
+  { start: 430, width: 112, header: "Member" },
+  { start: 542, width: 102, header: "Final Event" },
+  { start: 644, width: 94, header: "Program" },
   { start: 738, width: 68, header: "Status" }
 ] as const;
 
@@ -244,9 +245,34 @@ function transactionHeader(page: PdfPage, top: number) {
   return headerTop + 22;
 }
 
-function drawTransactionRow(page: PdfPage, row: PdfReportTransaction, top: number) {
+function memberDetailLines(row: PdfReportTransaction) {
+  const columnWidth = DETAIL_COLUMNS[5].width - 8;
+  // Conservative Helvetica advances in ems, with extra room for wide glyphs.
+  const width = (text: string) => Array.from(text).reduce((sum, char) =>
+    sum + (/[MWmw@%]/.test(char) ? 1.02 : /[Ilijtf .,:;'-]/.test(char) ? 0.4 : 0.76), 0) * 6.5;
+  return [row.member, row.memberCode].filter((value): value is string => Boolean(value)).flatMap(value => {
+    const lines: string[] = [];
+    let remaining = ascii(value);
+    while (width(remaining) > columnWidth) {
+      let fit = 1;
+      while (fit < remaining.length && width(remaining.slice(0, fit + 1)) <= columnWidth) fit++;
+      const space = remaining.lastIndexOf(" ", fit);
+      const end = space > 0 ? space : fit;
+      lines.push(remaining.slice(0, end));
+      remaining = remaining.slice(end).trimStart();
+    }
+    if (remaining) lines.push(remaining);
+    return lines;
+  });
+}
+
+function drawTransactionRow(page: PdfPage, row: PdfReportTransaction, top: number, memberLines: string[], height: number) {
   const values = [row.date, row.description, row.referenceNo, row.type, row.amount, row.member, row.finalEvent, row.campaign, row.status];
   DETAIL_COLUMNS.forEach((column, index) => {
+    if (index === 5) {
+      memberLines.forEach((line, lineIndex) => page.text(column.start + 4, top + 14 + lineIndex * 8, line, 6.5));
+      return;
+    }
     const maxWidth = column.width - 8;
     const value = truncate(values[index], maxWidth, 6.5);
     const x = index === AMOUNT_COLUMN_INDEX
@@ -254,7 +280,7 @@ function drawTransactionRow(page: PdfPage, row: PdfReportTransaction, top: numbe
       : column.start + 4;
     page.text(x, top + 14, value, 6.5);
   });
-  page.line(MARGIN, top + 22, PAGE_WIDTH - MARGIN, top + 22, 0.2);
+  page.line(MARGIN, top + height, PAGE_WIDTH - MARGIN, top + height, 0.2);
 }
 
 export function buildTransactionInquiryPdf(input: TransactionInquiryPdfInput) {
@@ -285,12 +311,14 @@ export function buildTransactionInquiryPdf(input: TransactionInquiryPdfInput) {
     let page = document.addPage();
     let rowTop = transactionHeader(page, 42);
     for (const row of input.transactions) {
-      if (rowTop + 24 > 548) {
+      const memberLines = memberDetailLines(row);
+      const height = 22 + Math.max(0, memberLines.length - 1) * 8;
+      if (rowTop + height + 2 > 548) {
         page = document.addPage();
         rowTop = transactionHeader(page, 42);
       }
-      drawTransactionRow(page, row, rowTop);
-      rowTop += 22;
+      drawTransactionRow(page, row, rowTop, memberLines, height);
+      rowTop += height;
     }
   }
 

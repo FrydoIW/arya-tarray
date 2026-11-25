@@ -45,10 +45,9 @@ export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, upload
   return (
     <CollapsibleSection
       className="ui-card"
-      title="Selected Draft Workspace"
-      description="Upload a new BCA workbook or inspect the RAW statement selected from Draft Statements."
+      title="Upload Draft"
+      description="Unggah rekening koran BCA baru atau lanjutkan draft yang sudah ada."
       summary={statement ? getStatementStatusLabel(statement.status) : "No draft selected"}
-      defaultExpanded={false}
       headerActions={statement?.status === "RAW" ? (
         <Button
           type="button"
@@ -64,7 +63,7 @@ export function DraftWorkspace({ statement, bankAccounts, uploadDisabled, upload
     >
       <div className={styles.workspaceCard}>
       {!statement ? (
-        <div className={styles.selectionNotice}>No draft selected. Select a statement draft above to continue.</div>
+        <div className={styles.selectionNotice}>Belum ada draft dipilih. Unggah file baru atau pilih draft dari Draft Statements di bawah.</div>
       ) : null}
       {statement?.overlaps?.length ? (
         <div className={styles.overlapNotice}>

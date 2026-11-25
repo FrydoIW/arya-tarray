@@ -9,7 +9,7 @@ import { buildApprovalApproverSnapshot, LEGACY_APPROVAL_SNAPSHOT_MESSAGE } from 
 import { canonicalDatabaseFingerprint, canonicalDuplicateSignature, matchDuplicateTransactions, signedAmountCents } from "./statement-upload.duplicate.js";
 import { centsToDecimalString } from "./statement-upload.classifier.js";
 import { assertCampaignClassification, selectSingleEligibleCampaign } from "../campaign-classification.js";
-import { resolveTimeBasedUnits } from "../time-based-classification.js";
+import { resolveTimeBasedUnits, selectTimeBasedClassificationRule } from "../time-based-classification.js";
 import {
   assertChildClassification,
   selectSingleEligibleChild,
@@ -486,11 +486,20 @@ export async function persistParsedStatement(input: PersistParsedStatementInput)
           }; })
         };
         return statementResult;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        // Concurrent imports for the same bank account serialize on its row.
+        timeout: 30_000
+      });
     } catch (error) {
-      const retryableConflict = error instanceof Prisma.PrismaClientKnownRequestError &&
-        (error.code === "P2034" || (error.code === "P2010" && ["1213", "1205"].includes(String(error.meta?.code))));
-      if (!retryableConflict || attempt === 4) throw error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError)) throw error;
+      const mysqlCode = String(error.meta?.code);
+      const conflict = error.code === "P2034" || (error.code === "P2010" && mysqlCode === "1213");
+      if (conflict && attempt < 4) continue;
+      if (conflict || ["P2024", "P2028"].includes(error.code) || (error.code === "P2010" && mysqlCode === "1205")) {
+        throw new HttpError(503, "Statement import is temporarily busy. Use Reload to check the draft list before trying again.");
+      }
+      throw error;
     }
   }
 
@@ -656,7 +665,7 @@ export async function updateTransactionFinalEventAtomic(input: {
       if (!eventCode) throw new HttpError(400, "The selected Final Event is inactive or no longer available.");
       const children = await tx.eventCodeChild.findMany({
         where: { eventCodeId: eventCode.id },
-        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true }
+        select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true, capacity: true, unitAmount: true, durationMonths: true }
       });
       const childId = input.eventCodeChildId ?? null;
       const child = childId ? children.find((item) => item.id === childId) ?? null : null;
@@ -683,7 +692,11 @@ export async function updateTransactionFinalEventAtomic(input: {
         requireComplete: false,
         historicalCampaignId: current.eventCodeId === input.eventCodeId ? current.eventCampaignId : null
       });
-      resolveTimeBasedUnits({ eventCode, rule: eventCode.timeRule, transaction: current, requiresClassification: storedTransactionRequiresClassification(current) });
+      if (effectiveChildId || children.length === 0) {
+        const effectiveChild = children.find(item => item.id === effectiveChildId) ?? null;
+        resolveTimeBasedUnits({ eventCode, rule: selectTimeBasedClassificationRule(eventCode, effectiveChild),
+          transaction: current, requiresClassification: storedTransactionRequiresClassification(current) });
+      }
     } else {
       if (input.eventCodeChildId) {
         throw new HttpError(400, "Child requires a Final Event");
@@ -812,7 +825,7 @@ export async function executeStatementAtomic(input: { statementId: string; userI
             eventCodeChildId: true,
             eventCampaignId: true,
             eventCode: { select: { id: true, eventType: true, activeFlag: true, timeRule: { select: { unitAmount: true, durationMonths: true, activeFlag: true } } } },
-            eventCodeChild: { select: { id: true, eventCodeId: true, activeFlag: true } },
+            eventCodeChild: { select: { id: true, eventCodeId: true, activeFlag: true, capacity: true, unitAmount: true, durationMonths: true } },
             eventCampaign: { select: { id: true, eventCodeId: true, activeFlag: true, startDate: true, endDate: true } },
             transactionDate: true
             ,itemSalePurchase: { select: { id: true, quantity: true } }
@@ -913,7 +926,9 @@ export async function executeStatementAtomic(input: { statementId: string; userI
         requireComplete: true,
         historicalCampaignId: null
       });
-      resolveTimeBasedUnits({ eventCode: transaction.eventCode, rule: transaction.eventCode?.timeRule ?? null, transaction, requiresClassification: true });
+      resolveTimeBasedUnits({ eventCode: transaction.eventCode,
+        rule: selectTimeBasedClassificationRule(transaction.eventCode, transaction.eventCodeChild),
+        transaction, requiresClassification: true });
     }
 
     const approvalConfig = await loadActiveStatementApprovalConfigWithEligibleApprovers(tx);

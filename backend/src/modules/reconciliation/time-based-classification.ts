@@ -2,6 +2,23 @@ import { HttpError } from "../../lib/http.js";
 
 export type TimeRule = { unitAmount: { toString(): string }; durationMonths: number; activeFlag: boolean };
 
+type ChildTimeRule = {
+  eventCodeId: string; activeFlag: boolean; capacity: number | null;
+  unitAmount: { toString(): string } | null; durationMonths: number | null;
+};
+
+export function selectTimeBasedClassificationRule(
+  event: { id: string; eventType: string; timeRule: TimeRule | null } | null,
+  child: ChildTimeRule | null
+) {
+  if (event?.eventType !== "TIME_BASED" || !child) return event?.timeRule ?? null;
+  if (child.eventCodeId !== event.id || !child.activeFlag || !child.capacity ||
+    !child.unitAmount || !child.durationMonths || String(child.unitAmount).startsWith("-") || cents(child.unitAmount) === 0n) {
+    throw new HttpError(400, "The selected TIME_BASED Child must belong to the event, be active, and have valid capacity, amount, and duration.");
+  }
+  return { unitAmount: child.unitAmount, durationMonths: child.durationMonths, activeFlag: true };
+}
+
 function cents(value: { toString(): string } | null | undefined) {
   const raw = value?.toString() ?? "0";
   const [whole = "0", fraction = ""] = raw.replace(/^-/, "").split(".");

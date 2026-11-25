@@ -69,10 +69,16 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       window.location.href = "/login";
     }
 
-    throw new Error(payload.message ?? "Request failed");
+    throw new ApiRequestError(payload.message ?? "Request failed", response.status);
   }
 
   return payload as T;
+}
+
+export class ApiRequestError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+  }
 }
 
 

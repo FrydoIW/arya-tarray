@@ -3,7 +3,8 @@ import { HttpError } from "../../../lib/http.js";
 import { prisma } from "../../../lib/prisma.js";
 import { storedTransactionRequiresClassification } from "../reconciliation-classification.js";
 import { assertCampaignClassification } from "../campaign-classification.js";
-import { resolveTimeBasedUnits } from "../time-based-classification.js";
+import { resolveTimeBasedUnits, selectTimeBasedClassificationRule } from "../time-based-classification.js";
+import { assertConfirmedItemSaleUnchanged } from "../../item-sale/item-sale.service.js";
 import { assertChildClassification, selectSingleEligibleChild } from "../event-child-classification.js";
 import { timeBasedHistoryInclude } from "../../member/time-based/time-based-preview.js";
 import { loadActiveStatementApprovalConfigWithEligibleApprovers } from "../reconciliation-approval.js";
@@ -207,7 +208,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
             transactionDate: true,
             remark: true,
             reconciliationExcludedAt: true
-            ,itemSalePurchase: { select: { quantity: true, unitPriceSnapshot: true, status: true, walletAppliedAmount: true } }
+            ,itemSalePurchase: { select: { eventCodeChildId: true, quantity: true, unitPriceSnapshot: true, status: true, walletAppliedAmount: true } }
           }
         }
       }
@@ -260,6 +261,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       tx.eventCodeChild.findMany({
         where: { eventCodeId: { in: selectedEventIds } },
         select: { id: true, eventCodeId: true, childCode: true, childName: true, activeFlag: true, displayOrder: true,
+          capacity: true, unitAmount: true, durationMonths: true,
           itemSaleConfig: { select: { unitPrice: true, stockOnHand: true } } }
       })
     ]);
@@ -333,6 +335,7 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
         throw new HttpError(400, "An already excluded transaction cannot be corrected again.");
       }
       if (requested.action === "EXCLUDED") {
+        assertConfirmedItemSaleUnchanged(current.itemSalePurchase, null);
         proposalItems.push({
           action: "EXCLUDED",
           bankTransactionId: current.id,
@@ -369,7 +372,6 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
         historicalCampaignId: current.eventCodeId === requested.eventCodeId ? current.eventCampaignId : null
       });
       const event = requested.eventCodeId ? selectedEventById.get(requested.eventCodeId) ?? null : null;
-      resolveTimeBasedUnits({ eventCode: event, rule: event?.timeRule ?? null, transaction: current, requiresClassification });
       const children = requested.eventCodeId ? childrenByParent.get(requested.eventCodeId) ?? [] : [];
       const childId = requested.eventCodeChildId ?? null;
       const child = childId ? children.find((item) => item.id === childId) ?? null : null;
@@ -384,7 +386,9 @@ export async function executeEditIncomeCorrectionAtomic(input: EditIncomeCorrect
       });
       const effectiveChildId = childId ?? selectSingleEligibleChild(event, children);
       const effectiveChild = effectiveChildId ? children.find((item) => item.id === effectiveChildId) ?? null : null;
+      resolveTimeBasedUnits({ eventCode: event, rule: selectTimeBasedClassificationRule(event, effectiveChild), transaction: current, requiresClassification });
       const itemSaleQuantity = event?.eventType === "ITEM_SALE" ? requested.itemSaleQuantity ?? current.itemSalePurchase?.quantity ?? null : null;
+      assertConfirmedItemSaleUnchanged(current.itemSalePurchase, { childId: effectiveChildId, quantity: itemSaleQuantity });
       if (event?.eventType === "ITEM_SALE") {
         if (!itemSaleQuantity || !effectiveChild?.itemSaleConfig) throw new HttpError(400, "ITEM_SALE correction requires a configured item and positive quantity");
         const unitPrice = current.itemSalePurchase && current.eventCodeChildId === effectiveChildId
